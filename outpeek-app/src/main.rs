@@ -56,7 +56,6 @@ fn main() {
     // Frame styling is best-effort and logged: a refused DWM attribute costs a
     // cosmetic detail, never the app. The HWND can be absent before the event
     // loop starts, so the first tick retries once.
-    let chrome_done = apply_window_chrome(&app);
     // The HUD window is created hidden here; a failure is a notice in the
     // tracker, never a startup failure (the tracker must still work).
     let (overlay, overlay_error) = match OverlayWindow::new() {
@@ -134,9 +133,7 @@ fn main() {
         slint::Timer::single_shot(Duration::ZERO, move || {
             start_worker(app_weak.clone(), overlay_weak.clone(), &flags);
             if let Some(app) = app_weak.upgrade() {
-                if !chrome_done {
-                    apply_window_chrome(&app);
-                }
+                apply_window_chrome_retrying(&app);
                 spawn_foreground_watch(
                     stop.clone(),
                     enabled,
@@ -372,15 +369,45 @@ fn apply_settings(ui: &AppWindow) {
 /// App-window only: the HUD keeps the overlay recipe (DONOTROUND, no frame) and
 /// is never passed here. Every attribute result is logged; a refused attribute
 /// is cosmetic and never fatal.
+/// Apply the app-window DWM chrome, retrying until Slint has created the HWND.
+///
+/// One single_shot attempt was not enough on the real machine: the log showed
+/// "no Win32 HWND yet" twice and the chrome never landed, which is exactly the
+/// pale DWM bar the user saw. Slint only materializes the HWND from the event
+/// loop, so poll for it: 40 x 50 ms = 2 s, then say so once and keep the
+/// system frame rather than spinning forever.
+fn apply_window_chrome_retrying(ui: &AppWindow) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    fn attempt(weak: slint::Weak<AppWindow>, tries: Rc<Cell<u32>>) {
+        slint::Timer::single_shot(Duration::from_millis(50), move || {
+            let Some(ui) = weak.upgrade() else { return };
+            if apply_window_chrome(&ui) {
+                return;
+            }
+            let n = tries.get() + 1;
+            tries.set(n);
+            if n >= 40 {
+                eprintln!(
+                    "[{PRODUCT_NAME}] app-window chrome: no Win32 HWND after 2s; the system frame stays"
+                );
+                return;
+            }
+            attempt(ui.as_weak(), tries.clone());
+        });
+    }
+    attempt(ui.as_weak(), Rc::new(Cell::new(0)));
+}
+
 #[cfg(windows)]
 fn apply_window_chrome(ui: &AppWindow) -> bool {
     use raw_window_handle::HasWindowHandle as _;
 
     let handle = ui.window().window_handle();
     let Ok(raw) = handle.window_handle() else {
-        eprintln!(
-            "[{PRODUCT_NAME}] app-window chrome: no Win32 HWND yet; retrying on the first tick"
-        );
+        // Slint creates the HWND from the event loop, so a miss here is normal
+        // on the first tick. The caller retries with a bounded budget and is
+        // the only place that logs the outcome.
         return false;
     };
     let raw_window_handle::RawWindowHandle::Win32(hwnd) = raw.as_raw() else {
