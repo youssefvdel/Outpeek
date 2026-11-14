@@ -1,281 +1,612 @@
-// Tracker panels. Every panel has loading / empty / error / value states —
-// never a dash rendered as a value, never an invented rank.
+// Tracker view: the Overview page. Lifted from the shipping Recon shell —
+// filter row, four headline numerals, one wide metrics strip, then the three
+// analysis cards and the two history cards.
+//
+// Every numeral here is a slot, not a number. This build has no match history
+// (see ROADMAP.md), so each card prints an em dash and one line saying what it
+// would need; nothing is estimated and no row is faked.
 
-import { Theme, TypeScale, Space, Shape } from "tokens.slint";
+import { Theme, TypeScale, Space } from "tokens.slint";
 import { Tracker } from "../state.slint";
-import { Plate } from "components/plate.slint";
-import { Caption, Chip, Divider, LinkButton, PanelTitle } from "widgets.slint";
+import { Card, Chip, Glyph, HCenter, PanelTitle, SelectBox, VCenter } from "widgets.slint";
 
-export component LiveCard inherits Plate {
-    VerticalLayout {
-        padding: Space.lg;
-        spacing: Space.md;
-
-        HorizontalLayout {
-            spacing: Space.sm;
-            PanelTitle { text: "LIVE MATCH"; vertical-alignment: center; }
-            Rectangle { horizontal-stretch: 1; }
-            Chip {
-                text: Tracker.phase-chip;
-                tone: Tracker.live-state == "live" ? "live" : (Tracker.live-state == "error" ? "error" : "neutral");
-            }
-        }
-
-        if Tracker.live-state == "live": VerticalLayout {
-            spacing: Space.sm;
-
-            Text {
-                text: Tracker.map-name == "" ? "Map not reported" : Tracker.map-name;
-                font-family: Theme.font-display;
-                font-size: 30px;
-                font-weight: 800;
-                color: Theme.ink;
-            }
-
-            HorizontalLayout {
-                spacing: Space.sm;
-                Text {
-                    text: Tracker.mode == "" ? "Mode not reported" : Tracker.mode;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.caption;
-                    color: Theme.ink-dim;
-                }
-                Text {
-                    text: "·";
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.caption;
-                    color: Theme.ink-faint;
-                }
-                Text {
-                    text: Tracker.phase-title;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.caption;
-                    color: Theme.ink-faint;
-                }
-            }
-
-            Rectangle { height: 2px; }
-
-            HorizontalLayout {
-                spacing: Space.xl;
-                alignment: start;
-
-                VerticalLayout {
-                    spacing: 0px;
-                    PanelTitle { text: "ALLIES"; }
-                    Text {
-                        text: Tracker.blue;
-                        font-family: Theme.font-display;
-                        font-size: 30px;
-                        font-weight: 800;
-                        color: Theme.mint;
-                    }
-                }
-                VerticalLayout {
-                    spacing: 0px;
-                    PanelTitle { text: "ENEMIES"; }
-                    Text {
-                        text: Tracker.red;
-                        font-family: Theme.font-display;
-                        font-size: 30px;
-                        font-weight: 800;
-                        color: Theme.coral;
-                    }
-                }
-            }
-        }
-
-        if Tracker.live-state == "loading": VerticalLayout {
-            spacing: Space.sm;
-            vertical-stretch: 0;
-            Caption { text: Tracker.live-message; }
-            Rectangle { height: 10px; width: 220px; border-radius: 5px; background: Theme.container-high; }
-            Rectangle { height: 10px; width: 150px; border-radius: 5px; background: Theme.container-high; }
-        }
-
-        if Tracker.live-state == "empty": VerticalLayout {
-            spacing: Space.sm;
-            Text {
-                text: Tracker.phase-title;
-                font-family: Theme.font-display;
-                font-size: TypeScale.big;
-                font-weight: 700;
-                color: Theme.ink-dim;
-            }
-            Caption { text: Tracker.live-message; }
-        }
-
-        if Tracker.live-state == "error": VerticalLayout {
-            spacing: Space.sm;
-            Text {
-                text: "Live data unavailable";
-                font-family: Theme.font-display;
-                font-size: TypeScale.big;
-                font-weight: 700;
-                color: Theme.error;
-            }
-            Caption { text: Tracker.live-message; }
-            Caption { text: "The poller retries on its own; no stale score is kept."; }
-        }
-
-        // Keep the state block at the top of the card when the row is taller.
-        Rectangle { vertical-stretch: 1; }
-    }
+/// Honest "what this needs" note. One size below Caption so a missing value
+/// reads as a footnote instead of a second headline.
+component Need inherits Text {
+    text: "";
+    font-family: Theme.font-body;
+    font-size: TypeScale.micro;
+    color: Theme.ink-faint;
+    wrap: word-wrap;
 }
 
-export component RankCard inherits Plate {
-    callback refresh();
+/// Em dash for an unknown value is always faint: a dash is the absence of data,
+/// never a zero. (Plain Text at ink-faint, sized per call site.)
 
-    VerticalLayout {
-        padding: Space.lg;
-        spacing: Space.md;
+/// Card title (the one display-face line inside a card).
+component CardTitle inherits Text {
+    height: 18px;
+    text: "";
+    font-family: Theme.font-display;
+    font-size: TypeScale.title;
+    font-weight: 700;
+    color: Theme.ink;
+    vertical-alignment: center;
+}
+
+// ---------------------------------------------------------------------------
+// Filter row
+// ---------------------------------------------------------------------------
+
+component FilterRow inherits Rectangle {
+    height: 49px;
+    background: transparent;
+
+    HorizontalLayout {
+        spacing: Space.lg;
+
+        VerticalLayout {
+            spacing: 4px;
+            PanelTitle { text: "PLAYLIST"; }
+            SelectBox { value: "Any"; label: "Playlist filter — not ported"; }
+        }
+
+        VerticalLayout {
+            spacing: 4px;
+            PanelTitle { text: "ACT"; }
+            SelectBox { value: "All acts"; box-width: 152px; label: "Act filter — not ported"; }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
 
         HorizontalLayout {
             spacing: Space.sm;
-            PanelTitle { text: "YOUR RANK"; vertical-alignment: center; }
-            Rectangle { horizontal-stretch: 1; }
-            LinkButton {
-                text: "REFRESH";
-                enabled: Tracker.rank-state != "loading" && Tracker.rank-state != "waiting";
-                clicked => { root.refresh(); }
-            }
-        }
 
-        if Tracker.rank-state == "ok": VerticalLayout {
-            spacing: 4px;
-            Text {
-                text: Tracker.rank-label;
-                font-family: Theme.font-display;
-                font-size: 28px;
-                font-weight: 800;
-                color: Theme.primary;
+            VCenter {
+                Chip { text: "SOON"; tone: "off"; pad-x: 7px; pad-y: 1px; }
             }
             Text {
-                text: Tracker.rank-rr + " RR";
-                font-family: Theme.font-mono;
-                font-size: TypeScale.body;
-                font-weight: 700;
-                color: Theme.ink-dim;
+                text: "Filters open once match history is read.";
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
             }
-            Rectangle {
-                height: 6px;
-                border-radius: 3px;
-                background: Theme.container-high;
-
-                Rectangle {
-                    width: parent.width * min(1.0, Tracker.rank-rr * 1.0 / 100.0);
-                    height: parent.height;
-                    border-radius: 3px;
-                    background: @linear-gradient(90deg, #7c5cff 0%, #d0bcff 100%);
-                }
-            }
-        }
-
-        if Tracker.rank-state == "unranked": VerticalLayout {
-            spacing: 4px;
-            Text {
-                text: Tracker.rank-label;
-                font-family: Theme.font-display;
-                font-size: 28px;
-                font-weight: 800;
-                color: Theme.ink-dim;
-            }
-            Caption { text: Tracker.rank-message; }
-        }
-
-        if Tracker.rank-state == "loading" || Tracker.rank-state == "waiting": VerticalLayout {
-            spacing: 4px;
-            Caption { text: Tracker.rank-message; }
-            Rectangle { height: 8px; width: 170px; border-radius: 4px; background: Theme.container-high; }
-        }
-
-        if Tracker.rank-state == "error": VerticalLayout {
-            spacing: 4px;
-            Text {
-                text: "Rank unavailable";
-                font-family: Theme.font-display;
-                font-size: TypeScale.big;
-                font-weight: 700;
-                color: Theme.error;
-            }
-            Caption { text: Tracker.rank-message; }
-        }
-
-        Rectangle { vertical-stretch: 1; }
-
-        Caption {
-            text: "Public rank + RR from the Riot shard. Riot does not expose raw MMR; this app never claims it.";
         }
     }
 }
 
-export component AccountCard inherits Plate {
-    VerticalLayout {
-        padding: Space.lg;
+// ---------------------------------------------------------------------------
+// Four headline numerals
+// ---------------------------------------------------------------------------
+
+component StatCard inherits Card {
+    in property <string> label: "";
+    in property <string> value: "—";
+    in property <bool> known: false;
+    in property <string> need: "";
+
+    pad: 12px;
+    gap: 2px;
+
+    PanelTitle {
+        text: root.label;
+        letter-spacing: 1.2px;
+    }
+    Text {
+        text: root.value;
+        font-family: Theme.font-display;
+        font-size: TypeScale.metric;
+        font-weight: 800;
+        color: root.known ? Theme.ink : Theme.ink-faint;
+        letter-spacing: -0.5px;
+    }
+    Need { text: root.need; }
+}
+
+// ---------------------------------------------------------------------------
+// Eight-cell metrics strip
+// ---------------------------------------------------------------------------
+
+component MetricCell inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> value: "—";
+    in property <bool> known: false;
+    in property <brush> tone: Theme.ink;
+
+    spacing: 2px;
+
+    PanelTitle {
+        text: root.label;
+        letter-spacing: 1px;
+    }
+    Text {
+        text: root.value;
+        font-family: Theme.font-display;
+        font-size: TypeScale.value;
+        font-weight: 700;
+        color: root.known ? root.tone : Theme.ink-faint;
+    }
+}
+
+component MetricsStrip inherits Card {
+    pad: 12px;
+    gap: 0;
+
+    HorizontalLayout {
         spacing: Space.sm;
 
-        PanelTitle { text: "SESSION"; }
-
-        Text {
-            text: Tracker.player-display == "" ? "No local account" : Tracker.player-display;
-            font-family: Theme.font-display;
-            font-size: TypeScale.big;
-            font-weight: 700;
-            color: Tracker.player-display == "" ? Theme.ink-faint : Theme.ink;
-        }
-
-        Divider {}
-
-        VerticalLayout {
-            spacing: 3px;
-            PanelTitle { text: "CLIENT"; }
-            Caption { text: Tracker.client-line; }
-        }
-
-        VerticalLayout {
-            spacing: 3px;
-            PanelTitle { text: "READ PATH"; }
-            Caption { text: "127.0.0.1 loopback · lockfile credentials · read-only"; }
-        }
-
-        if Tracker.platform-note != "": VerticalLayout {
-            spacing: 3px;
-            PanelTitle { text: "PLATFORM"; }
-            Caption { text: Tracker.platform-note; }
-        }
-
-        Rectangle { vertical-stretch: 1; }
+        MetricCell { label: "WINS"; horizontal-stretch: 1; tone: Theme.mint; }
+        MetricCell { label: "LOSSES"; horizontal-stretch: 1; tone: Theme.coral; }
+        MetricCell { label: "KILLS"; horizontal-stretch: 1; }
+        MetricCell { label: "DEATHS"; horizontal-stretch: 1; }
+        MetricCell { label: "ASSISTS"; horizontal-stretch: 1; }
+        MetricCell { label: "HEADSHOTS"; horizontal-stretch: 1; }
+        MetricCell { label: "FLAWLESS"; horizontal-stretch: 1; }
+        MetricCell { label: "CLUTCHES"; horizontal-stretch: 1; }
     }
 }
 
-export component MatchesCard inherits Plate {
+// ---------------------------------------------------------------------------
+// Combat highlights · top agent · accuracy
+// ---------------------------------------------------------------------------
+
+component HighlightRow inherits HorizontalLayout {
+    in property <string> glyph: "target";
+    in property <string> label: "";
+    in property <string> value: "—";
+
+    height: 36px;
+    spacing: Space.md;
+
+    VCenter {
+        Rectangle {
+            width: 30px;
+            height: 30px;
+            border-radius: 15px;
+            background: Theme.container-high;
+
+            Glyph {
+                kind: root.glyph;
+                size: 14px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                stroke: Theme.primary;
+                opacity: 0.85;
+            }
+        }
+    }
+
     VerticalLayout {
-        padding: Space.lg;
+        spacing: 0px;
+        horizontal-stretch: 1;
+
+        Text {
+            text: root.label;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            color: Theme.ink-dim;
+        }
+        Text {
+            text: root.value;
+            font-family: Theme.font-display;
+            font-size: TypeScale.value;
+            font-weight: 700;
+            color: root.value == "—" ? Theme.ink-faint : Theme.ink;
+        }
+    }
+}
+
+component CombatHighlights inherits Card {
+    pad: 12px;
+    gap: 6px;
+
+    HorizontalLayout {
+        height: 18px;
+        spacing: Space.sm;
+        CardTitle { text: "Combat Highlights"; horizontal-stretch: 1; }
+        VCenter {
+            Chip { text: "NOT READ"; tone: "off"; pad-y: 1px; }
+        }
+    }
+
+    HighlightRow { glyph: "target"; label: "Match kills (best)"; }
+    HighlightRow { glyph: "flame"; label: "First kills / deaths"; }
+    HighlightRow { glyph: "star"; label: "Aces"; }
+
+    Rectangle { vertical-stretch: 1; }
+}
+
+component TopAgent inherits Card {
+    in property <string> role: "";
+
+    pad: 14px;
+    gap: 10px;
+
+    HorizontalLayout {
+        height: 18px;
+        spacing: Space.sm;
+        CardTitle { text: "Top Agent"; horizontal-stretch: 1; }
+        VCenter {
+            Chip { text: root.role == "" ? "NOT READ" : root.role; tone: "off"; pad-y: 1px; }
+        }
+    }
+
+    HorizontalLayout {
+        height: 44px;
         spacing: Space.md;
 
-        HorizontalLayout {
+        VCenter {
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                border-radius: 22px;
+                background: Theme.primary-deep;
+
+                Glyph {
+                    kind: "user";
+                    size: 20px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 1px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: "No agent read";
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 700;
+                color: Theme.ink-dim;
+            }
+            Text {
+                text: "Needs this act's match details.";
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    Rectangle { vertical-stretch: 1; }
+
+    HorizontalLayout {
+        height: 34px;
+        spacing: Space.md;
+
+        VerticalLayout { horizontal-stretch: 1; spacing: 1px;
+            PanelTitle { text: "WIN %"; letter-spacing: 0.8px; }
+            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+        }
+        VerticalLayout { horizontal-stretch: 1; spacing: 1px;
+            PanelTitle { text: "K/D"; letter-spacing: 0.8px; }
+            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+        }
+        VerticalLayout { horizontal-stretch: 1; spacing: 1px;
+            PanelTitle { text: "ADR"; letter-spacing: 0.8px; }
+            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+        }
+        VerticalLayout { horizontal-stretch: 1; spacing: 1px;
+            PanelTitle { text: "ACS"; letter-spacing: 0.8px; }
+            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+        }
+    }
+}
+
+/// Abstract body chart: head, torso, legs as three opacity steps of one accent.
+/// It carries no numbers, so it cannot imply a headshot split we do not have.
+component BodyChart inherits Rectangle {
+    in property <length> chart-width: 44px;
+    in property <length> chart-height: 78px;
+
+    width: root.chart-width;
+    height: root.chart-height;
+
+    Rectangle {
+        x: (parent.width - 14px) / 2;
+        y: 0;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: Theme.primary;
+        opacity: 0.85;
+    }
+    Rectangle {
+        x: (parent.width - 26px) / 2;
+        y: 18px;
+        width: 26px;
+        height: 30px;
+        border-radius: 8px;
+        background: Theme.primary;
+        opacity: 0.45;
+    }
+    Rectangle {
+        x: (parent.width - 26px) / 2;
+        y: 52px;
+        width: 10px;
+        height: 26px;
+        border-radius: 5px;
+        background: Theme.primary;
+        opacity: 0.28;
+    }
+    Rectangle {
+        x: (parent.width + 26px) / 2 - 10px;
+        y: 52px;
+        width: 10px;
+        height: 26px;
+        border-radius: 5px;
+        background: Theme.primary;
+        opacity: 0.28;
+    }
+}
+
+component AccuracyRow inherits HorizontalLayout {
+    height: 23px;
+    in property <string> label: "";
+    in property <string> value: "—";
+    in property <string> hits: "— hits";
+
+    spacing: Space.sm;
+
+    Text {
+        text: root.label;
+        font-family: Theme.font-body;
+        font-size: TypeScale.caption;
+        color: Theme.ink-dim;
+        width: 46px;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.value;
+        font-family: Theme.font-display;
+        font-size: TypeScale.value;
+        font-weight: 700;
+        color: Theme.ink-faint;
+        horizontal-alignment: right;
+        horizontal-stretch: 1;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.hits;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
+        horizontal-alignment: right;
+        width: 54px;
+        vertical-alignment: center;
+    }
+}
+
+component Accuracy inherits Card {
+    pad: 14px;
+    gap: 10px;
+
+    HorizontalLayout {
+        height: 18px;
+        spacing: Space.sm;
+        CardTitle { text: "Accuracy"; horizontal-stretch: 1; }
+        VCenter {
+            Chip { text: "NOT READ"; tone: "off"; pad-y: 1px; }
+        }
+    }
+
+    HorizontalLayout {
+        height: 85px;
+        spacing: Space.lg;
+
+        VCenter { BodyChart {} }
+        VerticalLayout {
             spacing: Space.sm;
-            PanelTitle { text: "RECENT MATCHES"; vertical-alignment: center; }
-            Rectangle { horizontal-stretch: 1; }
-            Chip { text: "NOT PORTED"; tone: "off"; }
+            horizontal-stretch: 1;
+            AccuracyRow { label: "Head"; }
+            AccuracyRow { label: "Body"; }
+            AccuracyRow { label: "Legs"; }
+        }
+    }
+
+    Rectangle { vertical-stretch: 1; }
+}
+
+// ---------------------------------------------------------------------------
+// Previous acts · tracker score
+// ---------------------------------------------------------------------------
+
+component ActColumn inherits VerticalLayout {
+    height: 105px;
+    in property <string> when: "";
+    spacing: 2px;
+
+    PanelTitle {
+        text: root.when;
+        letter-spacing: 0.8px;
+        horizontal-alignment: center;
+    }
+
+    HCenter {
+        Rectangle {
+            width: 34px;
+            height: 34px;
+            border-radius: 17px;
+            background: Theme.container-high;
+
+            Glyph {
+                kind: "ranks";
+                size: 16px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                stroke: Theme.primary;
+                opacity: 0.45;
+            }
+        }
+    }
+
+    PanelTitle {
+        text: "PEAK RATING";
+        letter-spacing: 0.8px;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "—";
+        font-family: Theme.font-display;
+        font-size: TypeScale.title;
+        font-weight: 700;
+        color: Theme.ink-faint;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "not read";
+        font-family: Theme.font-body;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
+        horizontal-alignment: center;
+    }
+}
+
+component PreviousActs inherits Card {
+    pad: 14px;
+    gap: 10px;
+
+    HorizontalLayout {
+        height: 18px;
+        spacing: Space.sm;
+        CardTitle { text: "Previous Acts"; horizontal-stretch: 1; }
+        VCenter {
+            Chip { text: "COMPETITIVE HISTORY"; tone: "off"; pad-y: 1px; }
+        }
+    }
+
+    HorizontalLayout {
+        height: 105px;
+        spacing: Space.md;
+
+        ActColumn { when: "LAST ACT"; horizontal-stretch: 1; }
+        Rectangle { width: 1px; background: Theme.line-soft; }
+        ActColumn { when: "2 ACTS AGO"; horizontal-stretch: 1; }
+        Rectangle { width: 1px; background: Theme.line-soft; }
+        ActColumn { when: "3 ACTS AGO"; horizontal-stretch: 1; }
+    }
+
+    Rectangle { vertical-stretch: 1; }
+}
+
+component ScoreMetric inherits VerticalLayout {
+    in property <string> label: "";
+    spacing: 1px;
+
+    PanelTitle { text: root.label; letter-spacing: 0.8px; }
+    Text {
+        text: "—";
+        font-family: Theme.font-display;
+        font-size: TypeScale.title;
+        font-weight: 700;
+        color: Theme.ink-faint;
+    }
+}
+
+component TrackerScore inherits Card {
+    pad: 14px;
+    gap: 10px;
+
+    HorizontalLayout {
+        height: 18px;
+        spacing: Space.sm;
+        CardTitle { text: "Tracker Score"; horizontal-stretch: 1; }
+        VCenter {
+            Chip { text: "UNRATED"; tone: "off"; pad-y: 1px; }
+        }
+    }
+
+    HorizontalLayout {
+        height: 38px;
+        spacing: Space.md;
+
+        VCenter {
+            Rectangle {
+                width: 38px;
+                height: 38px;
+                border-radius: 19px;
+                background: Theme.container-high;
+
+                Glyph {
+                    kind: "shield";
+                    size: 20px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.45;
+                }
+            }
         }
 
         Text {
-            text: "Match history is not wired in this build.";
+            text: "—";
             font-family: Theme.font-display;
-            font-size: TypeScale.big;
-            font-weight: 700;
-            color: Theme.ink-dim;
+            font-size: TypeScale.metric;
+            font-weight: 800;
+            color: Theme.ink-faint;
         }
 
-        Caption {
-            text: "It needs /match-history/v1 from the Riot shard for match ids, then one /match-details read per row. Nothing is cached, guessed, or rendered as a placeholder match.";
+        Need {
+            text: "A tier needs the four metrics below.";
+            horizontal-stretch: 1;
         }
+    }
 
-        Rectangle { vertical-stretch: 1; }
+    Rectangle { vertical-stretch: 1; }
 
-        Caption {
-            text: "Porting it is the next tracker slice — the list will fill from the same poller, not a second process.";
-        }
+    HorizontalLayout {
+        height: 34px;
+        spacing: Space.md;
+        ScoreMetric { label: "ROUND WIN %"; horizontal-stretch: 1; }
+        ScoreMetric { label: "KAST"; horizontal-stretch: 1; }
+        ScoreMetric { label: "ACS"; horizontal-stretch: 1; }
+        ScoreMetric { label: "DDA/ROUND"; horizontal-stretch: 1; }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export component TrackerPage inherits VerticalLayout {
+    padding-left: Space.xl;
+    padding-right: Space.xl;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    spacing: Space.md;
+
+    FilterRow {}
+
+    HorizontalLayout {
+        height: 96px;
+        spacing: Space.md;
+        StatCard { label: "WIN %"; horizontal-stretch: 1; need: "needs match outcomes"; }
+        StatCard { label: "K/D"; horizontal-stretch: 1; need: "needs kills and deaths"; }
+        StatCard { label: "HEADSHOT %"; horizontal-stretch: 1; need: "needs per-match hit data"; }
+        StatCard { label: "DAMAGE/ROUND"; horizontal-stretch: 1; need: "needs round damage"; }
+    }
+
+    MetricsStrip { height: 64px; }
+
+    HorizontalLayout {
+        height: 176px;
+        spacing: Space.md;
+        CombatHighlights { horizontal-stretch: 1; }
+        TopAgent { horizontal-stretch: 1; }
+        Accuracy { horizontal-stretch: 1; }
+    }
+
+    HorizontalLayout {
+        height: 165px;
+        spacing: Space.md;
+        PreviousActs { horizontal-stretch: 1; }
+        TrackerScore { horizontal-stretch: 1; }
     }
 }

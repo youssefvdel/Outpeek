@@ -28,10 +28,27 @@ export global Theme {
     // Accents.
     in-out property <brush> primary: #d0bcff;
     in-out property <brush> primary-dim: #4f378b;
+    // Selected-row fill, distinct from primary-dim so a chip can sit *on* the
+    // selected row and still read as a chip. Sampled from the shipping app's
+    // version pill (v0.3.2 badge), which is the same violet at one step deeper.
+    in-out property <brush> primary-deep: #362558;
     in-out property <brush> amber: #e8b73a;
     in-out property <brush> mint: #a8f5cc;
     in-out property <brush> coral: #ff8a7a;
     in-out property <brush> error: #ffb4ab;
+
+    // Wash + edge pairs for tinted chips and toggle fills. Alpha lives here so
+    // component files never carry a hex literal.
+    in-out property <brush> primary-wash: #d0bcff1a;
+    in-out property <brush> primary-edge: #d0bcff59;
+    in-out property <brush> mint-wash: #a8f5cc1f;
+    in-out property <brush> mint-edge: #a8f5cc59;
+    in-out property <brush> amber-wash: #e8b73a1f;
+    in-out property <brush> amber-edge: #e8b73a59;
+    in-out property <brush> coral-wash: #ffb4ab1f;
+    in-out property <brush> coral-edge: #ffb4ab59;
+    in-out property <brush> neutral-wash: #ffffff0d;
+    in-out property <brush> neutral-edge: #ffffff14;
 
     // Party spines (queued-together groups).
     in-out property <brush> party-1: #7dd3fc;
@@ -55,7 +72,12 @@ export global TypeScale {
     in-out property <length> caption: 12px;
     in-out property <length> body: 13px;
     in-out property <length> title: 14px;
+    // Compact-table value (the eight-cell metrics strip), between body and big.
+    in-out property <length> value: 18px;
     in-out property <length> big: 20px;
+    // Stat-card numeral. The shipping tracker sets its four headline numbers at
+    // ~30px; this is that step, not a one-off size in a component file.
+    in-out property <length> metric: 30px;
 }
 
 export global Space {

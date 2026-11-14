@@ -1,36 +1,46 @@
-// Shared app chrome. Same visual family as the HUD: tokens only, no blur,
-// layered translucent plates and 1px inner strokes.
+// Shared shell chrome. One token set, no hex literals in this file: every
+// colour comes from Theme, every stroke size from Shape.
+//
+// The language is the shipping Recon shell: flat rows that fill only when
+// selected, 1px hairlines instead of stacks of shadows, mono eyebrows over
+// display numerals. Nothing here blurs or overlays the game.
 
 import { Theme, TypeScale, Space, Shape, Motion } from "tokens.slint";
 
+/// Status pill. `tone`: neutral | live | armed | error | off.
+/// `pad-x` / `pad-y` let a dense row use a flatter chip without a second
+/// component; the type size stays on the 11px floor.
 export component Chip inherits Rectangle {
     in property <string> text: "";
-    // neutral | live | armed | error | off
     in property <string> tone: "neutral";
+    in property <length> pad-x: 9px;
+    in property <length> pad-y: 2px;
 
-    height: label.height + 8px;
-    width: label.width + 18px;
+    height: label.height + root.pad-y * 2;
+    width: label.width + root.pad-x * 2;
     border-radius: Shape.pill;
     background: tone == "live"
-        ? #a8f5cc1f
+        ? Theme.mint-wash
         : tone == "armed"
-            ? #e8b73a1f
+            ? Theme.amber-wash
             : tone == "error"
-                ? #ffb4ab1f
+                ? Theme.coral-wash
                 : tone == "off"
-                    ? #ffffff0d
-                    : #d0bcff1a;
-    border-width: 1px;
+                    ? Theme.neutral-wash
+                    : Theme.primary-wash;
+    border-width: Shape.stroke;
     border-color: tone == "live"
-        ? #a8f5cc59
+        ? Theme.mint-edge
         : tone == "armed"
-            ? #e8b73a59
+            ? Theme.amber-edge
             : tone == "error"
-                ? #ffb4ab59
-                : #ffffff14;
+                ? Theme.coral-edge
+                : tone == "off"
+                    ? Theme.neutral-edge
+                    : Theme.primary-edge;
 
     label := Text {
-        x: 9px;
+        x: root.pad-x;
         y: (parent.height - self.height) / 2;
         text: root.text;
         font-family: Theme.font-mono;
@@ -49,9 +59,9 @@ export component Chip inherits Rectangle {
 
 export component StateDot inherits Rectangle {
     in property <string> tone: "neutral";
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
+    width: 7px;
+    height: 7px;
+    border-radius: 3.5px;
     background: tone == "ok" || tone == "live"
         ? Theme.mint
         : tone == "warn" || tone == "armed"
@@ -61,15 +71,29 @@ export component StateDot inherits Rectangle {
                 : Theme.ink-faint;
 }
 
-/// Leading glyph for a nav row. Four stroke paths on Lucide's 24x24 grid,
-/// scaled by the view box: no icon font, no image asset, no new dependency.
-/// `kind`: tracker (reticle) | overlay (stacked plates) | settings (sliders) |
-/// stretch (corner arrows).
-export component NavGlyph inherits Path {
-    in property <string> kind: "tracker";
+/// Cross-axis centering for a fixed-size child inside a layout. Slint layouts
+/// align fixed children at the start of the cross axis; `alignment` only
+/// distributes the main axis. A one-child layout is the supported way to
+/// center on the other axis, so the shell has exactly these two wrappers.
+export component VCenter inherits VerticalLayout {
+    alignment: center;
+    @children
+}
 
-    width: 16px;
-    height: 16px;
+export component HCenter inherits HorizontalLayout {
+    alignment: center;
+    @children
+}
+
+/// Stroke glyph on Lucide's 24x24 grid. One component for every icon in the
+/// shell: no icon font, no image asset, no dependency. New kinds are one more
+/// branch of the same ternary chain.
+export component Glyph inherits Path {
+    in property <string> kind: "tracker";
+    in property <length> size: 16px;
+
+    width: root.size;
+    height: root.size;
     viewbox-width: 24;
     viewbox-height: 24;
     stroke-width: 2px;
@@ -78,60 +102,89 @@ export component NavGlyph inherits Path {
     fill: transparent;
     commands: kind == "tracker"
         ? "M 12 2 A 10 10 0 1 1 12 22 A 10 10 0 1 1 12 2 M 22 12 H 18 M 6 12 H 2 M 12 6 V 2 M 12 22 V 18"
-        : kind == "overlay"
-            ? "M 12 2.75 L 21 7.25 L 12 11.75 L 3 7.25 Z M 3 12.75 L 12 17.25 L 21 12.75 M 3 17.75 L 12 22.25 L 21 17.75"
-            : kind == "settings"
-                ? "M 21 4 H 14 M 10 4 H 3 M 14 2 V 6 M 21 12 H 12 M 8 12 H 3 M 8 10 V 14 M 21 20 H 16 M 12 20 H 3 M 16 18 V 22"
-                : "M 15 3 H 21 V 9 M 9 21 H 3 V 15 M 21 3 L 14 10 M 3 21 L 10 14";
+        : kind == "store"
+            ? "M 6 2 L 3 6 V 20 A 2 2 0 0 0 5 22 H 19 A 2 2 0 0 0 21 20 V 6 L 18 2 Z M 3 6 H 21 M 16 10 A 4 4 0 0 1 8 10"
+            : kind == "crosshair"
+                ? "M 12 5 A 7 7 0 1 1 12 19 A 7 7 0 1 1 12 5 M 12 2 V 5 M 12 19 V 22 M 2 12 H 5 M 19 12 H 22"
+                : kind == "monitor"
+                    ? "M 3 4 H 21 V 16 H 3 Z M 8 21 H 16 M 12 16 V 21"
+                    : kind == "chat"
+                        ? "M 21 15 A 2 2 0 0 1 19 17 H 7 L 3 21 V 5 A 2 2 0 0 1 5 3 H 19 A 2 2 0 0 1 21 5 Z"
+                        : kind == "people"
+                            ? "M 16 21 V 19 A 4 4 0 0 0 12 15 H 6 A 4 4 0 0 0 2 19 V 21 M 9 11 A 4 4 0 1 0 9 3 A 4 4 0 1 0 9 11 M 22 21 V 19 A 4 4 0 0 0 19 15.13 M 16 3.13 A 4 4 0 0 1 16 10.87"
+                            : kind == "user"
+                                ? "M 19 21 V 19 A 4 4 0 0 0 15 15 H 9 A 4 4 0 0 0 5 19 V 21 M 12 11 A 4 4 0 1 0 12 3 A 4 4 0 1 0 12 11"
+                                : kind == "settings"
+                                    ? "M 21 4 H 14 M 10 4 H 3 M 14 2 V 6 M 21 12 H 12 M 8 12 H 3 M 8 10 V 14 M 21 20 H 16 M 12 20 H 3 M 16 18 V 22"
+                                    : kind == "refresh"
+                                        ? "M 20 12 A 8 8 0 1 1 17.2 5.9 M 20 3.4 V 8 H 15.4"
+                                        : kind == "shield"
+                                            ? "M 12 22 C 12 22 20 18 20 12 V 5 L 12 2 L 4 5 V 12 C 4 18 12 22 12 22 Z"
+                                            : kind == "chevron-down"
+                                                ? "M 6 9 L 12 15 L 18 9"
+                                                : kind == "target"
+                                                    ? "M 12 6 A 6 6 0 1 1 12 18 A 6 6 0 1 1 12 6 M 12 10.5 A 1.5 1.5 0 1 1 12 13.5 A 1.5 1.5 0 1 1 12 10.5"
+                                                    : kind == "flame"
+                                                        ? "M 12 22 C 8.1 22 5 19 5 15.2 C 5 9 12 2 12 2 C 12 2 19 9 19 15.2 C 19 19 15.9 22 12 22 Z"
+                                                        : kind == "star"
+                                                            ? "M 12 2.5 L 14.9 8.6 L 21.5 9.5 L 16.7 14.1 L 17.9 20.6 L 12 17.5 L 6.1 20.6 L 7.3 14.1 L 2.5 9.5 L 9.1 8.6 Z"
+                                                            : kind == "ranks"
+                                                                ? "M 6 14 L 12 8 L 18 14 M 6 19 L 12 13 L 18 19"
+                                                                : "M 7 17 L 17 7 M 9 7 H 17 V 15";
 }
 
-/// Sidebar navigation row: a real button, so it must read as one at rest.
-/// The row is a recessed slot (surface fill + hairline) that lifts to a filled
-/// plate on hover, brighter on press, and shows a violet edge, spine and glyph
-/// when current. Space/Return activates; Tab focus draws a 2px ring inside the
-/// plate. A `soon` row keeps the same footprint but stays hollow: ghost
-/// outline, faint glyph and label, SOON chip, no hover, no focus, no click.
-export component NavRow inherits Rectangle {
+/// Round index badge on a nav row. `active` deepens the fill so the number
+/// stays readable on the selected row's violet.
+export component CountChip inherits Rectangle {
+    in property <int> value: 0;
+    in property <bool> active: false;
+
+    width: 22px;
+    height: 20px;
+    border-radius: 10px;
+    background: root.active ? Theme.primary-deep : Theme.container;
+
+    Text {
+        text: root.value;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        font-weight: 700;
+        color: root.active ? Theme.ink : Theme.ink-faint;
+    }
+}
+
+/// Sidebar navigation row: a real button, flat at rest like the shipping app.
+/// Selected = full violet fill + 700 label; hover lifts one container step.
+/// `soon` keeps the same footprint, stays hollow, shows a SOON chip and takes
+/// no pointer, focus or click. Space/Return activate; Tab draws a 2px ring.
+export component NavItem inherits Rectangle {
     in property <string> label: "";
     in property <string> glyph: "tracker";
+    in property <int> index: 0;
     in property <bool> active: false;
     in property <bool> soon: false;
     out property <bool> has-focus: scope.has-focus;
     out property <bool> hovered: !root.soon && touch.has-hover;
-    // Held down on the row: a press dragged off the row is not a press.
-    out property <bool> pressing: root.hovered && touch.pressed;
     callback clicked();
 
-    height: 40px;
-    border-radius: Shape.sm;
-    border-width: Shape.stroke;
-    border-color: root.soon
-        ? Theme.line-soft
-        : root.active
-            ? Theme.primary-dim
-            : root.hovered || root.pressing
-                ? Theme.line
-                : Theme.line-soft;
-    // Rest is one step below the rail so the row reads as a slot, not a label;
-    // hover/active/press climb toward the HUD's container scale.
+    height: 32px;
+    border-radius: Shape.pill;
     background: root.soon
         ? transparent
-        : root.pressing
-            ? Theme.container-highest
-            : root.active
+        : root.active
+            ? Theme.primary-dim
+            : root.hovered
                 ? Theme.container-high
-                : root.hovered
-                    ? Theme.container
-                    : Theme.surface;
+                : transparent;
     animate background { duration: Motion.fast; easing: ease-out; }
-    animate border-color { duration: Motion.fast; easing: ease-out; }
 
     accessible-role: button;
     accessible-enabled: !root.soon;
     accessible-label: root.label;
     accessible-action-default => { touch.clicked(); }
 
-    // Pointer cursor over the whole row, including the padding.
     touch := TouchArea {
         enabled: !root.soon;
         mouse-cursor: pointer;
@@ -152,63 +205,59 @@ export component NavRow inherits Rectangle {
         }
     }
 
-    // Keyboard focus ring: 2px inset, no layout shift, state border kept.
     if root.has-focus && !root.soon: Rectangle {
         x: 1px;
         y: 1px;
         width: parent.width - 2px;
         height: parent.height - 2px;
-        border-radius: Shape.sm - 1px;
+        border-radius: Shape.pill - 1px;
         border-width: 2px;
         border-color: Theme.primary;
         background: transparent;
     }
 
-    // Active accent spine, same 2px as the HUD's live spine.
-    if root.active: Rectangle {
-        x: 0px;
-        y: 10px;
-        width: 2px;
-        height: parent.height - 20px;
-        border-radius: 2px;
-        background: Theme.primary;
-    }
-
     HorizontalLayout {
         padding-left: Space.md;
-        padding-right: Space.md;
+        padding-right: Space.sm;
         spacing: Space.sm;
 
-        NavGlyph {
+        Glyph {
             kind: root.glyph;
-            stroke: root.soon
-                ? Theme.line
-                : root.active
-                    ? Theme.primary
-                    : root.hovered
-                        ? Theme.ink
-                        : Theme.ink-faint;
-            animate stroke { duration: Motion.fast; easing: ease-out; }
+            size: 15px;
+            stroke: root.active
+                ? Theme.ink
+                : root.soon
+                    ? Theme.ink-faint
+                    : Theme.ink-dim;
+            opacity: root.soon ? 0.55 : 1;
         }
         Text {
             text: root.label;
             font-family: Theme.font-body;
-            font-size: TypeScale.body;
+            font-size: TypeScale.caption;
             font-weight: root.active ? 700 : 500;
             color: root.active
                 ? Theme.ink
                 : root.soon
                     ? Theme.ink-faint
-                    : root.hovered
-                        ? Theme.ink
-                        : Theme.ink-dim;
+                    : Theme.ink-dim;
             vertical-alignment: center;
             horizontal-stretch: 1;
-            animate color { duration: Motion.fast; easing: ease-out; }
+            opacity: root.soon ? 0.7 : 1;
         }
-        if root.soon: Chip {
-            text: "SOON";
-            tone: "off";
+        if root.soon: VCenter {
+            Chip {
+                text: "SOON";
+                tone: "off";
+                pad-x: 7px;
+                pad-y: 1px;
+            }
+        }
+        if !root.soon: VCenter {
+            CountChip {
+                value: root.index;
+                active: root.active;
+            }
         }
     }
 }
@@ -220,9 +269,9 @@ export component HudToggle inherits Rectangle {
     width: 46px;
     height: 26px;
     border-radius: 13px;
-    background: checked ? #d0bcff33 : Theme.container-high;
+    background: checked ? Theme.primary-deep : Theme.container-high;
     border-width: 1px;
-    border-color: checked ? Theme.primary : Theme.line;
+    border-color: checked ? Theme.primary-dim : Theme.line;
 
     knob := Rectangle {
         x: checked ? parent.width - self.width - 4px : 4px;
@@ -240,12 +289,73 @@ export component HudToggle inherits Rectangle {
     }
 }
 
+/// Small square action in the window chrome (refresh, HUD toggle). Focusable
+/// and keyboard-activatable: an icon button is still a button.
+export component IconButton inherits Rectangle {
+    in property <string> glyph: "refresh";
+    in property <string> label: "Refresh";
+    in property <bool> enabled: true;
+    in property <brush> tone: Theme.ink-dim;
+    out property <bool> has-focus: scope.has-focus;
+    callback clicked();
+
+    width: 28px;
+    height: 28px;
+    border-radius: Shape.sm;
+    background: root.enabled && touch.has-hover ? Theme.container-high : transparent;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.label;
+    accessible-action-default => { touch.clicked(); }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    scope := FocusScope {
+        x: 0;
+        width: 0;
+        enabled: root.enabled;
+
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if root.has-focus: Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        border-radius: Shape.sm;
+        border-width: 2px;
+        border-color: Theme.primary;
+        background: transparent;
+    }
+
+    Glyph {
+        kind: root.glyph;
+        size: 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        stroke: root.enabled ? root.tone : Theme.line;
+    }
+}
+
 export component Divider inherits Rectangle {
     height: 1px;
     background: Theme.line-soft;
 }
 
-/// Small mono section label. One definition for every panel in the app.
+/// Mono eyebrow. One definition for every section label and table header.
 export component PanelTitle inherits Text {
     text: "";
     font-family: Theme.font-mono;
@@ -264,33 +374,157 @@ export component Caption inherits Text {
     wrap: word-wrap;
 }
 
-/// Small text button (rank refresh). Disabled colour when `enabled` is false.
-export component LinkButton inherits Rectangle {
-    in property <string> text: "";
-    in property <bool> enabled: true;
-    callback clicked();
+/// Inert filter control. Shaped like the shipping app's selects (dark plate,
+/// hairline, chevron) but never opens: the row it would filter has no data yet.
+export component SelectBox inherits Rectangle {
+    in property <string> value: "";
+    in property <string> label: "Filter";
+    in property <length> box-width: 168px;
+    in property <bool> enabled: false;
 
-    height: label.height + 8px;
-    width: label.width + 16px;
-    border-radius: Shape.pill;
-    background: hover.has-hover && enabled ? #ffffff10 : transparent;
-    border-width: 1px;
-    border-color: enabled ? Theme.line : transparent;
+    width: root.box-width;
+    height: 30px;
+    border-radius: Shape.sm;
+    background: Theme.container;
+    border-width: Shape.stroke;
+    border-color: Theme.line;
 
-    label := Text {
-        x: 8px;
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.label;
+
+    Text {
+        x: 10px;
         y: (parent.height - self.height) / 2;
-        text: root.text;
-        font-family: Theme.font-mono;
-        font-size: TypeScale.micro;
-        font-weight: 700;
-        letter-spacing: 0.6px;
-        color: enabled ? Theme.primary : Theme.ink-faint;
+        text: root.value;
+        font-family: Theme.font-body;
+        font-size: TypeScale.caption;
+        font-weight: 500;
+        color: Theme.ink-dim;
     }
 
-    hover := TouchArea {
-        enabled: root.enabled;
+    Glyph {
+        kind: "chevron-down";
+        size: 13px;
+        x: parent.width - self.width - 10px;
+        y: (parent.height - self.height) / 2;
+        stroke: Theme.ink-faint;
+    }
+}
+
+/// Tab in the header band. Active gets the 2px violet underline; `soon` tabs
+/// dim out and take no click. The optional dot is a fact, not decoration: the
+/// caller binds it to a live match.
+export component Tab inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> active: false;
+    in property <bool> soon: false;
+    in property <bool> dot: false;
+    callback clicked();
+
+    height: 44px;
+    background: transparent;
+    accessible-role: button;
+    accessible-enabled: !root.soon;
+    accessible-label: root.label;
+
+    touch := TouchArea {
+        enabled: !root.soon;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+
+        Text {
+            text: root.label;
+            font-family: Theme.font-body;
+            font-size: TypeScale.body;
+            font-weight: root.active ? 600 : 500;
+            color: root.active
+                ? Theme.primary
+                : root.soon
+                    ? Theme.ink-faint
+                    : touch.has-hover
+                        ? Theme.ink
+                        : Theme.ink-dim;
+            vertical-alignment: center;
+            opacity: root.soon ? 0.8 : 1;
+            animate color { duration: Motion.fast; easing: ease-out; }
+        }
+        if root.dot: VCenter {
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: Theme.coral;
+            }
+        }
+    }
+
+    if root.active: Rectangle {
+        x: 0;
+        y: parent.height - 2px;
+        width: parent.width;
+        height: 2px;
+        border-radius: 1px;
+        background: Theme.primary;
+    }
+}
+
+/// Opaque plate for the tracker grid: flat fill, hairline, 12px radius, and an
+/// inner layout that owns the padding. Not the HUD's glass Plate — the shell
+/// never floats over the game, so it never needs a gradient or a drop shadow.
+export component Card inherits Rectangle {
+    in property <length> pad: Space.lg;
+    in property <length> gap: Space.md;
+
+    border-radius: Shape.md;
+    background: Theme.container;
+    border-width: Shape.stroke;
+    border-color: Theme.line-soft;
+
+    VerticalLayout {
+        padding: root.pad;
+        spacing: root.gap;
+        @children
+    }
+}
+
+/// Settings band: no fill, a hairline on top, an eyebrow and an optional chip.
+/// Bands replace the old stack of rounded cards so both views share one sheet.
+export component Band inherits Rectangle {
+    in property <bool> rule: true;
+    in property <string> label: "";
+    in property <string> note: "";
+    in property <string> note-tone: "off";
+
+    background: transparent;
+
+    VerticalLayout {
+        padding-bottom: Space.lg;
+        spacing: Space.md;
+
+        if root.rule: Rectangle {
+            height: 1px;
+            background: Theme.line-soft;
+        }
+
+        HorizontalLayout {
+            height: 18px;
+            spacing: Space.sm;
+            PanelTitle { text: root.label; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            if root.note != "": VCenter {
+                Chip {
+                    text: root.note;
+                    tone: root.note-tone;
+                    pad-y: 1px;
+                }
+            }
+        }
+
+        @children
     }
 }

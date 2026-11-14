@@ -1,17 +1,20 @@
-// Custom window chrome. The shell is frameless (`no-frame: true` in app.slint),
-// so this row *is* the title bar: product mark, current view, the drag surface,
-// and the three window controls. The pale band it replaces was DWM's own
-// title-bar surface — no frame attribute removed it, only not having a caption.
+// Window chrome. The shell is frameless (`no-frame: true` in app.slint), so
+// this 38px row is the title bar: a drag surface on the left, then the client
+// state, the two real actions, and the three window controls flush right.
 //
-// Geometry contract: the drag surface is the whole bar left of the three
-// controls, and `app_window::titlebar_layout` carries the same numbers (tested).
-// Slint's `resize-border-width` band sits above this row at the edges, so a
-// press within 6 px of an edge resizes instead of dragging — same as Windows.
+// Geometry contract: the drag surface is everything left of the controls and
+// `app_window::titlebar_layout` carries the same numbers (tested). Slint's
+// `resize-border-width` band sits above this row at the edges, so a press
+// within 6px of an edge resizes instead of dragging — same as Windows.
+//
+// The page title is NOT here: it sits in the header band below, which keeps
+// this row to window facts only and avoids two competing headings.
 
-import { Theme, TypeScale, Space, Motion } from "tokens.slint";
-import { Shell } from "../state.slint";
+import { Theme, TypeScale, Space, Shape, Motion } from "tokens.slint";
+import { Tracker } from "../state.slint";
+import { IconButton, StateDot, VCenter } from "widgets.slint";
 
-/// One window button. Glyphs are stroke paths on Lucide's 24 unit grid, the
+/// One window button. Glyphs are stroke paths on Lucide's 24-unit grid, the
 /// same construction as the nav glyphs: no icon font, no image, no new hex.
 component WindowButton inherits Rectangle {
     in property <length> button-width: 46px;
@@ -40,9 +43,35 @@ component WindowButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
 
+    out property <bool> has-focus: scope.has-focus;
+
+    scope := FocusScope {
+        x: 0;
+        width: 0; // Tab-focusable, but clicks must land on the button.
+
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if root.has-focus: Rectangle {
+        x: 4px;
+        y: 4px;
+        width: parent.width - 8px;
+        height: parent.height - 8px;
+        border-radius: Shape.sm;
+        border-width: 2px;
+        border-color: Theme.primary;
+        background: transparent;
+    }
+
     Path {
-        width: 14px;
-        height: 14px;
+        width: 13px;
+        height: 13px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         viewbox-width: 24;
@@ -67,20 +96,21 @@ component WindowButton inherits Rectangle {
 export component TitleBar inherits Rectangle {
     in property <length> bar-height: 38px;
     in property <length> control-width: 46px;
-    in property <string> view-name: "Tracker";
     // Rust owns the maximised fact, so the glyph is a binding, not a guess.
     in property <string> max-glyph: "maximize";
     in property <string> max-label: "Maximize";
     callback minimize-window();
     callback toggle-maximize();
     callback close-window();
+    callback refresh-rank();
+    callback toggle-hud();
 
     height: root.bar-height;
-    background: Theme.container-low;
+    background: Theme.surface;
 
-    // The drag surface. Declared first so it sits under the mark and the view
-    // label (Text takes no input) and under the buttons — which are declared
-    // after it, so a press on a button is a press on the button, never a drag.
+    // Declared first so it sits under the status text (no input) and under the
+    // buttons — which are declared after it, so a press on a button is a press
+    // on the button, never a drag.
     WindowMoveArea {
         x: 0;
         y: 0;
@@ -88,7 +118,7 @@ export component TitleBar inherits Rectangle {
         height: parent.height;
     }
 
-    // Bottom hairline, continuous with the rail's right edge and the header's.
+    // Bottom hairline, continuous with the header band's own rule.
     Rectangle {
         x: 0;
         y: parent.height - 1px;
@@ -98,56 +128,50 @@ export component TitleBar inherits Rectangle {
     }
 
     HorizontalLayout {
-        // Product mark, width-locked to the rail so the sidebar column reads
-        // straight through the titlebar.
-        Rectangle {
-            width: Shell.rail-width;
-            HorizontalLayout {
-                padding-left: Space.lg;
-                padding-right: Space.lg;
-                spacing: Space.sm;
+        padding-left: Space.lg;
+        padding-right: 0;
+        spacing: 4px;
 
-                Rectangle {
-                    width: 10px;
-                    height: 10px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 3px;
-                    background: @linear-gradient(135deg, Theme.primary 0%, Theme.primary-dim 100%);
-                }
-                Text {
-                    text: "OUTPEEK";
-                    font-family: Theme.font-display;
-                    font-size: TypeScale.title;
-                    font-weight: 800;
-                    letter-spacing: 2px;
-                    color: Theme.ink;
-                    vertical-alignment: center;
-                }
+        Rectangle { horizontal-stretch: 1; }
+
+        // Client state. One dot, two words: the long client line lives in the
+        // player card and the settings page, not in chrome.
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 6px;
+
+            VCenter { StateDot { tone: Tracker.client-tone == "ok" ? "ok" : "warn"; } }
+            Text {
+                text: Tracker.client-tone == "ok" ? "Stats on" : "Offline";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 500;
+                color: Theme.ink-dim;
+                vertical-alignment: center;
             }
         }
 
-        // Column divider: the rail's 1px edge, continued through the bar.
-        Rectangle {
-            width: 1px;
-            background: Theme.line-soft;
-        }
+        Rectangle { width: Space.sm; }
 
-        // Current view as a breadcrumb, not a second page title: the header
-        // below owns the heading, this only says where you are.
-        Rectangle {
-            horizontal-stretch: 1;
-            HorizontalLayout {
-                padding-left: Space.lg;
-                Text {
-                    text: root.view-name;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.micro;
-                    letter-spacing: 1.2px;
-                    color: Theme.ink-faint;
-                    vertical-alignment: center;
-                }
+        if Tracker.view == "tracker": VCenter {
+            IconButton {
+                glyph: "refresh";
+                label: "Refresh rank";
+                enabled: Tracker.rank-state != "loading" && Tracker.rank-state != "waiting";
+                clicked => { root.refresh-rank(); }
             }
         }
+
+        VCenter {
+            IconButton {
+                glyph: "shield";
+                label: Tracker.hud-enabled ? "Hide HUD" : "Show HUD";
+                tone: Tracker.hud-tone == "live" || Tracker.hud-tone == "armed" ? Theme.mint : Theme.ink-faint;
+                clicked => { root.toggle-hud(); }
+            }
+        }
+
+        Rectangle { width: 6px; }
 
         WindowButton {
             button-width: root.control-width;

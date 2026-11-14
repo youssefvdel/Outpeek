@@ -1,22 +1,24 @@
 // Outpeek app shell. One window; the HUD is a second Window from the
-// `outpeek-overlay` crate at runtime. Tokens and the plate component are
-// imported from that crate's UI through build.rs include paths — no copies.
+// `outpeek-overlay` crate at runtime. Tokens and shared widgets come from that
+// crate's UI through build.rs include paths — no copies.
 //
-// Views: Tracker and Settings are real and switch in place (the sidebar writes
-// `Tracker.view`). Overlay and Stretch stay marked SOON because they are not
-// ported — a dead screen would be a lie.
+// Structure is the shipping Recon shell: a full-height rail on the left, and on
+// the right the window chrome row, the page header with the tracker's tabs, then
+// the content sheet. Tracker and Settings are real and switch in place (the
+// sidebar writes `Tracker.view`); the other rows and tabs stay marked SOON
+// because they are not ported — a dead screen would be a lie.
 //
 // Frameless by construction: DWM paints a system title bar's surface above the
 // client area, and no frame attribute removes it (the caption colour only
 // repaints it). So the window has no system title bar at all; TitleBar draws
 // our own chrome and Rust owns the window commands.
 
-import { Theme, Space } from "tokens.slint";
+import { Theme } from "tokens.slint";
 import { Tracker } from "state.slint";
 import { Sidebar } from "components/sidebar.slint";
 import { Header } from "components/header.slint";
 import { TitleBar } from "components/titlebar.slint";
-import { LiveCard, RankCard, AccountCard, MatchesCard } from "components/cards.slint";
+import { TrackerPage } from "components/cards.slint";
 import { SettingsPage } from "components/settings.slint";
 
 // Re-exported so the Rust side can address the same globals, push the titlebar
@@ -32,10 +34,13 @@ export component AppWindow inherits Window {
     // starts a resize drag only when the pointer is within this many logical
     // pixels of an edge, so without it the window cannot be resized at all.
     resize-border-width: 6px;
-    preferred-width: 1180px;
-    preferred-height: 780px;
-    min-width: 980px;
-    min-height: 640px;
+    // The shipping app opens at 1216x804; the shell's grid is tuned to that.
+    preferred-width: 1216px;
+    preferred-height: 804px;
+    // 1120 keeps the three-card row (title + state chip) on one line; below it
+    // the dashboard would start eliding its own labels.
+    min-width: 1120px;
+    min-height: 680px;
     // The resize ceiling, declared because Slint derives the window's min AND
     // max from this layout: a finite maximum computed from the content (~984 px
     // on Windows) wins over `preferred-width`, so the shell opened at min width
@@ -43,7 +48,7 @@ export component AppWindow inherits Window {
     // window system still caps to the work area.
     max-width: 3840px;
     max-height: 2160px;
-    background: Theme.surface-dim;
+    background: Theme.surface;
 
     callback toggle-hud();
     callback refresh-rank();
@@ -56,55 +61,50 @@ export component AppWindow inherits Window {
     callback toggle-maximize();
     callback close-window();
 
-    VerticalLayout {
-        TitleBar {
-            bar-height: Tracker.titlebar-height;
-            control-width: Tracker.control-width;
-            view-name: Tracker.view == "settings" ? "Settings" : "Tracker";
-            max-glyph: Tracker.max-glyph;
-            max-label: Tracker.max-label;
-            minimize-window => { root.minimize-window(); }
-            toggle-maximize => { root.toggle-maximize(); }
-            close-window => { root.close-window(); }
+    // The rail spans the full height (its hairline reaches the top edge, as in
+    // the shipping app), so the chrome row sits only over the content column.
+    HorizontalLayout {
+        Sidebar {
+            toggle-hud => { root.toggle-hud(); }
+            navigate(view) => { root.navigate(view); }
         }
 
-        HorizontalLayout {
-            Sidebar {
+        VerticalLayout {
+            TitleBar {
+                bar-height: Tracker.titlebar-height;
+                control-width: Tracker.control-width;
+                max-glyph: Tracker.max-glyph;
+                max-label: Tracker.max-label;
+                minimize-window => { root.minimize-window(); }
+                toggle-maximize => { root.toggle-maximize(); }
+                close-window => { root.close-window(); }
+                refresh-rank => { root.refresh-rank(); }
                 toggle-hud => { root.toggle-hud(); }
-                navigate(view) => { root.navigate(view); }
             }
 
-            VerticalLayout {
-                Header {
-                    title: Tracker.view == "settings" ? "Settings" : "Tracker";
-                    subtitle: Tracker.view == "settings"
-                        ? "What this build really does — and what it does not"
-                        : "Live from the Riot Client loopback — read-only";
-                }
+            Header {
+                title: Tracker.view == "settings" ? "Settings" : "Tracker";
+                icon: Tracker.view == "settings" ? "settings" : "tracker";
+                show-tabs: Tracker.view == "tracker";
+                subtitle: Tracker.view == "settings"
+                    ? "What this build really does — and what it does not"
+                    : "Live from the Riot Client loopback — read-only";
+            }
 
-                if Tracker.view == "settings": SettingsPage {
-                    toggle-hud => { root.toggle-hud(); }
-                }
+            // One scroll surface for both views: the tracker grid and the
+            // settings bands both exceed a short window, and neither view
+            // should clip its last row instead of scrolling to it.
+            flick := Flickable {
+                vertical-stretch: 1;
+                content-width: self.width;
+                content-height: page.preferred-height;
 
-                if Tracker.view == "tracker": VerticalLayout {
-                    padding: Space.xl;
-                    spacing: Space.lg;
+                page := VerticalLayout {
+                    width: flick.content-width;
 
-                    HorizontalLayout {
-                        spacing: Space.lg;
-                        vertical-stretch: 0;
-                        LiveCard { horizontal-stretch: 3; }
-                        RankCard {
-                            horizontal-stretch: 2;
-                            refresh => { root.refresh-rank(); }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: Space.lg;
-                        vertical-stretch: 1;
-                        AccountCard { horizontal-stretch: 2; }
-                        MatchesCard { horizontal-stretch: 3; }
+                    if Tracker.view == "tracker": TrackerPage {}
+                    if Tracker.view == "settings": SettingsPage {
+                        toggle-hud => { root.toggle-hud(); }
                     }
                 }
             }

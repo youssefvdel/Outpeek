@@ -1,100 +1,138 @@
-// Header: view title plus the signed-in player block.
+// Page header: the one heading for the current view, with the tracker's tab row
+// directly under it inside the same band (one rule closes the band, as in the
+// shipping app). Settings has no tabs, so the band ends after the title row.
+//
+// Tabs are real buttons but only Overview has content in this build: the other
+// four take no click, and the band says so on the right instead of pretending.
 
 import { Theme, TypeScale, Space, Shape } from "tokens.slint";
 import { Tracker } from "../state.slint";
-import { StateDot } from "widgets.slint";
+import { Glyph, Tab, VCenter } from "widgets.slint";
 
 export component Header inherits Rectangle {
     // Set by the shell so one header serves every view.
     in property <string> title: "Tracker";
     in property <string> subtitle: "";
+    in property <string> icon: "tracker";
+    in property <bool> show-tabs: true;
 
-    height: 92px;
-    background: transparent;
+    height: 54px + (root.show-tabs ? 44px : 0px);
+    background: Theme.surface;
 
-    Rectangle {
-        x: 0px;
-        y: parent.height - 1px;
-        width: parent.width;
-        height: 1px;
-        background: Theme.line-soft;
-    }
+    VerticalLayout {
+        spacing: 0;
 
-    HorizontalLayout {
-        padding-left: 28px;
-        padding-right: 28px;
-        spacing: Space.md;
+        // Title row.
+        HorizontalLayout {
+            height: 54px;
+            padding-left: Space.xl;
+            padding-right: Space.xl;
+            spacing: Space.md;
 
-        VerticalLayout {
-            alignment: center;
-            spacing: 2px;
+            VCenter {
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: Shape.sm;
+                    background: Theme.container;
+                    border-width: Shape.stroke;
+                    border-color: Theme.line-soft;
+
+                    Glyph {
+                        kind: root.icon;
+                        size: 16px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        stroke: Theme.primary;
+                    }
+                }
+            }
+
             Text {
                 text: root.title;
                 font-family: Theme.font-display;
-                font-size: 26px;
-                font-weight: 800;
+                font-size: TypeScale.big;
+                font-weight: 700;
                 color: Theme.ink;
+                vertical-alignment: center;
             }
-            Text {
+
+            Rectangle { horizontal-stretch: 1; }
+
+            // Right side is a fact when there is one: a live match beats the
+            // static subtitle, and both come from state Rust already owns.
+            if Tracker.live-state == "live": HorizontalLayout {
+                horizontal-stretch: 0;
+                spacing: 8px;
+
+                VCenter {
+                    Rectangle {
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.mint;
+                    }
+                }
+                Text {
+                    text: "LIVE · "
+                        + (Tracker.map-name == "" ? "MATCH" : Tracker.map-name)
+                        + " · " + Tracker.blue + "–" + Tracker.red;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.micro;
+                    font-weight: 700;
+                    letter-spacing: 0.8px;
+                    color: Theme.mint;
+                    vertical-alignment: center;
+                }
+            }
+            if Tracker.live-state != "live": Text {
                 text: root.subtitle;
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 color: Theme.ink-faint;
+                vertical-alignment: center;
             }
         }
 
-        Rectangle { horizontal-stretch: 1; }
+        // Tab row: same left edge as the title, underline on the active tab.
+        if root.show-tabs: Rectangle {
+            height: 44px;
+            background: transparent;
 
-        HorizontalLayout {
-            spacing: Space.md;
-            alignment: end;
+            HorizontalLayout {
+                padding-left: Space.xl;
+                padding-right: Space.xl;
+                spacing: 22px;
 
-            VerticalLayout {
-                alignment: center;
-                spacing: 4px;
+                Tab { label: "Overview"; active: true; }
+                Tab { label: "Matches"; soon: true; }
+                Tab { label: "Agents"; soon: true; }
+                Tab { label: "Maps"; soon: true; }
+                Tab {
+                    label: "Live Match";
+                    soon: true;
+                    dot: Tracker.live-state == "live";
+                }
+
+                Rectangle { horizontal-stretch: 1; }
 
                 Text {
-                    text: Tracker.player-display == "" ? "Not signed in" : Tracker.player-display;
+                    text: "Overview is the only tab with data in this build.";
                     font-family: Theme.font-body;
-                    font-size: TypeScale.title;
-                    font-weight: 700;
-                    color: Tracker.player-display == "" ? Theme.ink-faint : Theme.ink;
-                    horizontal-alignment: right;
-                }
-                HorizontalLayout {
-                    spacing: 6px;
-                    alignment: end;
-                    StateDot {
-                        tone: Tracker.client-tone;
-                        y: (parent.height - self.height) / 2;
-                    }
-                    Text {
-                        text: Tracker.client-line;
-                        font-family: Theme.font-mono;
-                        font-size: TypeScale.micro;
-                        color: Theme.ink-faint;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 40px;
-                height: 40px;
-                border-radius: 20px;
-                background: Theme.container-high;
-                border-width: 1px;
-                border-color: Theme.line;
-
-                Text {
-                    text: Tracker.player-initial;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    font-family: Theme.font-display;
-                    font-size: TypeScale.title;
-                    font-weight: 800;
-                    color: Theme.primary;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
                 }
             }
         }
+    }
+
+    // One rule closes the header band.
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.line-soft;
     }
 }

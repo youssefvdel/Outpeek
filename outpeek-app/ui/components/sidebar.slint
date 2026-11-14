@@ -1,112 +1,427 @@
-// Left rail. Tracker and Settings are real views and switch the content area;
-// Overlay and Stretch stay explicitly marked SOON instead of being rendered as
-// dead fake screens.
+// Left rail. Full window height, so its hairline runs from the top edge to the
+// bottom like the shipping app's. The brand block is the rail's first row and
+// is height-locked to the window chrome beside it; below it sit the player
+// card, the eight nav rows and the active-display footer.
+//
+// Tracker and Settings are real views. The other six rows keep the same
+// geometry but stay hollow with a SOON chip: they are not ported, so they are
+// not clickable.
 
-import { Theme, TypeScale, Space } from "tokens.slint";
+import { Theme, TypeScale, Space, Shape } from "tokens.slint";
 import { Shell, Tracker } from "../state.slint";
-import { NavRow, HudToggle, StateDot, Divider } from "widgets.slint";
+import { Chip, Divider, Glyph, HCenter, NavItem, StateDot, VCenter } from "widgets.slint";
+
+/// Geometric brand mark: an eye outline with a solid pupil — "peek" drawn
+/// from two Paths. No image file, no font glyph, no second ink colour.
+component BrandMark inherits Rectangle {
+    width: 26px;
+    height: 26px;
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        stroke-width: 2px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        stroke: Theme.primary;
+        fill: transparent;
+        commands: "M 2.5 12 C 5.5 6.8 9 4.5 12 4.5 C 15 4.5 18.5 6.8 21.5 12 C 18.5 17.2 15 19.5 12 19.5 C 9 19.5 5.5 17.2 2.5 12 Z";
+    }
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        fill: Theme.primary;
+        commands: "M 12 8.2 A 3.8 3.8 0 1 1 12 15.8 A 3.8 3.8 0 1 1 12 8.2";
+    }
+}
+
+/// Version badge. The string is Rust's crate version, pushed into `Tracker`;
+/// if it is empty the badge is not drawn rather than showing a bare "v".
+component VersionPill inherits Rectangle {
+    in property <string> text: "";
+
+    height: 20px;
+    width: pill.width + 16px;
+    border-radius: 10px;
+    background: Theme.primary-deep;
+    border-width: Shape.stroke;
+    border-color: Theme.primary-dim;
+
+    pill := Text {
+        x: 8px;
+        y: (parent.height - self.height) / 2;
+        text: root.text;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        font-weight: 700;
+        color: Theme.primary;
+    }
+}
+
+/// One rank cell of the player card. `sub` is RR for the current rank and a
+/// literal PEAK for the peak cell; an empty rank prints an em dash.
+component RankCell inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> sub: "";
+    in property <bool> known: false;
+
+    spacing: 1px;
+
+    HCenter {
+        Glyph {
+            kind: "ranks";
+            size: 14px;
+            stroke: root.known ? Theme.primary : Theme.ink-faint;
+            opacity: root.known ? 1 : 0.5;
+        }
+    }
+    Text {
+        text: root.label == "" ? "—" : root.label;
+        font-family: Theme.font-display;
+        font-size: TypeScale.caption;
+        font-weight: 700;
+        color: root.known ? Theme.ink : Theme.ink-faint;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        text: root.sub;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        color: root.known ? Theme.primary : Theme.ink-faint;
+        horizontal-alignment: center;
+    }
+}
+
+/// Player card: token-gradient banner (the shipping app puts the account's
+/// background art there — this shell has no image pipeline, so the banner is
+/// paint), avatar, name, and two rank cells split by a hairline.
+component PlayerCard inherits Rectangle {
+    height: 164px;
+    border-radius: Shape.md;
+    background: Theme.container;
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: 62px;
+        background: @linear-gradient(118deg, Theme.primary-dim 0%, Theme.primary-deep 58%, Theme.container 100%);
+    }
+
+    // Fade the banner into the card body; no hard seam, no extra colour.
+    Rectangle {
+        y: 0;
+        width: root.width;
+        height: 62px;
+        background: @linear-gradient(180deg, transparent 55%, Theme.container 100%);
+    }
+
+    Rectangle {
+        y: 61px;
+        width: root.width;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+
+    Rectangle {
+        x: (root.width - 40px) / 2;
+        y: 42px;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: Theme.container-highest;
+        border-width: 3px;
+        border-color: Theme.container;
+
+        if Tracker.player-initial != "": Text {
+            text: Tracker.player-initial;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            font-family: Theme.font-display;
+            font-size: TypeScale.value;
+            font-weight: 800;
+            color: Theme.primary;
+        }
+        if Tracker.player-initial == "": Glyph {
+            kind: "user";
+            size: 18px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            stroke: Theme.ink-faint;
+        }
+    }
+
+    Text {
+        y: 88px;
+        width: root.width;
+        horizontal-alignment: center;
+        text: Tracker.player-display == "" ? "Not signed in" : Tracker.player-display;
+        font-family: Theme.font-body;
+        font-size: TypeScale.caption;
+        font-weight: 700;
+        color: Tracker.player-display == "" ? Theme.ink-faint : Theme.ink;
+        overflow: elide;
+    }
+
+    Rectangle {
+        y: 110px;
+        width: root.width;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+
+    RankCell {
+        x: 0;
+        y: 115px;
+        width: (root.width - 1px) / 2;
+        height: 49px;
+        label: Tracker.rank-label;
+        sub: Tracker.rank-state == "ok"
+            ? Tracker.rank-rr + " RR"
+            : Tracker.rank-state == "waiting" || Tracker.rank-state == "loading"
+                ? "WAITING"
+                : "—";
+        known: Tracker.rank-state == "ok";
+    }
+
+    Rectangle {
+        x: (root.width - 1px) / 2;
+        y: 123px;
+        width: 1px;
+        height: 33px;
+        background: Theme.line-soft;
+    }
+
+    RankCell {
+        x: (root.width + 1px) / 2;
+        y: 115px;
+        width: (root.width - 1px) / 2;
+        height: 49px;
+        label: "";
+        sub: "PEAK";
+        known: false;
+    }
+}
+
+/// Active display footer. Every field is bound to a `Tracker.display-*` string
+/// that this shell does not fill yet; empty means UNAVAILABLE, never a guessed
+/// 2560x1440.
+component DisplayCard inherits Rectangle {
+    border-radius: Shape.md;
+    background: Theme.container;
+    border-width: Shape.stroke;
+    border-color: Theme.line-soft;
+
+    // Fixed-height footer: rows hug at the top, one 6px gap between blocks.
+    VerticalLayout {
+        vertical-stretch: 0;
+        padding: 13px;
+        spacing: 7px;
+
+        HorizontalLayout {
+            height: 18px;
+            spacing: 6px;
+
+            VCenter {
+                StateDot { tone: Tracker.display-resolution == "" ? "neutral" : "ok"; }
+            }
+            Text {
+                text: "Active Display";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 500;
+                color: Theme.ink-dim;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            if Tracker.display-mode != "": VCenter {
+                Chip {
+                    text: Tracker.display-mode;
+                    tone: "neutral";
+                    pad-x: 7px;
+                    pad-y: 1px;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            height: 22px;
+            spacing: 6px;
+
+            Text {
+                text: Tracker.display-resolution == "" ? "No display read-back" : Tracker.display-resolution;
+                font-family: Theme.font-display;
+                font-size: Tracker.display-resolution == "" ? TypeScale.caption : TypeScale.value;
+                font-weight: 700;
+                color: Tracker.display-resolution == "" ? Theme.ink-faint : Theme.ink;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            if Tracker.display-refresh != "": VCenter {
+                Rectangle {
+                    height: 20px;
+                    width: hz.width + 14px;
+                    border-radius: 10px;
+                    background: Theme.container-high;
+
+                    hz := Text {
+                        x: 7px;
+                        y: (parent.height - self.height) / 2;
+                        text: Tracker.display-refresh;
+                        font-family: Theme.font-mono;
+                        font-size: TypeScale.micro;
+                        font-weight: 700;
+                        color: Theme.ink-dim;
+                    }
+                }
+            }
+        }
+
+        Divider {}
+
+        HorizontalLayout {
+            height: 16px;
+            spacing: 6px;
+
+            VCenter {
+                Glyph {
+                    kind: "monitor";
+                    size: 12px;
+                    stroke: Theme.ink-faint;
+                }
+            }
+            Text {
+                text: Tracker.display-gpu == "" ? "GPU not read" : Tracker.display-gpu;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+        }
+    }
+}
 
 export component Sidebar inherits Rectangle {
     callback toggle-hud();
     callback navigate(string);
 
-    // The same width the titlebar's product mark is locked to.
+    // The rail width the chrome row is locked to.
     width: Shell.rail-width;
     background: Theme.container-low;
 
     Rectangle {
         x: parent.width - 1px;
-        y: 0px;
+        y: 0;
         width: 1px;
         height: parent.height;
         background: Theme.line-soft;
     }
 
-    VerticalLayout {
-        padding: Space.lg;
-        spacing: Space.sm;
+    // Brand row: same height as the titlebar next to it, and the whole row is
+    // window-drag surface (no button lives here).
+    Rectangle {
+        y: 0;
+        width: parent.width;
+        height: Tracker.titlebar-height;
+        background: transparent;
 
-        // The product mark lives in the titlebar now; this is the rail caption.
-        Text {
-            text: "COMPETITIVE TOOLKIT";
-            font-family: Theme.font-mono;
-            font-size: TypeScale.micro;
-            letter-spacing: 1.4px;
-            color: Theme.ink-faint;
+        WindowMoveArea {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
         }
-
-        Rectangle { height: 14px; }
-
-        NavRow {
-            label: "Tracker";
-            glyph: "tracker";
-            active: Tracker.view == "tracker";
-            clicked => { root.navigate("tracker"); }
-        }
-        NavRow { label: "Overlay"; glyph: "overlay"; soon: true; }
-        NavRow {
-            label: "Settings";
-            glyph: "settings";
-            active: Tracker.view == "settings";
-            clicked => { root.navigate("settings"); }
-        }
-        NavRow { label: "Stretch"; glyph: "stretch"; soon: true; }
-
-        Rectangle { vertical-stretch: 1; }
-
-        Divider {}
-
-        Rectangle { height: 4px; }
 
         HorizontalLayout {
+            padding-left: Space.lg;
+            padding-right: Space.lg;
             spacing: Space.sm;
+
+            VCenter { BrandMark {} }
             Text {
-                text: "HUD OVERLAY";
-                font-family: Theme.font-mono;
-                font-size: TypeScale.micro;
-                letter-spacing: 1px;
-                color: Theme.ink-dim;
+                text: "OUTPEEK";
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 800;
+                letter-spacing: 1.8px;
+                color: Theme.ink;
                 vertical-alignment: center;
-                horizontal-stretch: 1;
             }
-            HudToggle {
-                checked: Tracker.hud-enabled;
-                toggled => { root.toggle-hud(); }
-            }
-        }
-
-        HorizontalLayout {
-            spacing: Space.sm;
-            alignment: start;
-            StateDot {
-                tone: Tracker.hud-tone;
-                y: 4px;
-            }
-            Text {
-                text: Tracker.hud-status;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                color: Tracker.hud-tone == "live" ? Theme.mint : Theme.ink-faint;
-                wrap: word-wrap;
-                horizontal-stretch: 1;
+            Rectangle { horizontal-stretch: 1; }
+            if Tracker.version != "": VCenter {
+                VersionPill { text: "v" + Tracker.version; }
             }
         }
+    }
 
-        if Tracker.platform-note != "": Text {
-            text: Tracker.platform-note;
-            font-family: Theme.font-body;
-            font-size: TypeScale.micro;
-            color: Theme.ink-faint;
-            wrap: word-wrap;
-        }
+    // Footer is pinned to the bottom edge; the scrolling list gets the space
+    // between the brand row and the footer. Explicit geometry, not nested
+    // stretch: the card must never grow to fill the rail.
+    DisplayCard {
+        x: 14px;
+        y: parent.height - 120px;
+        width: parent.width - 28px;
+        height: 106px;
+    }
 
-        Divider {}
+    // Player card + nav scroll together when the window is short.
+    flick := Flickable {
+        y: Tracker.titlebar-height;
+        width: parent.width;
+        height: parent.height - 166px;
+        content-width: self.width;
+        content-height: middle.preferred-height;
 
-        Text {
-            text: "v" + Tracker.version;
-            font-family: Theme.font-mono;
-            font-size: TypeScale.micro;
-            color: Theme.ink-faint;
+        middle := VerticalLayout {
+            width: flick.content-width;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 16px;
+            padding-bottom: 8px;
+            spacing: 0;
+
+            PlayerCard {}
+
+            Rectangle { height: 14px; }
+
+            NavItem {
+                label: "Tracker";
+                glyph: "tracker";
+                index: 1;
+                active: Tracker.view == "tracker";
+                clicked => { root.navigate("tracker"); }
+            }
+            Rectangle { height: 2px; }
+            NavItem { label: "Store"; glyph: "store"; index: 2; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem { label: "Crosshair"; glyph: "crosshair"; index: 3; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem { label: "Resolution Switch"; glyph: "monitor"; index: 4; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem { label: "Riot Chat"; glyph: "chat"; index: 5; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem { label: "Pre-Picker"; glyph: "people"; index: 6; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem { label: "Accounts"; glyph: "user"; index: 7; soon: true; }
+            Rectangle { height: 2px; }
+            NavItem {
+                label: "Settings";
+                glyph: "settings";
+                index: 8;
+                active: Tracker.view == "settings";
+                clicked => { root.navigate("settings"); }
+            }
         }
     }
 }

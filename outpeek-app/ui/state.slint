@@ -11,7 +11,7 @@ export struct SettingsItem {
 // App-shell geometry the titlebar shares with the rail, so the two columns can
 // never disagree about where the content starts.
 export global Shell {
-    in-out property <length> rail-width: 224px;
+    in-out property <length> rail-width: 272px;
 }
 
 export global Tracker {
@@ -50,6 +50,15 @@ export global Tracker {
 
     // Honest platform note (e.g. "Windows only" on a Linux dev host).
     in-out property <string> platform-note: "";
+
+    // Active display, for the sidebar footer card. Empty means "this shell has
+    // not read the display": the card prints UNAVAILABLE rather than a guessed
+    // mode. No Rust pass fills these yet — adding it is a display read-back,
+    // not a data shape change, so the card is already bound correctly.
+    in-out property <string> display-mode: "";
+    in-out property <string> display-resolution: "";
+    in-out property <string> display-refresh: "";
+    in-out property <string> display-gpu: "";
 
     // Titlebar geometry. Rust pushes `app_window::TITLEBAR_HEIGHT` and
     // `CONTROL_WIDTH` here so the drawn bar and the Win32 hit/region maths are
