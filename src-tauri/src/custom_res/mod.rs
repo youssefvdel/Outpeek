@@ -227,7 +227,7 @@ pub fn cds_code_to_text(code: i32) -> &'static str {
         0 => "SUCCESSFUL",
         1 => "RESTART_REQUIRED",
         -1 => "FAILED",
-        -2 => "BADMODE (mode not in driver list â€” Add it first)",
+        -2 => "BADMODE (mode not in driver list — Add it first)",
         -3 => "NOTUPDATED",
         -4 => "BADFLAGS",
         -5 => "BADPARAM",
@@ -325,7 +325,7 @@ pub fn restart_driver_stack() -> String {
 
 /// Detects an Intel display adapter (for logging / FakeEDID awareness).
 /// Modern Intel (Win10+) honors `EDID_OVERRIDE` like NVIDIA/AMD, so no extra
-/// `FakeEDID_*` write is needed â€” `restart64.exe` already handles the legacy
+/// `FakeEDID_*` write is needed — `restart64.exe` already handles the legacy
 /// Intel `FakeEDID_14_0_af0d_1723` / `ReadEDIDFromRegistry` recovery path on
 /// fallback. This keeps one code path for every GPU.
 fn intel_adapter_present() -> bool {
@@ -334,7 +334,7 @@ fn intel_adapter_present() -> bool {
     let Ok(class_key) = hklm.open_subkey_with_flags(base, KEY_QUERY_VALUE) else {
         return false;
     };
-    // Subkeys are 0000, 0001, ... â€” check ProviderName prefix.
+    // Subkeys are 0000, 0001, ... — check ProviderName prefix.
     for i in 0..16 {
         let sub = format!("{:04}", i);
         if let Ok(k) = class_key.open_subkey_with_flags(&sub, KEY_QUERY_VALUE) {
@@ -419,7 +419,7 @@ pub fn add_custom_resolution(monitor_id: &str, w: u32, h: u32, hz: u32) -> Resul
     }
     let Some(pnp) = crate::display::resolve_display_to_instance_id(target) else {
         return Err(format!(
-            "Could not resolve '{}' to a unique monitor (DISPLAY\\<model>\\<uid>). With duplicate models, pass the exact device_id from the monitor list â€” refusing to patch the wrong panel.",
+            "Could not resolve '{}' to a unique monitor (DISPLAY\\<model>\\<uid>). With duplicate models, pass the exact device_id from the monitor list — refusing to patch the wrong panel.",
             target
         ));
     };
@@ -435,7 +435,7 @@ pub fn add_custom_resolution(monitor_id: &str, w: u32, h: u32, hz: u32) -> Resul
     let pre = test_display_mode(gdi_hint, w, h, hz);
     if pre.exists {
         return Ok(format!(
-            "{}Ã—{} @ {} Hz already exists in the driver list (CDS_TEST ok) â€” no EDID change needed. Use Test to preview it.",
+            "{}×{} @ {} Hz already exists in the driver list (CDS_TEST ok) — no EDID change needed. Use Test to preview it.",
             w, h, hz
         ));
     }
@@ -458,7 +458,7 @@ pub fn add_custom_resolution(monitor_id: &str, w: u32, h: u32, hz: u32) -> Resul
     if intel_adapter_present() {
         // No extra FakeEDID_* write: modern Intel honors EDID_OVERRIDE; the
         // legacy FakeEDID recovery path lives in restart64.exe fallback.
-        log::info!("[custom_res] Intel adapter present â€” EDID_OVERRIDE path used (FakeEDID handled by restart fallback if needed)");
+        log::info!("[custom_res] Intel adapter present — EDID_OVERRIDE path used (FakeEDID handled by restart fallback if needed)");
     }
 
     let restart_msg = restart_driver_stack();
@@ -468,12 +468,12 @@ pub fn add_custom_resolution(monitor_id: &str, w: u32, h: u32, hz: u32) -> Resul
     let post = test_display_mode(gdi_hint, w, h, hz);
     if post.exists {
         Ok(format!(
-            "Added {}Ã—{} @ {} Hz on {} (EDID override, backup saved). {}. Driver now lists the mode (CDS_TEST ok) â€” run Test (15s safe) to preview.",
+            "Added {}×{} @ {} Hz on {} (EDID override, backup saved). {}. Driver now lists the mode (CDS_TEST ok) — run Test (15s safe) to preview.",
             w, h, hz, pnp, restart_msg
         ))
     } else {
         Ok(format!(
-            "Wrote EDID override for {}Ã—{} @ {} Hz on {} (backup saved). {}. Driver does not list it yet (CDS_TEST {}={}) â€” wait ~10s and Test again, or reboot; use Emergency Reset to undo.",
+            "Wrote EDID override for {}×{} @ {} Hz on {} (backup saved). {}. Driver does not list it yet (CDS_TEST {}={}) — wait ~10s and Test again, or reboot; use Emergency Reset to undo.",
             w,
             h,
             hz,
@@ -498,7 +498,7 @@ pub fn remove_custom_override(monitor_id: &str) -> Result<String, String> {
     }
     let Some(pnp) = crate::display::resolve_display_to_instance_id(target) else {
         return Err(format!(
-            "Could not resolve '{}' to a unique monitor â€” refusing to delete the wrong override.",
+            "Could not resolve '{}' to a unique monitor — refusing to delete the wrong override.",
             target
         ));
     };

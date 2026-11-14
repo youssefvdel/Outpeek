@@ -15,13 +15,13 @@
 
 pub fn validate_custom_resolution(w: u32, h: u32, hz: u32) -> Result<(), String> {
     if w < 640 || w > 7680 {
-        return Err(format!("Width {} out of range (640â€“7680).", w));
+        return Err(format!("Width {} out of range (640–7680).", w));
     }
     if h < 480 || h > 4320 {
-        return Err(format!("Height {} out of range (480â€“4320).", h));
+        return Err(format!("Height {} out of range (480–4320).", h));
     }
     if hz < 23 || hz > 500 {
-        return Err(format!("Refresh rate {} out of range (23â€“500 Hz).", hz));
+        return Err(format!("Refresh rate {} out of range (23–500 Hz).", hz));
     }
     if w % 2 != 0 {
         return Err(format!(
@@ -541,7 +541,7 @@ pub fn build_detailed_timing(w: u32, h: u32, hz: u32) -> Result<[u8; 18], String
 
     if pclock <= 0 || pclock > 65535 {
         return Err(format!(
-            "Invalid pixel clock calculated ({:.2} MHz) for {}Ã—{} @ {} Hz.",
+            "Invalid pixel clock calculated ({:.2} MHz) for {}×{} @ {} Hz.",
             pclock as f64 / 100.0,
             w,
             h,
