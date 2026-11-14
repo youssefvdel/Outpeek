@@ -4,7 +4,8 @@
 
 //! Outpeek app: one process, two windows.
 //!
-//! * `AppWindow` — the tracker shell (decorated, resizable, taskbar).
+//! * `AppWindow` — the tracker shell (frameless, drawn titlebar, resizable,
+//!   taskbar).
 //! * `OverlayWindow` — the HUD from `outpeek-overlay`'s compiled UI, created
 //!   hidden at startup and shown only while VALORANT is focused and the HUD
 //!   toggle is on.
@@ -14,16 +15,19 @@
 
 slint::include_modules!();
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use outpeek_app::app_window::{self, WindowCommand};
 use outpeek_app::hud::{self, PLATFORM_SUPPORTS_HUD};
 use outpeek_app::model::{self, ClientState, RankView, TrackerSnapshot};
 use outpeek_app::overlay_renderer::OverlayRendererSetting;
 use outpeek_app::settings_model::{self, McpPort, PathState};
 use outpeek_app::worker::{self, Event, Flags};
-use outpeek_app::{app_window, paths, PRODUCT_NAME, VERSION};
+use outpeek_app::{paths, PRODUCT_NAME, VERSION};
 use outpeek_overlay::ui::OverlayWindow;
 use slint::{ComponentHandle as _, ModelRc, VecModel};
 
@@ -85,6 +89,9 @@ fn main() {
     // Boot the chrome from the persisted toggle so the first frame is honest.
     let t = app.global::<Tracker>();
     t.set_version(VERSION.into());
+    // The drawn titlebar and the Win32 hit/region maths read the same numbers.
+    t.set_titlebar_height(app_window::TITLEBAR_HEIGHT);
+    t.set_control_width(app_window::CONTROL_WIDTH);
     let platform_note = if !PLATFORM_SUPPORTS_HUD {
         "HUD window styling is Win32-only; the overlay stays hidden on this host.".to_string()
     } else if let Some(error) = &overlay_error {
@@ -98,6 +105,8 @@ fn main() {
     t.set_platform_note(platform_note.into());
     apply_hud(&app, enabled.load(Ordering::Relaxed), false);
     apply_settings(&app);
+    // Honest first frame: the glyph reflects the real window, not a default.
+    apply_window_state(&app);
 
     // Overlay close does not kill the app; app close kills the process.
     app.window().on_close_requested(|| {
@@ -105,7 +114,11 @@ fn main() {
         slint::CloseRequestResponse::HideWindow
     });
 
-    wire_callbacks(&app, &overlay, &enabled, &foreground, &flags);
+    // What the Win32 chrome pass learned, so a resize or a maximise can never
+    // leave a stale corner clip or a wrong glyph behind.
+    let chrome = Rc::new(ChromeState::default());
+
+    wire_callbacks(&app, &overlay, &enabled, &foreground, &flags, &chrome);
 
     // Both background threads start on the first loop iteration:
     // `invoke_from_event_loop` is only accepted once the loop is running.
@@ -116,6 +129,7 @@ fn main() {
         let foreground = foreground.clone();
         let stop = stop.clone();
         let flags = flags.clone();
+        let chrome = chrome.clone();
         // The window is laid out only after the loop runs; log its real size
         // there, once, as the startup proof that the frame exists.
         {
@@ -133,7 +147,11 @@ fn main() {
         slint::Timer::single_shot(Duration::ZERO, move || {
             start_worker(app_weak.clone(), overlay_weak.clone(), &flags);
             if let Some(app) = app_weak.upgrade() {
-                apply_window_chrome_retrying(&app);
+                apply_window_chrome_retrying(&app, &chrome);
+                // The maximise glyph and any corner clip follow the window:
+                // snap layouts and taskbar restores change them with no click
+                // of ours, so this is a read-back, not a state machine.
+                poll_window_state(app.as_weak(), chrome.clone());
                 spawn_foreground_watch(
                     stop.clone(),
                     enabled,
@@ -250,6 +268,7 @@ fn wire_callbacks(
     enabled: &Arc<AtomicBool>,
     foreground: &Arc<AtomicBool>,
     flags: &Arc<Flags>,
+    chrome: &Rc<ChromeState>,
 ) {
     // Sidebar navigation: Rust owns the view state, so the header, the active
     // row and the window title can never disagree with the content area.
@@ -297,6 +316,171 @@ fn wire_callbacks(
             flags.refresh_rank.store(true, Ordering::Relaxed);
         });
     }
+
+    // Window controls. One place runs the command, logs what the window did,
+    // and re-reads the state, so the glyph can never describe a click that the
+    // window system refused.
+    {
+        let app_weak = app.as_weak();
+        let chrome = chrome.clone();
+        app.on_minimize_window(move || {
+            if let Some(app) = app_weak.upgrade() {
+                run_window_command(&app, WindowCommand::Minimize, &chrome);
+            }
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let chrome = chrome.clone();
+        app.on_toggle_maximize(move || {
+            if let Some(app) = app_weak.upgrade() {
+                run_window_command(&app, WindowCommand::ToggleMaximize, &chrome);
+            }
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let chrome = chrome.clone();
+        app.on_close_window(move || {
+            if let Some(app) = app_weak.upgrade() {
+                run_window_command(&app, WindowCommand::Close, &chrome);
+            }
+        });
+    }
+}
+
+/// What the Win32 chrome pass learned, kept for the resize/maximise poll.
+///
+/// Only the Windows path reads these fields; the type stays compiled on every
+/// host so one code path serves every `cfg`.
+#[cfg_attr(not(windows), allow(dead_code))]
+#[derive(Default)]
+struct ChromeState {
+    /// How the corners are produced, decided once from DWM's HRESULT.
+    corner: Cell<Option<app_window::CornerMode>>,
+    /// The region currently on the window, so a resize can tell whether the
+    /// clip it needs is already applied.
+    region: Cell<Option<app_window::Region>>,
+    /// The clip Windows refused at the last attempt, so a cosmetic miss logs
+    /// once instead of on every poll tick.
+    refused: Cell<Option<app_window::Region>>,
+}
+
+/// Push the window's real maximised state and its button glyph.
+fn apply_window_state(ui: &AppWindow) {
+    let control = app_window::max_control(app_is_maximized(ui));
+    let t = ui.global::<Tracker>();
+    t.set_max_glyph(control.glyph.into());
+    t.set_max_label(control.label.into());
+}
+
+/// Read the maximised state from the window, once per poll tick. Cheap and
+/// exact; there is no Slint event for "the window manager changed it".
+#[cfg(windows)]
+fn app_is_maximized(ui: &AppWindow) -> bool {
+    app_hwnd(ui).map(app_window::is_maximized).unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn app_is_maximized(_ui: &AppWindow) -> bool {
+    false
+}
+
+/// The window's native handle, once Slint's event loop has created it.
+#[cfg(windows)]
+fn app_hwnd(ui: &AppWindow) -> Option<isize> {
+    use raw_window_handle::HasWindowHandle as _;
+
+    let handle = ui.window().window_handle();
+    match handle.window_handle().ok()?.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(hwnd) => Some(hwnd.hwnd.get() as isize),
+        _ => None,
+    }
+}
+
+/// Run one titlebar command, log the state it produced, refresh the glyph and
+/// any corner clip. A refused command is one log line, never a panic.
+#[cfg(windows)]
+fn run_window_command(ui: &AppWindow, command: WindowCommand, chrome: &ChromeState) {
+    let Some(hwnd) = app_hwnd(ui) else {
+        eprintln!("[{PRODUCT_NAME}] app-window command {command:?}: no HWND yet");
+        return;
+    };
+    let report = app_window::apply_window_command(hwnd, command);
+    eprintln!("[{PRODUCT_NAME}] {}", report.log_line());
+    apply_window_state(ui);
+    refresh_corners(ui, chrome);
+}
+
+/// Non-Windows: there is no Win32 window to command. Close still quits the one
+/// event loop (the same path the window's close request takes); the other two
+/// are honest no-ops.
+#[cfg(not(windows))]
+fn run_window_command(_ui: &AppWindow, command: WindowCommand, _chrome: &ChromeState) {
+    if command == WindowCommand::Close {
+        let _ = slint::quit_event_loop();
+    } else {
+        #[cfg(debug_assertions)]
+        eprintln!("[{PRODUCT_NAME}] app-window command {command:?}: no-op on this host");
+    }
+}
+
+/// Keep the window's corner clip in step with its size and its maximised state.
+///
+/// Only the region fallback does anything; when DWM rounds the window this
+/// returns immediately, so the 300 ms poll costs one comparison.
+#[cfg(windows)]
+fn refresh_corners(ui: &AppWindow, chrome: &ChromeState) {
+    let Some(mode) = chrome.corner.get() else {
+        return;
+    };
+    let Some(hwnd) = app_hwnd(ui) else {
+        return;
+    };
+    let size = ui.window().size();
+    let scale = ui.window().scale_factor();
+    let wanted = app_window::wanted_region(
+        mode,
+        app_window::is_maximized(hwnd),
+        size.width as i32,
+        size.height as i32,
+        scale,
+    );
+    if !app_window::should_apply_region(chrome.region.get(), wanted, chrome.refused.get()) {
+        return;
+    }
+    let applied = app_window::apply_region(hwnd, wanted);
+    if applied {
+        chrome.region.set(wanted);
+        chrome.refused.set(None);
+    } else if wanted.is_some() {
+        chrome.refused.set(wanted);
+    }
+    eprintln!(
+        "[{PRODUCT_NAME}] {}",
+        app_window::corner_log(
+            mode,
+            if applied { wanted } else { chrome.region.get() },
+            scale
+        )
+    );
+}
+
+#[cfg(not(windows))]
+fn refresh_corners(_ui: &AppWindow, _chrome: &ChromeState) {}
+
+/// Re-read the window state on a slow tick and re-apply the corner clip when
+/// the window changed size or was maximised/restored. 300 ms is invisible to a
+/// user and one Win32 query per tick.
+fn poll_window_state(ui: slint::Weak<AppWindow>, chrome: Rc<ChromeState>) {
+    slint::Timer::single_shot(Duration::from_millis(300), move || {
+        let Some(ui) = ui.upgrade() else {
+            return;
+        };
+        apply_window_state(&ui);
+        refresh_corners(&ui, &chrome);
+        poll_window_state(ui.as_weak(), chrome.clone());
+    });
 }
 
 fn apply_hud(ui: &AppWindow, enabled: bool, game_foreground: bool) {
@@ -364,25 +548,25 @@ fn apply_settings(ui: &AppWindow) {
     s.set_not_ported(ModelRc::new(VecModel::from(rows)));
 }
 
-/// Paint the app window's DWM frame and ask for rounded corners.
+/// Apply the app-window's DWM chrome and decide how its corners are produced.
 ///
 /// App-window only: the HUD keeps the overlay recipe (DONOTROUND, no frame) and
 /// is never passed here. Every attribute result is logged; a refused attribute
 /// is cosmetic and never fatal.
-/// Apply the app-window DWM chrome, retrying until Slint has created the HWND.
+///
+/// The window is frameless (`no-frame: true`), so there is no caption to paint
+/// and no `DWMWA_CAPTION_COLOR` here: the pale band the user saw *was* DWM's
+/// title-bar surface, and only removing the caption removes it.
 ///
 /// One single_shot attempt was not enough on the real machine: the log showed
-/// "no Win32 HWND yet" twice and the chrome never landed, which is exactly the
-/// pale DWM bar the user saw. Slint only materializes the HWND from the event
-/// loop, so poll for it: 40 x 50 ms = 2 s, then say so once and keep the
-/// system frame rather than spinning forever.
-fn apply_window_chrome_retrying(ui: &AppWindow) {
-    use std::cell::Cell;
-    use std::rc::Rc;
-    fn attempt(weak: slint::Weak<AppWindow>, tries: Rc<Cell<u32>>) {
+/// "no Win32 HWND yet" twice and the chrome never landed. Slint only
+/// materializes the HWND from the event loop, so poll for it: 40 x 50 ms = 2 s,
+/// then say so once and keep the system frame rather than spinning forever.
+fn apply_window_chrome_retrying(ui: &AppWindow, chrome: &Rc<ChromeState>) {
+    fn attempt(weak: slint::Weak<AppWindow>, tries: Rc<Cell<u32>>, chrome: Rc<ChromeState>) {
         slint::Timer::single_shot(Duration::from_millis(50), move || {
             let Some(ui) = weak.upgrade() else { return };
-            if apply_window_chrome(&ui) {
+            if apply_window_chrome(&ui, &chrome) {
                 return;
             }
             let n = tries.get() + 1;
@@ -393,55 +577,50 @@ fn apply_window_chrome_retrying(ui: &AppWindow) {
                 );
                 return;
             }
-            attempt(ui.as_weak(), tries.clone());
+            attempt(ui.as_weak(), tries.clone(), chrome.clone());
         });
     }
-    attempt(ui.as_weak(), Rc::new(Cell::new(0)));
+    attempt(ui.as_weak(), Rc::new(Cell::new(0)), chrome.clone());
 }
 
 #[cfg(windows)]
-fn apply_window_chrome(ui: &AppWindow) -> bool {
-    use raw_window_handle::HasWindowHandle as _;
-
-    let handle = ui.window().window_handle();
-    let Ok(raw) = handle.window_handle() else {
+fn apply_window_chrome(ui: &AppWindow, chrome: &ChromeState) -> bool {
+    let Some(hwnd) = app_hwnd(ui) else {
         // Slint creates the HWND from the event loop, so a miss here is normal
         // on the first tick. The caller retries with a bounded budget and is
         // the only place that logs the outcome.
         return false;
     };
-    let raw_window_handle::RawWindowHandle::Win32(hwnd) = raw.as_raw() else {
-        eprintln!("[{PRODUCT_NAME}] app-window chrome: not a Win32 window; skipping");
-        return true;
-    };
-    let caption = app_caption_color(ui);
-    let report = app_window::style_app_window(hwnd.hwnd.get() as isize, caption);
-    eprintln!("[{PRODUCT_NAME}] {}", report.log_line(caption));
+    let report = app_window::style_app_window(hwnd);
+    eprintln!("[{PRODUCT_NAME}] {}", report.log_line());
     if !report.all_ok() {
         eprintln!(
-            "[{PRODUCT_NAME}] app-window chrome: a DWM attribute was refused; that part keeps the system frame"
+            "[{PRODUCT_NAME}] app-window chrome: a DWM attribute was refused; \
+             corners fall back to a window region"
         );
     }
+    let mode = app_window::corner_mode(report.corner);
+    chrome.corner.set(Some(mode));
+    if mode == app_window::CornerMode::Dwm {
+        // The one line that proves the corners: DWM owns them, no clip needed.
+        eprintln!(
+            "[{PRODUCT_NAME}] {}",
+            app_window::corner_log(mode, None, ui.window().scale_factor())
+        );
+    }
+    // Region mode: apply (and log) the clip now, not on the next poll tick.
+    refresh_corners(ui, chrome);
     true
 }
 
 #[cfg(not(windows))]
-fn apply_window_chrome(ui: &AppWindow) -> bool {
-    // DWM does not exist on this host; corners and frame stay the platform's.
-    // The token is still resolved so the log shows the colour Windows will use.
-    let caption = app_window::rgb_hex(app_caption_color(ui));
+fn apply_window_chrome(ui: &AppWindow, _chrome: &ChromeState) -> bool {
+    // No DWM on this host; there is nothing to apply or to clip.
+    let _ = ui;
     eprintln!(
-        "[{PRODUCT_NAME}] app-window chrome: skipped (non-Windows host); caption token #{caption:06X}"
+        "[{PRODUCT_NAME}] app-window chrome: frameless, no Win32 chrome to apply on this host"
     );
     true
-}
-
-/// DWM caption colour taken from the design token the window already uses:
-/// `Theme.surface-dim` in `outpeek-overlay/ui/tokens.slint` (`#0e0813`).
-/// Reading it means a token change repaints the frame; no second hex lives here.
-fn app_caption_color(ui: &AppWindow) -> u32 {
-    let color = ui.global::<Theme>().get_surface_dim().color();
-    app_window::colorref(color.red(), color.green(), color.blue())
 }
 
 fn apply_snapshot(ui: &AppWindow, snap: &TrackerSnapshot) {

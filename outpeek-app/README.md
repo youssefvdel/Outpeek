@@ -56,36 +56,56 @@ to "can this window receive WS_EX_TRANSPARENT / the HTTRANSPARENT subclass".
 
 On the overlay HWND the recipe is the proven one: `WS_POPUP | WS_CLIPSIBLINGS`,
 `TOPMOST | TOOLWINDOW | TRANSPARENT | NOACTIVATE | LAYERED`, LWA_ALPHA 255,
-DWM strip, HTTRANSPARENT subclass, `SWP_NOACTIVATE`. The app window keeps
-winit's decorated/resizable window.
+DWM strip, HTTRANSPARENT subclass, `SWP_NOACTIVATE`. The app window is
+frameless with its own titlebar (next section); the HUD's recipe is never
+applied to it.
 
-### App window frame: rounded corners, no pale bar
+### App window: frameless, custom titlebar, rounded corners
 
-The app window gets its own small DWM pass (`src/app_window.rs`); the HUD's
-recipe is never applied to it, and `corner_preference()` is tested to keep the
-two apart.
+The app window has **no system title bar** (`no-frame: true`). DWM paints its
+title-bar surface above the client area and no frame attribute removes it —
+`DWMWA_CAPTION_COLOR` only repainted it (red still showed the pale band). So
+the window has no caption at all, and `ui/components/titlebar.slint` draws the
+chrome: product mark, current view, the drag surface (`WindowMoveArea`), and the
+minimise / maximise-restore / close buttons.
+
+`resize-border-width: 6px` is what keeps a frameless window resizable: Slint's
+winit backend only starts a resize drag when the pointer is inside that band
+(`drag_resize_window.rs`), so without it the edges are inert. The same band
+means the outer 6 px of the titlebar resizes instead of dragging, as on Windows.
+
+The titlebar's numbers live once in `src/app_window.rs` (`TITLEBAR_HEIGHT`,
+`CONTROL_WIDTH`) and are pushed into Slint at boot; `titlebar_layout()` is the
+tested hit geometry the drawn bar implements.
 
 | Attribute | App window | HUD overlay |
 | --- | --- | --- |
 | `DWMWA_WINDOW_CORNER_PREFERENCE` (33) | `DWMWCP_ROUND` (2) | `DWMWCP_DONOTROUND` (1) |
 | `DWMWA_BORDER_COLOR` (34) | `DWMWA_COLOR_NONE` | `DWMWA_COLOR_NONE` |
-| `DWMWA_CAPTION_COLOR` (35) | `Theme.surface-dim` (`#0e0813`, read from the token at startup) | none |
-| `DWMWA_USE_IMMERSIVE_DARK_MODE` (20) | `1` (light caption glyphs) | n/a |
+| `DWMWA_USE_IMMERSIVE_DARK_MODE` (20) | `1` | n/a |
 
-Move and resize stay intact: this only colours the frame and asks for corners.
-`DWMWA_NCRENDERING_POLICY` is deliberately never touched — in this repo that is
-what turned a composited surface into the pale bar. Each attribute logs its
-HRESULT once, so one Windows run proves what DWM accepted:
+`DWMWA_CAPTION_COLOR` is gone on purpose: a frameless window has no caption to
+paint. If DWM refuses `DWMWCP_ROUND` the app falls back to a window region
+(`CreateRoundRectRgn` + `SetWindowRgn`, `Shape.lg` radius scaled by the monitor
+DPI), re-applied on resize and after maximise/restore. When DWM accepts, no
+region is set — a region would blunt the anti-aliased edge and drop the system
+shadow. One line per run proves the path taken:
 
 ```
-[Outpeek] app-window chrome: corner=ROUND hr=0x00000000 border=NONE hr=0x00000000 caption=#0E0813 hr=0x00000000 dark-mode hr=0x00000000
+[Outpeek] app-window chrome (frameless): corner=ROUND hr=0x00000000 border=NONE hr=0x00000000 dark-mode hr=0x00000000
+[Outpeek] app-window corners: DWM ROUND (no clip) scale=1.00
 [Outpeek] app window 1180x780 physical
-[Outpeek] nav -> settings        # debug builds only, one line per sidebar click
+[Outpeek] app-window command ToggleMaximize: ok (IsZoomed)     # one line per titlebar click
 ```
 
-A refused attribute (negative HRESULT) adds a
-`a DWM attribute was refused; that part keeps the system frame` line and the app
-carries on. Off Windows the pass logs `skipped (non-Windows host)`.
+The fallback logs `app-window corners: window region 1180x780 r=16 (ellipse 32)
+scale=1.00` instead. A refused DWM attribute adds `a DWM attribute was refused;
+corners fall back to a window region` and the app carries on. Off Windows the
+pass logs `frameless, no Win32 chrome to apply on this host`; close quits the
+event loop, minimise/maximise are no-ops.
+
+`DWMWA_NCRENDERING_POLICY` is deliberately never touched — in this repo that is
+what turned a composited surface into the pale bar.
 
 ## What the tracker shows (real data only)
 

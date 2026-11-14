@@ -5,22 +5,33 @@
 // Views: Tracker and Settings are real and switch in place (the sidebar writes
 // `Tracker.view`). Overlay and Stretch stay marked SOON because they are not
 // ported — a dead screen would be a lie.
+//
+// Frameless by construction: DWM paints a system title bar's surface above the
+// client area, and no frame attribute removes it (the caption colour only
+// repaints it). So the window has no system title bar at all; TitleBar draws
+// our own chrome and Rust owns the window commands.
 
 import { Theme, Space } from "tokens.slint";
 import { Tracker } from "state.slint";
 import { Sidebar } from "components/sidebar.slint";
 import { Header } from "components/header.slint";
+import { TitleBar } from "components/titlebar.slint";
 import { LiveCard, RankCard, AccountCard, MatchesCard } from "components/cards.slint";
 import { SettingsPage } from "components/settings.slint";
 
-// Re-exported so the Rust side can address the same globals, read the Theme
-// token for the DWM caption colour, and use the row struct without the
-// deprecated generated alias.
+// Re-exported so the Rust side can address the same globals, push the titlebar
+// geometry, and use the row struct without the deprecated generated alias.
 export { Tracker, Settings, SettingsItem } from "state.slint";
 export { Theme } from "tokens.slint";
 
 export component AppWindow inherits Window {
     title: "Outpeek — " + (Tracker.view == "settings" ? "Settings" : "Tracker");
+    // No system frame: no caption, no DWM title-bar surface, no pale band.
+    no-frame: true;
+    // A frameless window has no system resize border. Slint's winit backend
+    // starts a resize drag only when the pointer is within this many logical
+    // pixels of an edge, so without it the window cannot be resized at all.
+    resize-border-width: 6px;
     preferred-width: 1180px;
     preferred-height: 780px;
     min-width: 980px;
@@ -39,44 +50,62 @@ export component AppWindow inherits Window {
     // Navigation goes through Rust so the view state has one owner (and one
     // debug log line per click).
     callback navigate(string);
+    // Window commands. Rust calls Win32 and reads the state back; the UI never
+    // pretends a window was minimised because a button was pressed.
+    callback minimize-window();
+    callback toggle-maximize();
+    callback close-window();
 
-    HorizontalLayout {
-        Sidebar {
-            toggle-hud => { root.toggle-hud(); }
-            navigate(view) => { root.navigate(view); }
+    VerticalLayout {
+        TitleBar {
+            bar-height: Tracker.titlebar-height;
+            control-width: Tracker.control-width;
+            view-name: Tracker.view == "settings" ? "Settings" : "Tracker";
+            max-glyph: Tracker.max-glyph;
+            max-label: Tracker.max-label;
+            minimize-window => { root.minimize-window(); }
+            toggle-maximize => { root.toggle-maximize(); }
+            close-window => { root.close-window(); }
         }
 
-        VerticalLayout {
-            Header {
-                title: Tracker.view == "settings" ? "Settings" : "Tracker";
-                subtitle: Tracker.view == "settings"
-                    ? "What this build really does — and what it does not"
-                    : "Live from the Riot Client loopback — read-only";
-            }
-
-            if Tracker.view == "settings": SettingsPage {
+        HorizontalLayout {
+            Sidebar {
                 toggle-hud => { root.toggle-hud(); }
+                navigate(view) => { root.navigate(view); }
             }
 
-            if Tracker.view == "tracker": VerticalLayout {
-                padding: Space.xl;
-                spacing: Space.lg;
-
-                HorizontalLayout {
-                    spacing: Space.lg;
-                    vertical-stretch: 0;
-                    LiveCard { horizontal-stretch: 3; }
-                    RankCard {
-                        horizontal-stretch: 2;
-                        refresh => { root.refresh-rank(); }
-                    }
+            VerticalLayout {
+                Header {
+                    title: Tracker.view == "settings" ? "Settings" : "Tracker";
+                    subtitle: Tracker.view == "settings"
+                        ? "What this build really does — and what it does not"
+                        : "Live from the Riot Client loopback — read-only";
                 }
 
-                HorizontalLayout {
+                if Tracker.view == "settings": SettingsPage {
+                    toggle-hud => { root.toggle-hud(); }
+                }
+
+                if Tracker.view == "tracker": VerticalLayout {
+                    padding: Space.xl;
                     spacing: Space.lg;
-                    vertical-stretch: 1;
-                    AccountCard { horizontal-stretch: 2; }
-                    MatchesCard { horizontal-stretch: 3; }
+
+                    HorizontalLayout {
+                        spacing: Space.lg;
+                        vertical-stretch: 0;
+                        LiveCard { horizontal-stretch: 3; }
+                        RankCard {
+                            horizontal-stretch: 2;
+                            refresh => { root.refresh-rank(); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Space.lg;
+                        vertical-stretch: 1;
+                        AccountCard { horizontal-stretch: 2; }
+                        MatchesCard { horizontal-stretch: 3; }
+                    }
                 }
             }
         }

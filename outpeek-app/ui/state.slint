@@ -8,6 +8,12 @@ export struct SettingsItem {
     detail: string,
 }
 
+// App-shell geometry the titlebar shares with the rail, so the two columns can
+// never disagree about where the content starts.
+export global Shell {
+    in-out property <length> rail-width: 224px;
+}
+
 export global Tracker {
     // Shell navigation. UI state, not a fact: Rust sets it from the sidebar's
     // `navigate` callback. "tracker" | "settings".
@@ -44,6 +50,18 @@ export global Tracker {
 
     // Honest platform note (e.g. "Windows only" on a Linux dev host).
     in-out property <string> platform-note: "";
+
+    // Titlebar geometry. Rust pushes `app_window::TITLEBAR_HEIGHT` and
+    // `CONTROL_WIDTH` here so the drawn bar and the Win32 hit/region maths are
+    // the same numbers, not two copies.
+    in-out property <length> titlebar-height: 38px;
+    in-out property <length> control-width: 46px;
+
+    // Window state, read back from the native window (IsZoomed) rather than
+    // remembered from the last click: a snap drag changes it with no callback.
+    // The glyph is a fact Rust derives from that state; the UI only draws it.
+    in-out property <string> max-glyph: "maximize"; // "maximize" | "restore"
+    in-out property <string> max-label: "Maximize";
 
     in-out property <string> version: "";
 }

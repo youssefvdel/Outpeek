@@ -1,0 +1,171 @@
+// Custom window chrome. The shell is frameless (`no-frame: true` in app.slint),
+// so this row *is* the title bar: product mark, current view, the drag surface,
+// and the three window controls. The pale band it replaces was DWM's own
+// title-bar surface — no frame attribute removed it, only not having a caption.
+//
+// Geometry contract: the drag surface is the whole bar left of the three
+// controls, and `app_window::titlebar_layout` carries the same numbers (tested).
+// Slint's `resize-border-width` band sits above this row at the edges, so a
+// press within 6 px of an edge resizes instead of dragging — same as Windows.
+
+import { Theme, TypeScale, Space, Motion } from "tokens.slint";
+import { Shell } from "../state.slint";
+
+/// One window button. Glyphs are stroke paths on Lucide's 24 unit grid, the
+/// same construction as the nav glyphs: no icon font, no image, no new hex.
+component WindowButton inherits Rectangle {
+    in property <length> button-width: 46px;
+    in property <string> glyph: "minimize"; // minimize | maximize | restore | close
+    in property <string> label: "Minimize";
+    callback clicked();
+
+    width: root.button-width;
+    // Close is the one destructive control: it gets the coral fill on hover so
+    // it reads as a warning, every other button lifts one container step.
+    background: root.glyph == "close"
+        ? touch.has-hover ? Theme.coral : transparent
+        : touch.pressed
+            ? Theme.container-highest
+            : touch.has-hover
+                ? Theme.container-high
+                : transparent;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { touch.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    Path {
+        width: 14px;
+        height: 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        stroke-width: 2px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+        fill: transparent;
+        stroke: root.glyph == "close"
+            ? touch.has-hover ? Theme.surface-dim : Theme.ink-dim
+            : touch.has-hover ? Theme.ink : Theme.ink-dim;
+        commands: root.glyph == "minimize"
+            ? "M 5 12 H 19"
+            : root.glyph == "maximize"
+                ? "M 6 6 H 18 V 18 H 6 Z"
+                : root.glyph == "restore"
+                    ? "M 9 9 H 20 V 20 H 9 Z M 5 15 V 4 H 16"
+                    : "M 6 6 L 18 18 M 18 6 L 6 18";
+    }
+}
+
+export component TitleBar inherits Rectangle {
+    in property <length> bar-height: 38px;
+    in property <length> control-width: 46px;
+    in property <string> view-name: "Tracker";
+    // Rust owns the maximised fact, so the glyph is a binding, not a guess.
+    in property <string> max-glyph: "maximize";
+    in property <string> max-label: "Maximize";
+    callback minimize-window();
+    callback toggle-maximize();
+    callback close-window();
+
+    height: root.bar-height;
+    background: Theme.container-low;
+
+    // The drag surface. Declared first so it sits under the mark and the view
+    // label (Text takes no input) and under the buttons — which are declared
+    // after it, so a press on a button is a press on the button, never a drag.
+    WindowMoveArea {
+        x: 0;
+        y: 0;
+        width: parent.width - root.control-width * 3;
+        height: parent.height;
+    }
+
+    // Bottom hairline, continuous with the rail's right edge and the header's.
+    Rectangle {
+        x: 0;
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+
+    HorizontalLayout {
+        // Product mark, width-locked to the rail so the sidebar column reads
+        // straight through the titlebar.
+        Rectangle {
+            width: Shell.rail-width;
+            HorizontalLayout {
+                padding-left: Space.lg;
+                padding-right: Space.lg;
+                spacing: Space.sm;
+
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: @linear-gradient(135deg, Theme.primary 0%, Theme.primary-dim 100%);
+                }
+                Text {
+                    text: "OUTPEEK";
+                    font-family: Theme.font-display;
+                    font-size: TypeScale.title;
+                    font-weight: 800;
+                    letter-spacing: 2px;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Column divider: the rail's 1px edge, continued through the bar.
+        Rectangle {
+            width: 1px;
+            background: Theme.line-soft;
+        }
+
+        // Current view as a breadcrumb, not a second page title: the header
+        // below owns the heading, this only says where you are.
+        Rectangle {
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                padding-left: Space.lg;
+                Text {
+                    text: root.view-name;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.micro;
+                    letter-spacing: 1.2px;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        WindowButton {
+            button-width: root.control-width;
+            glyph: "minimize";
+            label: "Minimize";
+            clicked => { root.minimize-window(); }
+        }
+        WindowButton {
+            button-width: root.control-width;
+            glyph: root.max-glyph;
+            label: root.max-label;
+            clicked => { root.toggle-maximize(); }
+        }
+        WindowButton {
+            button-width: root.control-width;
+            glyph: "close";
+            label: "Close";
+            clicked => { root.close-window(); }
+        }
+    }
+}

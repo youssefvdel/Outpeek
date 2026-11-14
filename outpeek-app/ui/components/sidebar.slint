@@ -2,15 +2,16 @@
 // Overlay and Stretch stay explicitly marked SOON instead of being rendered as
 // dead fake screens.
 
-import { Theme, TypeScale, Space, Shape } from "tokens.slint";
-import { Tracker } from "../state.slint";
+import { Theme, TypeScale, Space } from "tokens.slint";
+import { Shell, Tracker } from "../state.slint";
 import { NavRow, HudToggle, StateDot, Divider } from "widgets.slint";
 
 export component Sidebar inherits Rectangle {
     callback toggle-hud();
     callback navigate(string);
 
-    width: 224px;
+    // The same width the titlebar's product mark is locked to.
+    width: Shell.rail-width;
     background: Theme.container-low;
 
     Rectangle {
@@ -25,27 +26,7 @@ export component Sidebar inherits Rectangle {
         padding: Space.lg;
         spacing: Space.sm;
 
-        HorizontalLayout {
-            spacing: Space.sm;
-            alignment: start;
-
-            Rectangle {
-                width: 10px;
-                height: 10px;
-                y: (parent.height - self.height) / 2;
-                border-radius: 3px;
-                background: @linear-gradient(135deg, #d0bcff 0%, #7c5cff 100%);
-            }
-            Text {
-                text: "OUTPEEK";
-                font-family: Theme.font-display;
-                font-size: TypeScale.title;
-                font-weight: 800;
-                letter-spacing: 2px;
-                color: Theme.ink;
-            }
-        }
-
+        // The product mark lives in the titlebar now; this is the rail caption.
         Text {
             text: "COMPETITIVE TOOLKIT";
             font-family: Theme.font-mono;

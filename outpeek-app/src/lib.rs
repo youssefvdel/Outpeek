@@ -2,7 +2,8 @@
 //!
 //! Two windows, one Slint event loop:
 //!
-//! * the tracker window — decorated, resizable, taskbar-visible;
+//! * the tracker window — frameless with a drawn titlebar, resizable,
+//!   taskbar-visible;
 //! * the HUD overlay — transparent, topmost, click-through, toolwindow,
 //!   created hidden at startup and shown only while VALORANT is focused and
 //!   the renderer setting says native.
