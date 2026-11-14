@@ -58,16 +58,18 @@ export component Sidebar inherits Rectangle {
 
         NavRow {
             label: "Tracker";
+            glyph: "tracker";
             active: Tracker.view == "tracker";
             clicked => { root.navigate("tracker"); }
         }
-        NavRow { label: "Overlay"; soon: true; }
+        NavRow { label: "Overlay"; glyph: "overlay"; soon: true; }
         NavRow {
             label: "Settings";
+            glyph: "settings";
             active: Tracker.view == "settings";
             clicked => { root.navigate("settings"); }
         }
-        NavRow { label: "Stretch"; soon: true; }
+        NavRow { label: "Stretch"; glyph: "stretch"; soon: true; }
 
         Rectangle { vertical-stretch: 1; }
 

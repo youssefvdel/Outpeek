@@ -61,26 +61,70 @@ export component StateDot inherits Rectangle {
                 : Theme.ink-faint;
 }
 
-/// Sidebar navigation row: a real button. Hover, pressed and keyboard focus
-/// all change something visible; pointer cursor; Space/Return activates.
-/// A `soon` row is inert but still reads as a row: faint label + SOON chip.
+/// Leading glyph for a nav row. Four stroke paths on Lucide's 24x24 grid,
+/// scaled by the view box: no icon font, no image asset, no new dependency.
+/// `kind`: tracker (reticle) | overlay (stacked plates) | settings (sliders) |
+/// stretch (corner arrows).
+export component NavGlyph inherits Path {
+    in property <string> kind: "tracker";
+
+    width: 16px;
+    height: 16px;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    stroke-width: 2px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    fill: transparent;
+    commands: kind == "tracker"
+        ? "M 12 2 A 10 10 0 1 1 12 22 A 10 10 0 1 1 12 2 M 22 12 H 18 M 6 12 H 2 M 12 6 V 2 M 12 22 V 18"
+        : kind == "overlay"
+            ? "M 12 2.75 L 21 7.25 L 12 11.75 L 3 7.25 Z M 3 12.75 L 12 17.25 L 21 12.75 M 3 17.75 L 12 22.25 L 21 17.75"
+            : kind == "settings"
+                ? "M 21 4 H 14 M 10 4 H 3 M 14 2 V 6 M 21 12 H 12 M 8 12 H 3 M 8 10 V 14 M 21 20 H 16 M 12 20 H 3 M 16 18 V 22"
+                : "M 15 3 H 21 V 9 M 9 21 H 3 V 15 M 21 3 L 14 10 M 3 21 L 10 14";
+}
+
+/// Sidebar navigation row: a real button, so it must read as one at rest.
+/// The row is a recessed slot (surface fill + hairline) that lifts to a filled
+/// plate on hover, brighter on press, and shows a violet edge, spine and glyph
+/// when current. Space/Return activates; Tab focus draws a 2px ring inside the
+/// plate. A `soon` row keeps the same footprint but stays hollow: ghost
+/// outline, faint glyph and label, SOON chip, no hover, no focus, no click.
 export component NavRow inherits Rectangle {
     in property <string> label: "";
+    in property <string> glyph: "tracker";
     in property <bool> active: false;
     in property <bool> soon: false;
     out property <bool> has-focus: scope.has-focus;
-    out property <bool> pressed: !root.soon && touch.pressed;
+    out property <bool> hovered: !root.soon && touch.has-hover;
+    // Held down on the row: a press dragged off the row is not a press.
+    out property <bool> pressing: root.hovered && touch.pressed;
     callback clicked();
 
     height: 40px;
     border-radius: Shape.sm;
-    border-width: 1px;
-    border-color: root.has-focus && !root.soon ? Theme.primary : transparent;
-    background: root.pressed
-        ? Theme.container-high
+    border-width: Shape.stroke;
+    border-color: root.soon
+        ? Theme.line-soft
         : root.active
-            ? Theme.container
-            : (touch.has-hover && !root.soon ? Theme.container-low : transparent);
+            ? Theme.primary-dim
+            : root.hovered || root.pressing
+                ? Theme.line
+                : Theme.line-soft;
+    // Rest is one step below the rail so the row reads as a slot, not a label;
+    // hover/active/press climb toward the HUD's container scale.
+    background: root.soon
+        ? transparent
+        : root.pressing
+            ? Theme.container-highest
+            : root.active
+                ? Theme.container-high
+                : root.hovered
+                    ? Theme.container
+                    : Theme.surface;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
 
     accessible-role: button;
     accessible-enabled: !root.soon;
@@ -108,8 +152,20 @@ export component NavRow inherits Rectangle {
         }
     }
 
+    // Keyboard focus ring: 2px inset, no layout shift, state border kept.
+    if root.has-focus && !root.soon: Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        border-radius: Shape.sm - 1px;
+        border-width: 2px;
+        border-color: Theme.primary;
+        background: transparent;
+    }
+
     // Active accent spine, same 2px as the HUD's live spine.
-    if active: Rectangle {
+    if root.active: Rectangle {
         x: 0px;
         y: 10px;
         width: 2px;
@@ -119,23 +175,40 @@ export component NavRow inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 12px;
+        padding-left: Space.md;
+        padding-right: Space.md;
         spacing: Space.sm;
 
+        NavGlyph {
+            kind: root.glyph;
+            stroke: root.soon
+                ? Theme.line
+                : root.active
+                    ? Theme.primary
+                    : root.hovered
+                        ? Theme.ink
+                        : Theme.ink-faint;
+            animate stroke { duration: Motion.fast; easing: ease-out; }
+        }
         Text {
             text: root.label;
             font-family: Theme.font-body;
             font-size: TypeScale.body;
             font-weight: root.active ? 700 : 500;
-            color: root.active ? Theme.ink : (root.soon ? Theme.ink-faint : Theme.ink-dim);
+            color: root.active
+                ? Theme.ink
+                : root.soon
+                    ? Theme.ink-faint
+                    : root.hovered
+                        ? Theme.ink
+                        : Theme.ink-dim;
             vertical-alignment: center;
+            horizontal-stretch: 1;
+            animate color { duration: Motion.fast; easing: ease-out; }
         }
-        Rectangle { horizontal-stretch: 1; }
         if root.soon: Chip {
             text: "SOON";
             tone: "off";
-            y: (parent.height - self.height) / 2;
         }
     }
 }
