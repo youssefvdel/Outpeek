@@ -33,6 +33,7 @@ pub mod paths;
 pub mod riot_http;
 
 pub mod app_window;
+pub mod badges;
 pub mod hud;
 pub mod identity;
 pub mod fonts;

@@ -111,11 +111,11 @@ component LegacyGlyph inherits Path {
 /// ink — the container draws no border of its own, so the brush only reaches the
 /// path.
 ///
-/// Five kinds have no Lucide source in the shipping set and keep the shell's
+/// Two kinds have no Lucide source in the shipping set and keep the shell's
 /// own paths below: `ranks` (the React app drew rank crests from art, not from
-/// lucide), `target` / `flame` / `star` (the old combat-highlight badges were
-/// agent art too), and `user` (the set ships `users` and `user-check`, not a
-/// single person).
+/// lucide) and `user` (the set ships `users` and `user-check`, not a single
+/// person). The combat-highlight badges are real artwork now: `cards.slint`
+/// draws the PNGs, not a glyph.
 export component Glyph inherits Rectangle {
     in property <string> kind: "tracker";
     in property <length> size: 16px;
@@ -146,21 +146,6 @@ export component Glyph inherits Rectangle {
         size: root.size;
         stroke: root.stroke;
         commands: "M 6 14 L 12 8 L 18 14 M 6 19 L 12 13 L 18 19";
-    }
-    if kind == "target": LegacyGlyph {
-        size: root.size;
-        stroke: root.stroke;
-        commands: "M 12 6 A 6 6 0 1 1 12 18 A 6 6 0 1 1 12 6 M 12 10.5 A 1.5 1.5 0 1 1 12 13.5 A 1.5 1.5 0 1 1 12 10.5";
-    }
-    if kind == "flame": LegacyGlyph {
-        size: root.size;
-        stroke: root.stroke;
-        commands: "M 12 22 C 8.1 22 5 19 5 15.2 C 5 9 12 2 12 2 C 12 2 19 9 19 15.2 C 19 19 15.9 22 12 22 Z";
-    }
-    if kind == "star": LegacyGlyph {
-        size: root.size;
-        stroke: root.stroke;
-        commands: "M 12 2.5 L 14.9 8.6 L 21.5 9.5 L 16.7 14.1 L 17.9 20.6 L 12 17.5 L 6.1 20.6 L 7.3 14.1 L 2.5 9.5 L 9.1 8.6 Z";
     }
     if kind == "user": LegacyGlyph {
         size: root.size;

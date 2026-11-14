@@ -57,6 +57,9 @@ component RankCell inherits VerticalLayout {
     spacing: 1px;
 
     HCenter {
+        // Rank crests are competitive-tier art from media.valorant-api.com; they
+        // arrive with the valorant-api asset pipeline. The chevron stays until
+        // then — never a fake crest.
         Glyph {
             kind: "ranks";
             size: 14px;

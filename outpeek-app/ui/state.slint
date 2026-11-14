@@ -33,6 +33,11 @@ export global Tracker {
     in-out property <int> rank-rr: 0;
     in-out property <string> rank-message: "Waiting for the Riot Client.";
 
+    // Tracker Score medallion key, from `badges::score_badge`: "1K" | "S" | "A"
+    // | "B" | "C" | "D", or empty for unrated. Rust owns the grade rule; the
+    // UI only picks the asset, so no letter is ever guessed here.
+    in-out property <string> score-badge: "";
+
     // Live panel. state: loading | empty | live | error.
     in-out property <string> live-state: "loading";
     in-out property <string> live-message: "Reading the Riot Client…";

@@ -152,7 +152,9 @@ component MetricsStrip inherits Card {
 // ---------------------------------------------------------------------------
 
 component HighlightRow inherits HorizontalLayout {
-    in property <string> glyph: "target";
+    // The shipping app's own round badge art (a 64x64 PNG whose circle IS the
+    // chip surface). Passed in as an image so the row draws no invented glyph.
+    in property <image> badge;
     in property <string> label: "";
     in property <string> value: "—";
 
@@ -166,13 +168,13 @@ component HighlightRow inherits HorizontalLayout {
             border-radius: 15px;
             background: Theme.container-high;
 
-            Glyph {
-                kind: root.glyph;
-                size: 14px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-                stroke: Theme.primary;
-                opacity: 0.85;
+            // Chip geometry stays; the artwork is the content. `contain` with an
+            // explicit square keeps the circular PNG circular at any scale.
+            Image {
+                width: 30px;
+                height: 30px;
+                source: root.badge;
+                image-fit: contain;
             }
         }
     }
@@ -210,9 +212,18 @@ component CombatHighlights inherits Card {
         }
     }
 
-    HighlightRow { glyph: "target"; label: "Match kills (best)"; }
-    HighlightRow { glyph: "flame"; label: "First kills / deaths"; }
-    HighlightRow { glyph: "star"; label: "Aces"; }
+    HighlightRow {
+        badge: @image-url("../assets/badges/kills.png");
+        label: "Match kills (best)";
+    }
+    HighlightRow {
+        badge: @image-url("../assets/badges/firstbloods.png");
+        label: "First kills / deaths";
+    }
+    HighlightRow {
+        badge: @image-url("../assets/badges/aces.png");
+        label: "Aces";
+    }
 
     Rectangle { vertical-stretch: 1; }
 }
@@ -510,6 +521,51 @@ component ScoreMetric inherits VerticalLayout {
     }
 }
 
+/// One embedded Tracker Score medallion. Six square files, one per tier key;
+/// explicit 38px square + `contain` so the 24x24 viewBox is never stretched.
+component GradeImage inherits Image {
+    width: 38px;
+    height: 38px;
+    image-fit: contain;
+}
+
+/// Tracker Score medallion slot. `grade` is the tier key from
+/// `badges::score_badge` ("1K" | "S" | "A" | "B" | "C" | "D"); an empty key is
+/// unrated and keeps the drawn shield, because no art exists for "no grade".
+component ScoreMedallion inherits Rectangle {
+    in property <string> grade: "";
+
+    width: 38px;
+    height: 38px;
+    background: transparent;
+
+    if root.grade == "": Rectangle {
+        width: 38px;
+        height: 38px;
+        border-radius: 19px;
+        background: Theme.container-high;
+
+        Glyph {
+            kind: "shield";
+            size: 20px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            stroke: Theme.primary;
+            opacity: 0.45;
+        }
+    }
+
+    // The shipping app's own hex emblems, copied from `src/assets/badges/`.
+    // The UI never chooses a grade; it only picks the file for the key Rust
+    // hands it. An unknown key draws nothing rather than a wrong medal.
+    if root.grade == "1K": GradeImage { source: @image-url("../assets/badges/score-1k.svg"); }
+    if root.grade == "S": GradeImage { source: @image-url("../assets/badges/score-s.svg"); }
+    if root.grade == "A": GradeImage { source: @image-url("../assets/badges/score-a.svg"); }
+    if root.grade == "B": GradeImage { source: @image-url("../assets/badges/score-b.svg"); }
+    if root.grade == "C": GradeImage { source: @image-url("../assets/badges/score-c.svg"); }
+    if root.grade == "D": GradeImage { source: @image-url("../assets/badges/score-d.svg"); }
+}
+
 component TrackerScore inherits Card {
     pad: 14px;
     gap: 10px;
@@ -519,7 +575,13 @@ component TrackerScore inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Tracker Score"; horizontal-stretch: 1; }
         VCenter {
-            Chip { text: "UNRATED"; tone: "off"; pad-y: 1px; }
+            // UNRATED is the absence of a tier; once a tier exists the chip
+            // names it, so the badge and the chip can never disagree.
+            Chip {
+                text: Tracker.score-badge == "" ? "UNRATED" : "TIER " + Tracker.score-badge;
+                tone: Tracker.score-badge == "" ? "off" : "neutral";
+                pad-y: 1px;
+            }
         }
     }
 
@@ -528,21 +590,7 @@ component TrackerScore inherits Card {
         spacing: Space.md;
 
         VCenter {
-            Rectangle {
-                width: 38px;
-                height: 38px;
-                border-radius: 19px;
-                background: Theme.container-high;
-
-                Glyph {
-                    kind: "shield";
-                    size: 20px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    stroke: Theme.primary;
-                    opacity: 0.45;
-                }
-            }
+            ScoreMedallion { grade: Tracker.score-badge; }
         }
 
         Text {
@@ -554,7 +602,7 @@ component TrackerScore inherits Card {
         }
 
         Need {
-            text: "A tier needs the four metrics below.";
+            text: Tracker.score-badge == "" ? "A tier needs the four metrics below." : "";
             horizontal-stretch: 1;
         }
     }

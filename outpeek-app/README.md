@@ -305,9 +305,11 @@ bun scripts/icons-check.ts   # fail when the committed file is stale
 
 `icons.slint` is generated and committed, and `bun run verify` runs the check,
 so a `lucide-react` bump cannot drift silently. The kinds Lucide does not cover
-(rank crests, the combat-highlight badges, the single-person placeholder) stay
-as the shell's own paths inside `Glyph` in `ui/components/widgets.slint`, each
-marked in place.
+(rank crests and the single-person placeholder) stay as the shell's own paths
+inside `Glyph` in `ui/components/widgets.slint`, each marked in place. The
+Combat Highlights badges and Tracker Score medallions are not glyphs: they are
+the React app's own art, copied byte-identical into `ui/assets/badges/` and
+embedded by Slint at build time (provenance in that folder's `README.md`).
 
 ## Deliberately not ported yet
 
