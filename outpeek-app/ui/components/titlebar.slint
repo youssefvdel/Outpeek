@@ -12,10 +12,10 @@
 
 import { Theme, TypeScale, Space, Shape, Motion } from "tokens.slint";
 import { Tracker } from "../state.slint";
-import { IconButton, StateDot, VCenter } from "widgets.slint";
+import { Glyph, IconButton, StateDot, VCenter } from "widgets.slint";
 
-/// One window button. Glyphs are stroke paths on Lucide's 24-unit grid, the
-/// same construction as the nav glyphs: no icon font, no image, no new hex.
+/// One window button. Glyphs come from the generated Lucide set (`icons.slint`)
+/// through `Glyph`: no icon font, no image, no new hex.
 component WindowButton inherits Rectangle {
     in property <length> button-width: 46px;
     in property <string> glyph: "minimize"; // minimize | maximize | restore | close
@@ -69,27 +69,19 @@ component WindowButton inherits Rectangle {
         background: transparent;
     }
 
-    Path {
-        width: 13px;
-        height: 13px;
+    // Lucide glyphs, the same three the shipping titlebar uses: Minus,
+    // Square/Copy (maximize/restore) and X.
+    Glyph {
+        kind: root.glyph == "minimize" ? "minus"
+            : root.glyph == "maximize" ? "square"
+                : root.glyph == "restore" ? "copy"
+                    : "x";
+        size: 13px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        stroke-width: 2px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
-        fill: transparent;
         stroke: root.glyph == "close"
             ? touch.has-hover ? Theme.surface-dim : Theme.ink-dim
             : touch.has-hover ? Theme.ink : Theme.ink-dim;
-        commands: root.glyph == "minimize"
-            ? "M 5 12 H 19"
-            : root.glyph == "maximize"
-                ? "M 6 6 H 18 V 18 H 6 Z"
-                : root.glyph == "restore"
-                    ? "M 9 9 H 20 V 20 H 9 Z M 5 15 V 4 H 16"
-                    : "M 6 6 L 18 18 M 18 6 L 6 18";
     }
 }
 

@@ -6,6 +6,11 @@
 // display numerals. Nothing here blurs or overlays the game.
 
 import { Theme, TypeScale, Space, Shape, Motion } from "tokens.slint";
+import {
+    IconChevronDown, IconCopy, IconCpu, IconCrosshair, IconMessageSquare, IconMinus,
+    IconMonitor, IconRefreshCw, IconSettings, IconShieldCheck, IconShoppingBag,
+    IconSquare, IconTrendingUp, IconUserCheck, IconUsers, IconX,
+} from "icons.slint";
 
 /// Status pill. `tone`: neutral | live | armed | error | off.
 /// `pad-x` / `pad-y` let a dense row use a flatter chip without a second
@@ -85,52 +90,83 @@ export component HCenter inherits HorizontalLayout {
     @children
 }
 
-/// Stroke glyph on Lucide's 24x24 grid. One component for every icon in the
-/// shell: no icon font, no image asset, no dependency. New kinds are one more
-/// branch of the same ternary chain.
-export component Glyph inherits Path {
-    in property <string> kind: "tracker";
+/// One component on the shell's own 24-unit grid, for the kinds Lucide does not
+/// ship. Same geometry as `LucideIcon` so a legacy glyph and a real icon sit on
+/// the same baseline.
+component LegacyGlyph inherits Path {
     in property <length> size: 16px;
 
-    width: root.size;
-    height: root.size;
+    width: self.size;
+    height: self.size;
     viewbox-width: 24;
     viewbox-height: 24;
     stroke-width: 2px;
     stroke-line-cap: round;
     stroke-line-join: round;
     fill: transparent;
-    commands: kind == "tracker"
-        ? "M 12 2 A 10 10 0 1 1 12 22 A 10 10 0 1 1 12 2 M 22 12 H 18 M 6 12 H 2 M 12 6 V 2 M 12 22 V 18"
-        : kind == "store"
-            ? "M 6 2 L 3 6 V 20 A 2 2 0 0 0 5 22 H 19 A 2 2 0 0 0 21 20 V 6 L 18 2 Z M 3 6 H 21 M 16 10 A 4 4 0 0 1 8 10"
-            : kind == "crosshair"
-                ? "M 12 5 A 7 7 0 1 1 12 19 A 7 7 0 1 1 12 5 M 12 2 V 5 M 12 19 V 22 M 2 12 H 5 M 19 12 H 22"
-                : kind == "monitor"
-                    ? "M 3 4 H 21 V 16 H 3 Z M 8 21 H 16 M 12 16 V 21"
-                    : kind == "chat"
-                        ? "M 21 15 A 2 2 0 0 1 19 17 H 7 L 3 21 V 5 A 2 2 0 0 1 5 3 H 19 A 2 2 0 0 1 21 5 Z"
-                        : kind == "people"
-                            ? "M 16 21 V 19 A 4 4 0 0 0 12 15 H 6 A 4 4 0 0 0 2 19 V 21 M 9 11 A 4 4 0 1 0 9 3 A 4 4 0 1 0 9 11 M 22 21 V 19 A 4 4 0 0 0 19 15.13 M 16 3.13 A 4 4 0 0 1 16 10.87"
-                            : kind == "user"
-                                ? "M 19 21 V 19 A 4 4 0 0 0 15 15 H 9 A 4 4 0 0 0 5 19 V 21 M 12 11 A 4 4 0 1 0 12 3 A 4 4 0 1 0 12 11"
-                                : kind == "settings"
-                                    ? "M 21 4 H 14 M 10 4 H 3 M 14 2 V 6 M 21 12 H 12 M 8 12 H 3 M 8 10 V 14 M 21 20 H 16 M 12 20 H 3 M 16 18 V 22"
-                                    : kind == "refresh"
-                                        ? "M 20 12 A 8 8 0 1 1 17.2 5.9 M 20 3.4 V 8 H 15.4"
-                                        : kind == "shield"
-                                            ? "M 12 22 C 12 22 20 18 20 12 V 5 L 12 2 L 4 5 V 12 C 4 18 12 22 12 22 Z"
-                                            : kind == "chevron-down"
-                                                ? "M 6 9 L 12 15 L 18 9"
-                                                : kind == "target"
-                                                    ? "M 12 6 A 6 6 0 1 1 12 18 A 6 6 0 1 1 12 6 M 12 10.5 A 1.5 1.5 0 1 1 12 13.5 A 1.5 1.5 0 1 1 12 10.5"
-                                                    : kind == "flame"
-                                                        ? "M 12 22 C 8.1 22 5 19 5 15.2 C 5 9 12 2 12 2 C 12 2 19 9 19 15.2 C 19 19 15.9 22 12 22 Z"
-                                                        : kind == "star"
-                                                            ? "M 12 2.5 L 14.9 8.6 L 21.5 9.5 L 16.7 14.1 L 17.9 20.6 L 12 17.5 L 6.1 20.6 L 7.3 14.1 L 2.5 9.5 L 9.1 8.6 Z"
-                                                            : kind == "ranks"
-                                                                ? "M 6 14 L 12 8 L 18 14 M 6 19 L 12 13 L 18 19"
-                                                                : "M 7 17 L 17 7 M 9 7 H 17 V 15";
+}
+
+/// Icon slot: the real Lucide geometry from `icons.slint`, selected by the
+/// shell's own kind name so rows and buttons stay strings. `stroke` is the icon
+/// ink — the container draws no border of its own, so the brush only reaches the
+/// path.
+///
+/// Five kinds have no Lucide source in the shipping set and keep the shell's
+/// own paths below: `ranks` (the React app drew rank crests from art, not from
+/// lucide), `target` / `flame` / `star` (the old combat-highlight badges were
+/// agent art too), and `user` (the set ships `users` and `user-check`, not a
+/// single person).
+export component Glyph inherits Rectangle {
+    in property <string> kind: "tracker";
+    in property <length> size: 16px;
+    in property <brush> stroke: transparent;
+
+    width: root.size;
+    height: root.size;
+    background: transparent;
+
+    if kind == "tracker": IconTrendingUp { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "store": IconShoppingBag { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "crosshair": IconCrosshair { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "monitor": IconMonitor { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "cpu": IconCpu { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "chat": IconMessageSquare { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "people": IconUserCheck { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "users": IconUsers { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "settings": IconSettings { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "refresh": IconRefreshCw { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "shield": IconShieldCheck { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "chevron-down": IconChevronDown { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "minus": IconMinus { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "square": IconSquare { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "copy": IconCopy { width: parent.width; height: parent.height; stroke: root.stroke; }
+    if kind == "x": IconX { width: parent.width; height: parent.height; stroke: root.stroke; }
+
+    if kind == "ranks": LegacyGlyph {
+        size: root.size;
+        stroke: root.stroke;
+        commands: "M 6 14 L 12 8 L 18 14 M 6 19 L 12 13 L 18 19";
+    }
+    if kind == "target": LegacyGlyph {
+        size: root.size;
+        stroke: root.stroke;
+        commands: "M 12 6 A 6 6 0 1 1 12 18 A 6 6 0 1 1 12 6 M 12 10.5 A 1.5 1.5 0 1 1 12 13.5 A 1.5 1.5 0 1 1 12 10.5";
+    }
+    if kind == "flame": LegacyGlyph {
+        size: root.size;
+        stroke: root.stroke;
+        commands: "M 12 22 C 8.1 22 5 19 5 15.2 C 5 9 12 2 12 2 C 12 2 19 9 19 15.2 C 19 19 15.9 22 12 22 Z";
+    }
+    if kind == "star": LegacyGlyph {
+        size: root.size;
+        stroke: root.stroke;
+        commands: "M 12 2.5 L 14.9 8.6 L 21.5 9.5 L 16.7 14.1 L 17.9 20.6 L 12 17.5 L 6.1 20.6 L 7.3 14.1 L 2.5 9.5 L 9.1 8.6 Z";
+    }
+    if kind == "user": LegacyGlyph {
+        size: root.size;
+        stroke: root.stroke;
+        commands: "M 19 21 V 19 A 4 4 0 0 0 15 15 H 9 A 4 4 0 0 0 5 19 V 21 M 12 11 A 4 4 0 1 0 12 3 A 4 4 0 1 0 12 11";
+    }
 }
 
 /// Round index badge on a nav row. `active` deepens the fill so the number

@@ -293,6 +293,22 @@ Every row is a value resolved on this machine or a sentence saying why it is not
 All strings come from `src/settings_model.rs`, which is pure and unit-tested
 (path fallbacks, MCP states, version formatting, non-empty not-ported list).
 
+## Icons
+
+The shell draws the React app's Lucide icons, not redrawn lookalikes. Geometry
+is generated from `lucide-react`'s `__iconNode` tables:
+
+```bash
+bun scripts/gen-icons.ts     # rewrite outpeek-app/ui/components/icons.slint
+bun scripts/icons-check.ts   # fail when the committed file is stale
+```
+
+`icons.slint` is generated and committed, and `bun run verify` runs the check,
+so a `lucide-react` bump cannot drift silently. The kinds Lucide does not cover
+(rank crests, the combat-highlight badges, the single-person placeholder) stay
+as the shell's own paths inside `Glyph` in `ui/components/widgets.slint`, each
+marked in place.
+
 ## Deliberately not ported yet
 
 * Stretch and Overlay views — sidebar rows are marked `SOON`.

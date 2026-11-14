@@ -49,13 +49,17 @@ const BUILD_TARGET: &str = match option_env!("OUTPEEK_TARGET") {
 };
 
 fn main() {
+    // Arguments first: `parse_args` fills SLINT_MCP_PORT, and the backend reads
+    // it exactly once when the platform is created. Font registration below
+    // touches Slint's font collection, which creates that platform — so a flag
+    // parsed after it never starts the MCP server.
+    parse_args();
     // Pin the one proven renderer before any window exists.
     outpeek_overlay::force_femtovg();
     // Embedded OFL fonts: without them Windows falls back to Segoe UI and the
     // whole design's metrics change. Must run before the first window.
     let faces = outpeek_app::fonts::register();
     eprintln!("[Outpeek] fonts registered: {faces} face(s)");
-    parse_args();
     // Copy-only migrations, exactly once per launch (same rules as the Tauri app).
     paths::migrate_previous_app_data();
     paths::migrate_legacy_data();

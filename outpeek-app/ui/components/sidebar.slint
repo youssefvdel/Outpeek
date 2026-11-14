@@ -10,33 +10,17 @@
 import { Theme, TypeScale, Space, Shape } from "tokens.slint";
 import { Shell, Tracker } from "../state.slint";
 import { Chip, Divider, Glyph, HCenter, NavItem, StateDot, VCenter } from "widgets.slint";
+import { IconEye } from "icons.slint";
 
-/// Geometric brand mark: an eye outline with a solid pupil — "peek" drawn
-/// from two Paths. No image file, no font glyph, no second ink colour.
+/// Brand mark: the real Lucide `eye` the React app uses for the tracker tab —
+/// one stroked path, no second ink colour, no image file.
 component BrandMark inherits Rectangle {
     width: 26px;
     height: 26px;
 
-    Path {
-        width: parent.width;
-        height: parent.height;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        stroke-width: 2px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
+    IconEye {
+        size: 26px;
         stroke: Theme.primary;
-        fill: transparent;
-        commands: "M 2.5 12 C 5.5 6.8 9 4.5 12 4.5 C 15 4.5 18.5 6.8 21.5 12 C 18.5 17.2 15 19.5 12 19.5 C 9 19.5 5.5 17.2 2.5 12 Z";
-    }
-
-    Path {
-        width: parent.width;
-        height: parent.height;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        fill: Theme.primary;
-        commands: "M 12 8.2 A 3.8 3.8 0 1 1 12 15.8 A 3.8 3.8 0 1 1 12 8.2";
     }
 }
 
@@ -294,7 +278,7 @@ component DisplayCard inherits Rectangle {
 
             VCenter {
                 Glyph {
-                    kind: "monitor";
+                    kind: "cpu";
                     size: 12px;
                     stroke: Theme.ink-faint;
                 }
@@ -413,7 +397,7 @@ export component Sidebar inherits Rectangle {
             Rectangle { height: 2px; }
             NavItem { label: "Pre-Picker"; glyph: "people"; index: 6; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Accounts"; glyph: "user"; index: 7; soon: true; }
+            NavItem { label: "Accounts"; glyph: "users"; index: 7; soon: true; }
             Rectangle { height: 2px; }
             NavItem {
                 label: "Settings";
