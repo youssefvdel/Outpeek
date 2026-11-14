@@ -35,6 +35,7 @@ pub mod riot_http;
 pub mod app_window;
 pub mod hud;
 pub mod identity;
+pub mod fonts;
 pub mod model;
 pub mod rank;
 pub mod settings_model;
