@@ -1,5 +1,12 @@
 fn main() {
     println!("cargo::rerun-if-changed=ui/");
+    // `--features ui-debug` turns on Slint's element metadata so the embedded
+    // MCP server can address widgets (get_element_tree/click_element).
+    // Production builds leave it off: it embeds widget paths and geometry.
+    if std::env::var_os("CARGO_FEATURE_UI_DEBUG").is_some() {
+        std::env::set_var("SLINT_EMIT_DEBUG_INFO", "1");
+        println!("cargo::rustc-cfg=ui_debug");
+    }
     // Tokens/components are shared with the HUD crate, never copied: the
     // include path makes `tokens.slint` and `components/plate.slint` resolve
     // out of `outpeek-overlay/ui`.

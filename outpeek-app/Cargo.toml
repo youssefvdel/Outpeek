@@ -19,6 +19,12 @@ path = "src/main.rs"
 [build-dependencies]
 slint-build = "1.18"
 
+[features]
+# Build Slint with element debug info so the embedded MCP server can address
+# widgets (get_element_tree / click_element). Off by default: it ships widget
+# paths and geometry in the binary, which production does not need.
+ui-debug = []
+
 [dependencies]
 # The HUD surface, its facts contract and the proven Win32 window recipe.
 # One compiled UI, no copies: this crate imports the overlay's tokens through

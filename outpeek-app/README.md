@@ -171,6 +171,18 @@ restart to load):
 The same flag exists on the standalone `outpeek-overlay.exe`, so the HUD can be
 driven headlessly (state injection still goes through stdin NDJSON there).
 
+Widget-level tools (`get_element_tree`, `click_element`) need Slint's element
+metadata, which is a build-time switch:
+
+```bash
+cargo build --features ui-debug      # element tree + click, for tests
+cargo build                          # production: no widget metadata embedded
+```
+
+Without `ui-debug` the server still answers `list_windows`,
+`get_window_properties` and `take_screenshot`; the tree reports
+`debugInfoMissing: true`.
+
 Build with `SLINT_EMIT_DEBUG_INFO=1` when an agent has to click by name: without
 it the element tree exposes handles and geometry but no type names or accessible
 labels, so there is nothing for "click the Settings row" to target. With it, the
