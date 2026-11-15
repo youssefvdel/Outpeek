@@ -221,7 +221,9 @@ export component LivePage inherits VerticalLayout {
                         ? "LIVE"
                         : Tracker.live-roster-state == "pregame"
                             ? "SELECT"
-                            : Tracker.live-roster-state == "error" ? "ERROR" : "IN MENUS";
+                            : Tracker.live-roster-state == "error"
+                                ? "ERROR"
+                                : Tracker.live-roster-state == "offline" ? "OFFLINE" : "IN MENUS";
                     tone: Tracker.live-roster-state == "coregame"
                         ? "mint"
                         : Tracker.live-roster-state == "pregame"
@@ -281,9 +283,13 @@ export component LivePage inherits VerticalLayout {
             background: transparent;
 
             Text {
-                text: Tracker.live-note == ""
-                    ? "No live match read yet."
-                    : Tracker.live-note;
+                // The band already carries the reason; this block says what to
+                // do about it instead of repeating the same sentence.
+                text: Tracker.live-roster-state == "offline"
+                    ? "Start the Riot Client and queue: this page fills when a match starts."
+                    : Tracker.live-roster-state == "idle"
+                        ? "No match running — the board appears at agent select."
+                        : Tracker.live-note == "" ? "No live match read yet." : Tracker.live-note;
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 color: Theme.ink-faint;

@@ -419,7 +419,7 @@ async fn live_frame(
     cache: &mut LiveCache,
 ) -> LiveView {
     let Some(me) = identity else {
-        return LiveView::idle("No Riot Client — the live lobby needs one.");
+        return LiveView::offline("No Riot Client — the live lobby needs one.");
     };
     // Names first: they are also the fallback for a lobby where the account
     // service has nothing.
@@ -450,13 +450,13 @@ async fn live_frame(
                 Ok(None) => return LiveView::idle("The match ended — back to the menu."),
                 Err(e) => {
                     eprintln!("[live] roster: {e}");
-                    return LiveView::idle(e);
+                    return LiveView::idle(e).error("Live lobby read failed.");
                 }
             }
         }
         Err(e) => {
             eprintln!("[live] probe: {e}");
-            return LiveView::idle(e);
+            return LiveView::idle(e).error("Live lobby read failed.");
         }
     };
     if !matched.has_roster() {
@@ -947,8 +947,8 @@ where
                 publish(Event::Snapshot(snap.clone()));
             }
             // No client, no lobby: say so once, not on every idle tick.
-            if fake_live.is_none() && live_last.as_ref().map(|v| v.state) != Some("idle") {
-                let view = LiveView::idle("No Riot Client — the live lobby needs one.");
+            if fake_live.is_none() && live_last.as_ref().map(|v| v.state) != Some("offline") {
+                let view = LiveView::offline("No Riot Client — the live lobby needs one.");
                 live_last = Some(view.clone());
                 publish(Event::Live(view));
             }

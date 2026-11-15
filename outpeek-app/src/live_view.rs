@@ -50,7 +50,7 @@ pub struct LivePlayerUi {
 /// The tab's whole state: the strip facts plus the two teams.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveView {
-    /// `idle` | `pregame` | `coregame` | `error`.
+    /// `idle` | `offline` | `pregame` | `coregame` | `error`.
     pub state: &'static str,
     /// The reason line: why there is no board, or which read failed.
     pub message: String,
@@ -76,8 +76,18 @@ impl LiveView {
         }
     }
 
-    /// A failed read never wipes a board that is still on screen: the caller
-    /// keeps the rows and swaps the label.
+    /// No Riot Client: a different state from "in menus", because the fix is
+    /// different (start the client, not queue).
+    pub fn offline(message: impl Into<String>) -> Self {
+        Self {
+            state: "offline",
+            message: message.into(),
+            ..Self::idle("")
+        }
+    }
+
+    /// A failed read. With rows on screen the caller keeps them and only the
+    /// label changes; with none it is a failure with a reason.
     pub fn error(mut self, message: impl Into<String>) -> Self {
         self.state = "error";
         self.message = message.into();

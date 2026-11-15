@@ -126,8 +126,15 @@ cargo xwin check --manifest-path outpeek-app/Cargo.toml \
 xvfb-run -a ./outpeek-app/target/debug/outpeek-app --mcp-port 8099 --tab agents
 ```
 
-`--tab overview|matches|agents|maps` opens a page directly: Rust owns the tab,
-so a screenshot cannot disagree with the underline.
+`--tab overview|matches|agents|maps|live` opens a page directly: Rust owns the
+tab, so a screenshot cannot disagree with the underline.
+
+`scripts/fake-riot/shots.py --out DIR [--fake-live]` launches the app once per
+tab and writes one PNG each — the whole visual surface in one command, against
+the cached profile in the fake data root. `--fake-live` renders the debug-only
+Live Match board (`OUTPEEK_FAKE_LIVE=1`, compiled out of release builds) with
+its awkward cases: you, a party, an incognito player, an unresolved name, a
+hidden rank, an unrated player and a failed read.
 
 With `--features ui-debug` the app's embedded Slint MCP server exposes
 `list_windows`, `get_element_tree`, `click_element`, `take_screenshot`; that is
