@@ -49,6 +49,13 @@ Two sources, deliberately separate:
   (the shape the RE'd Overwolf client uses). Parsed results are cached
   (`trn-cache.json`, `trn-matches.json`, 24 h TTL) so the last read is the
   first frame of a Riot-less launch.
+  TRN is the one host that **refuses Windows' Schannel fingerprint**: the same
+  URL answers 200 to curl/OpenSSL and 403 to Schannel over HTTP/1.1, with the
+  same public IP. That is why this transport alone uses a rustls + HTTP/2
+  client (`reqwest`), while the Riot transports keep `native-tls` (Schannel on
+  Windows, which Riot's loopback needs for its self-signed cert).
+  `outpeek-app --trn-probe [HANDLE]` prints `TRN OK …` / `TRN FAILED …` and
+  exits — headless, so a transport question can be answered over SSH.
 
 A local `/mmr` row wins rank + RR; TRN fills everything else and the RR cell
 then prints `NO RR` instead of a zero nobody measured.
@@ -61,6 +68,7 @@ then prints `NO RR` instead of a zero nobody measured.
 | Matches | TRN `matches` | last 20 games, every cell pre-formatted by Rust |
 | Agents | TRN `agent` segments | same profile payload as Overview — never a second request, so the season cannot disagree |
 | Maps | TRN `map` segments | map card art from valorant-api `listViewIcon`; TRN's own map URL is a 3840×2160 splash, past the art budget |
+| Live Match | Riot loopback + `glz` + `/mmr` | the lobby you are in: both teams, agent, level, Riot ID, public rank + RR, party size, incognito. Ranks are per player and cached 15 min; `RANK HIDDEN` / `UNRATED` / `NOT READ` are states, never a guessed rank |
 
 The Agents and Maps rows are what Tracker Network's endpoint returns (today 5
 agents, 7 maps), not a full roster; both pages say so in their note band rather

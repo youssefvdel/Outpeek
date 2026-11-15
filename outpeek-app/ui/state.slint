@@ -46,6 +46,21 @@ export struct AgentRowUi {
     art: image,
 }
 
+/// One player of the live lobby, pre-formatted by Rust. `rank` is a fact or an
+/// honest state (RANK HIDDEN / UNRATED / NOT READ) — the view never derives one.
+export struct LivePlayerUi {
+    name: string,
+    agent: string,
+    agent-art: image,
+    level: string,
+    rank: string,
+    rr: string,
+    crest: image,
+    party: string,
+    me: bool,
+    incognito: bool,
+}
+
 /// One map card on the Maps tab. Art is valorant-api's `listViewIcon`, cached
 /// locally; the numbers come from the same profile payload as the agents.
 export struct MapRowUi {
@@ -189,6 +204,21 @@ export global Tracker {
     // | "B" | "C" | "D", or empty for unrated. Rust owns the grade rule; the
     // UI only picks the asset, so no letter is ever guessed here.
     in-out property <string> score-badge: "";
+
+    // Live lobby board (the Live Match tab). `live-roster-state` is
+    // idle|pregame|coregame|error; `live-note` carries the reason when there is
+    // no board. Team rows are pre-formatted, like every other row in this file.
+    in-out property <[LivePlayerUi]> live-blue-team: [];
+    in-out property <[LivePlayerUi]> live-red-team: [];
+    in-out property <string> live-roster-state: "idle";
+    in-out property <string> live-note: "No live match read yet.";
+    // The board's own strip values: the live read is newer than the presence
+    // facts, so this tab reads these instead of the snapshot's copies (which an
+    // idle tick would otherwise clear under it).
+    in-out property <string> live-map: "";
+    in-out property <string> live-mode: "";
+    in-out property <int> live-blue-score: 0;
+    in-out property <int> live-red-score: 0;
 
     // Live panel. state: loading | empty | live | error.
     in-out property <string> live-state: "loading";

@@ -160,14 +160,14 @@ pub(crate) fn find_local_presence<'a>(root: &'a Value, local_puuid: &str) -> Opt
 }
 
 /// Decoded private blob. Base64 → UTF-8 → JSON, any step failing = `None`.
-fn presence_blob(presence: &Value) -> Option<Value> {
+pub(crate) fn presence_blob(presence: &Value) -> Option<Value> {
     let raw = presence.get("private")?.as_str()?;
     let bytes = decode_base64(raw)?;
     let text = String::from_utf8(bytes).ok()?;
     serde_json::from_str(&text).ok()
 }
 
-fn presence_puuid(presence: &Value) -> String {
+pub(crate) fn presence_puuid(presence: &Value) -> String {
     if let Some(s) = presence.get("puuid").and_then(Value::as_str) {
         let s = s.trim();
         if !s.is_empty() {

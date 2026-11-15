@@ -20,11 +20,10 @@
 //! * error strings mirror `trn_http_rules::status_error` exactly, so the TS
 //!   policy ladder and this app classify the same failure the same way.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde_json::Value;
-
-use crate::riot_http::{self, Request};
 
 /// The only host this transport may talk to.
 pub const HOST: &str = "api.tracker.network";
@@ -134,9 +133,9 @@ pub fn status_error(status: u16) -> Option<String> {
 /// A transport failure (no HTTP response at all) is `TRN_HTTP_ERROR`; a status
 /// failure is the mapping above; a body that is not JSON is
 /// `TRN_HTTP_BAD_BODY`. Bodies are never logged.
-pub fn fetch_profile(handle: &str) -> Result<Value, String> {
+pub async fn fetch_profile(handle: &str) -> Result<Value, String> {
     let path = profile_path(handle)?;
-    fetch_json(&path)
+    fetch_json(&path).await
 }
 
 /// Path of the recent-matches endpoint for `handle`.
@@ -150,40 +149,55 @@ pub fn matches_path(handle: &str) -> Result<String, String> {
 }
 
 /// One matches read, parsed (limit 20 as sent by the endpoint).
-pub fn fetch_matches(handle: &str) -> Result<Value, String> {
+pub async fn fetch_matches(handle: &str) -> Result<Value, String> {
     let path = matches_path(handle)?;
-    fetch_json(&path)
+    fetch_json(&path).await
+}
+
+/// One client for the life of the process: rustls TLS, HTTP/2 via ALPN, the
+/// OS-independent fingerprint TRN's edge accepts. Built once; a failure to
+/// build is a transport error, never a panic.
+fn client() -> Result<&'static reqwest::Client, String> {
+    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .timeout(TIMEOUT)
+                .connect_timeout(Duration::from_secs(5))
+                // No redirects: a redirect would be a second, un-reviewed host.
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))
+        })
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
 /// Shared GET for every TRN endpoint: allowlisted path, Overwolf UA, bounded
 /// body, no logging of bodies.
-fn fetch_json(path: &str) -> Result<Value, String> {
+async fn fetch_json(path: &str) -> Result<Value, String> {
     validate_path(path)?;
-    let headers = vec![
-        ("User-Agent".to_string(), USER_AGENT.to_string()),
-        ("Accept".to_string(), "application/json".to_string()),
-    ];
-    let response = riot_http::send(&Request {
-        host: HOST,
-        port: 443,
-        path,
-        method: "GET",
-        headers: &headers,
-        body: None,
-        basic_auth: None,
-        accept_invalid_certs: false,
-        connect_timeout: Duration::from_secs(5),
-        max_time: TIMEOUT,
-    })
-    .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))?;
-    if let Some(code) = status_error(response.status) {
+    let response = client()?
+        .get(format!("https://{HOST}{path}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))?;
+    if let Some(code) = status_error(response.status().as_u16()) {
         return Err(code);
     }
-    let len = response.body.len();
-    if len > MAX_BODY {
-        return Err(format!("TRN_HTTP_BODY_TOO_LARGE: {len} bytes > {MAX_BODY}"));
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))?;
+    if body.len() > MAX_BODY {
+        return Err(format!(
+            "TRN_HTTP_BODY_TOO_LARGE: {} bytes > {MAX_BODY}",
+            body.len()
+        ));
     }
-    serde_json::from_str(&response.body).map_err(|_| "TRN_HTTP_BAD_BODY".to_string())
+    serde_json::from_slice(&body).map_err(|_| "TRN_HTTP_BAD_BODY".to_string())
 }
 
 #[cfg(test)]

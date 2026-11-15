@@ -778,6 +778,22 @@ impl Art {
         self.ensure_url(fetcher, &url, now).await
     }
 
+    /// The agent catalogue, for the live board's names and portraits.
+    pub fn agents(&self) -> &[crate::assets::AgentArt] {
+        self.index.agents()
+    }
+
+    /// Rank crest for a tier, cached: the live board draws one per player.
+    pub async fn tier_icon(
+        &self,
+        fetcher: Arc<dyn Fetcher>,
+        tier: i64,
+        now: SystemTime,
+    ) -> Option<String> {
+        let url = tier_icon_url(self.index.tiers(), tier)?.to_string();
+        self.ensure_url(fetcher, &url, now).await
+    }
+
     /// Agent portrait for a uuid, resolved from the catalogue. The mirror is the
     /// fallback for rows whose TRN art is absent; most portraits arrive with
     /// the payload and never reach here.

@@ -68,6 +68,67 @@ pub fn parse_probe(payload: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// One `/chat/v4/presences` entry: the Riot ID and the party the client itself
+/// attaches. Never an agent or a rank — those come from the match payload and
+/// `/mmr`, and a presence must not be able to fake them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PresenceRow {
+    pub puuid: String,
+    pub name: String,
+    pub tag: String,
+    pub party_id: String,
+}
+
+/// Party id from a decoded presence blob: the flat `partyId` first, then the
+/// nested `partyPresenceData.partyId` the client also ships.
+fn party_from_blob(blob: &Value) -> String {
+    let direct = text(blob.get("partyId"));
+    if !direct.is_empty() {
+        return direct;
+    }
+    text(blob.pointer("/partyPresenceData/partyId"))
+}
+
+/// Every presence that names a puuid, for the lobby's names and parties.
+pub fn presence_rows(root: &Value) -> Vec<PresenceRow> {
+    let Some(list) = root.get("presences").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|presence| {
+            let puuid = crate::live_facts::presence_puuid(presence);
+            if puuid.is_empty() {
+                return None;
+            }
+            let name = {
+                let n = text(presence.get("game_name"));
+                if n.is_empty() {
+                    text(presence.get("gameName"))
+                } else {
+                    n
+                }
+            };
+            let tag = {
+                let t = text(presence.get("game_tag"));
+                if t.is_empty() {
+                    text(presence.get("gameTag"))
+                } else {
+                    t
+                }
+            };
+            let party_id = crate::live_facts::presence_blob(presence)
+                .map(|blob| party_from_blob(&blob))
+                .unwrap_or_default();
+            Some(PresenceRow {
+                puuid,
+                name,
+                tag,
+                party_id,
+            })
+        })
+        .collect()
+}
+
 /// One player of the live lobby, as the payload reports them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LivePlayer {
@@ -456,8 +517,31 @@ mod tests {
         assert_eq!(rows[1].name, "");
         assert!(rows[1].error.contains("Nameset V2 not found"));
         // A bare array (the Tauri command's own return shape) parses too.
-        assert_eq!(parse_namesets(&json!([{"puuid": "c", "alias": {"gameName": "X"}}])).len(), 1);
+        assert_eq!(
+            parse_namesets(&json!([{"puuid": "c", "alias": {"gameName": "X"}}])).len(),
+            1
+        );
         assert!(parse_namesets(&json!("nope")).is_empty());
+    }
+
+    #[test]
+    fn presences_give_names_and_parties_but_never_an_agent_or_rank() {
+        let root = json!({"presences": [
+            {"puuid": "p1", "game_name": "Shadow", "game_tag": "EUW",
+             "private": "eyJwYXJ0eUlkIjoicGFydHktMSJ9"},
+            {"puuid": "p2", "game_name": "Solo", "game_tag": "NA1", "private": ""},
+            {"puuid": "", "game_name": "NoId"},
+            // The nested shape the client also ships.
+            {"puuid": "p3", "game_name": "Nested", "game_tag": "EUW",
+             "private": "eyJwYXJ0eVByZXNlbmNlRGF0YSI6eyJwYXJ0eUlkIjoicGFydHktOSJ9fQ=="}
+        ]});
+        let rows = presence_rows(&root);
+        assert_eq!(rows.len(), 3, "an entry with no puuid is not a player");
+        assert_eq!(rows[0].name, "Shadow");
+        assert_eq!(rows[0].tag, "EUW");
+        assert_eq!(rows[0].party_id, "party-1");
+        assert!(rows[1].party_id.is_empty(), "no blob, no party");
+        assert_eq!(rows[2].party_id, "party-9");
     }
 
     #[test]

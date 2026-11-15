@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use outpeek_app::app_window::{self, WindowCommand};
 use outpeek_app::assets::ArtView;
 use outpeek_app::hud::{self, PLATFORM_SUPPORTS_HUD};
+use outpeek_app::live_view::{LivePlayerUi as LivePlayerRow, LiveView};
 use outpeek_app::model::{self, ClientState, RankView, TrackerSnapshot};
 use outpeek_app::overlay_renderer::OverlayRendererSetting;
 use outpeek_app::settings_model::{self, McpPort, PathState};
@@ -48,6 +49,14 @@ const BUILD_TARGET: &str = match option_env!("OUTPEEK_TARGET") {
 };
 
 fn main() {
+    // Diagnostic path: `--trn-probe [HANDLE]` reads one Tracker Network
+    // profile through this app's own transport and exits. It runs before any
+    // window exists, so it can be driven over SSH on the PC — that is how the
+    // Windows fingerprint (Schannel + HTTP/1.1 = 403) was proven.
+    if let Some(handle) = trn_probe_arg() {
+        run_trn_probe(&handle);
+        return;
+    }
     // Arguments first: `parse_args` fills SLINT_MCP_PORT, and the backend reads
     // it exactly once when the platform is created. Font registration below
     // touches Slint's font collection, which creates that platform — so a flag
@@ -203,6 +212,61 @@ fn main() {
     }
 }
 
+/// `--trn-probe [HANDLE]` → the handle to read (the remembered account when
+/// the flag carries none), or `None` when the flag is absent.
+fn trn_probe_arg() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    let at = args.iter().position(|a| a == "--trn-probe")?;
+    Some(
+        args.get(at + 1)
+            .filter(|a| !a.starts_with("--"))
+            .cloned()
+            .or_else(|| outpeek_app::account::load_default().map(|a| a.handle))
+            .unwrap_or_default(),
+    )
+}
+
+/// One profile read, printed and exited. `TRN OK …` / `TRN FAILED …` is the
+/// whole contract: it is a probe, not a feature.
+fn run_trn_probe(handle: &str) {
+    if handle.trim().is_empty() {
+        eprintln!("outpeek-app: --trn-probe needs a handle or a remembered account");
+        std::process::exit(2);
+    }
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("outpeek-app: --trn-probe could not start: {e}");
+            std::process::exit(2);
+        }
+    };
+    match rt.block_on(outpeek_app::trn::fetch_profile(handle)) {
+        Ok(json) => {
+            let bytes = serde_json::to_string(&json).map(|s| s.len()).unwrap_or(0);
+            match outpeek_app::trn_profile::parse(&json) {
+                Ok(profile) => println!(
+                    "TRN OK {bytes} bytes · {} · {} · {} matches",
+                    profile.handle,
+                    profile.season_short,
+                    profile
+                        .season
+                        .matches
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "—".to_string())
+                ),
+                Err(e) => println!("TRN OK {bytes} bytes · parse failed: {e}"),
+            }
+        }
+        Err(e) => {
+            println!("TRN FAILED {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// `--mcp-port PORT` (and `--help`). Slint reads `SLINT_MCP_PORT` at backend
 /// init; the flag only fills it when the environment did not. A port the app
 /// cannot use is rejected here instead of being handed to Slint, which would
@@ -238,15 +302,19 @@ fn parse_args() -> Option<String> {
             "--tab" => {
                 i += 1;
                 let Some(value) = args.get(i) else {
-                    eprintln!("outpeek-app: --tab needs a value (overview|matches|agents|maps)");
+                    eprintln!(
+                        "outpeek-app: --tab needs a value (overview|matches|agents|maps|live)"
+                    );
                     std::process::exit(2);
                 };
                 match value.as_str() {
-                    "overview" | "matches" | "agents" | "maps" => tab = Some(value.clone()),
+                    "overview" | "matches" | "agents" | "maps" | "live" => {
+                        tab = Some(value.clone())
+                    }
                     other => {
                         eprintln!(
                             "outpeek-app: --tab '{other}' is not ported \
-                             (overview|matches|agents|maps)"
+                             (overview|matches|agents|maps|live)"
                         );
                         std::process::exit(2);
                     }
@@ -319,6 +387,7 @@ fn wire_callbacks(
                 "matches" => "matches",
                 "agents" => "agents",
                 "maps" => "maps",
+                "live" => "live",
                 _ => "overview",
             };
             if let Some(app) = app_weak_tab.upgrade() {
@@ -854,6 +923,58 @@ fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
     t.set_breakdown_note(view.message.clone().into());
 }
 
+/// Push one live-lobby frame into the Live Match tab.
+///
+/// The worker already formatted every cell — including the honest rank states
+/// (`RANK HIDDEN` / `UNRATED` / `NOT READ`) — so this pass only decodes art at
+/// the size the rows draw it.
+fn apply_live(ui: &AppWindow, view: &LiveView) {
+    let t = ui.global::<Tracker>();
+    let any_art = view
+        .blue
+        .iter()
+        .chain(view.red.iter())
+        .any(|row| !row.agent_art.is_empty() || !row.crest.is_empty());
+    let dir = if any_art {
+        outpeek_app::assets::art_dir()
+    } else {
+        None
+    };
+    let load = |url: &str, edge: u32| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) => outpeek_overlay::image_cache::load_from_scaled(dir, url, edge),
+            None => slint::Image::default(),
+        }
+    };
+    let rows = |players: &[LivePlayerRow]| -> Vec<LivePlayerUi> {
+        players
+            .iter()
+            .map(|row| LivePlayerUi {
+                name: row.name.clone().into(),
+                agent: row.agent.clone().into(),
+                agent_art: load(&row.agent_art, 96),
+                level: row.level.clone().into(),
+                rank: row.rank.clone().into(),
+                rr: row.rr.clone().into(),
+                crest: load(&row.crest, 64),
+                party: row.party.clone().into(),
+                me: row.me,
+                incognito: row.incognito,
+            })
+            .collect()
+    };
+    t.set_live_blue_team(ModelRc::new(VecModel::from(rows(&view.blue))));
+    t.set_live_red_team(ModelRc::new(VecModel::from(rows(&view.red))));
+    t.set_live_roster_state(view.state.into());
+    t.set_live_note(view.message.clone().into());
+    // The board's strip has its own slots: the snapshot clears its copies on an
+    // idle tick, which would blank a board that is still on screen.
+    t.set_live_map(view.map.clone().into());
+    t.set_live_mode(view.mode.clone().into());
+    t.set_live_blue_score(view.blue_score as i32);
+    t.set_live_red_score(view.red_score as i32);
+}
+
 /// Decode the cached art this event names into the window's image slots.
 ///
 /// The worker cannot send `slint::Image` (it is not `Send`), so it publishes the
@@ -915,6 +1036,7 @@ fn start_worker(
                     Event::Profile(view) => apply_profile(&app, &view),
                     Event::Matches(view) => apply_matches(&app, &view),
                     Event::Breakdown(view) => apply_breakdown(&app, &view),
+                    Event::Live(view) => apply_live(&app, &view),
                 }
             });
         },

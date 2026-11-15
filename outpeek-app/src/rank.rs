@@ -34,6 +34,9 @@ pub struct RankRow {
     /// reported no act. Mirrors `parseLocalRank`'s `peakTier` in
     /// `src/sources/riot.ts` — a read of Riot's own act history, not a guess.
     pub peak_tier: i64,
+    /// Riot's own `IsActRankBadgeHidden`: the player hid their act rank. A
+    /// hidden rank is a fact to show as hidden, never as Unrated.
+    pub hidden: bool,
 }
 
 /// Decode the region claim out of the entitlements access token (JWT). Claim
@@ -134,6 +137,10 @@ pub fn parse_rank(payload: &Value) -> Result<RankRow, String> {
         tier,
         rr,
         peak_tier: peak_tier.max(tier),
+        hidden: payload
+            .get("IsActRankBadgeHidden")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
@@ -187,14 +194,10 @@ pub fn client_version() -> String {
     FALLBACK_CLIENT_VERSION.to_string()
 }
 
-/// One validated rank read. Remote by necessity; called once per launch and on
-/// explicit request, never on a timer.
-pub fn fetch_rank(puuid: &str, ent: &Entitlements, region: &str) -> Result<RankRow, String> {
-    if puuid.trim().is_empty() {
-        return Err("Rank read needs a PUUID.".to_string());
-    }
-    let host = shard_for(region);
-    let path = format!("/mmr/v1/players/{puuid}");
+/// One authenticated GET against a Riot host with the five headers its remote
+/// APIs expect. Returns `(status, body)`; `Err` means no response was read, so
+/// a transport failure stays distinguishable from a 4xx body.
+pub fn remote_get(host: &str, path: &str, ent: &Entitlements) -> Result<(u16, String), String> {
     let version = client_version();
     let headers = vec![
         (
@@ -213,9 +216,9 @@ pub fn fetch_rank(puuid: &str, ent: &Entitlements, region: &str) -> Result<RankR
         ),
     ];
     let resp = riot_http::send(&Request {
-        host: &host,
+        host,
         port: 443,
-        path: &path,
+        path,
         method: "GET",
         headers: &headers,
         body: None,
@@ -224,18 +227,27 @@ pub fn fetch_rank(puuid: &str, ent: &Entitlements, region: &str) -> Result<RankR
         connect_timeout: Duration::from_secs(2),
         max_time: Duration::from_secs(6),
     })
-    .map_err(|_| "Could not reach Riot for your rank.".to_string())?;
-    if resp.status == 401 || resp.status == 403 || riot_http::is_auth_failure(&resp.body) {
+    .map_err(|_| "Could not reach Riot.".to_string())?;
+    Ok((resp.status, resp.body))
+}
+
+/// One validated rank read. Remote by necessity; called once per launch and on
+/// explicit request, never on a timer.
+pub fn fetch_rank(puuid: &str, ent: &Entitlements, region: &str) -> Result<RankRow, String> {
+    if puuid.trim().is_empty() {
+        return Err("Rank read needs a PUUID.".to_string());
+    }
+    let host = shard_for(region);
+    let path = format!("/mmr/v1/players/{puuid}");
+    let (status, body) = remote_get(&host, &path, ent)?;
+    if status == 401 || status == 403 || riot_http::is_auth_failure(&body) {
         return Err("Riot session expired — restart the Riot Client.".to_string());
     }
-    if !(200..300).contains(&resp.status) {
-        return Err(format!(
-            "Riot returned HTTP {} for the rank read.",
-            resp.status
-        ));
+    if !(200..300).contains(&status) {
+        return Err(format!("Riot returned HTTP {status} for the rank read."));
     }
     let payload: Value =
-        serde_json::from_str(&resp.body).map_err(|_| "Unreadable rank payload.".to_string())?;
+        serde_json::from_str(&body).map_err(|_| "Unreadable rank payload.".to_string())?;
     parse_rank(&payload)
 }
 
@@ -285,6 +297,20 @@ mod tests {
         assert_eq!(row.rr, 64);
         // The current act's row (21) is the best one Riot reported here.
         assert_eq!(row.peak_tier, 21);
+        assert!(!row.hidden, "the fixture does not hide the badge");
+    }
+
+    #[test]
+    fn a_hidden_act_badge_is_a_flag_not_unrated() {
+        // Riot's own flag: the tier is still reported, the player hid the
+        // badge. The board must say HIDDEN, not "Unrated".
+        let payload = json!({
+            "IsActRankBadgeHidden": true,
+            "LatestCompetitiveUpdate": { "TierAfterUpdate": 21, "SeasonID": "s" },
+        });
+        let row = parse_rank(&payload).unwrap();
+        assert_eq!(row.tier, 21);
+        assert!(row.hidden);
     }
 
     #[test]

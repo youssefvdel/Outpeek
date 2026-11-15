@@ -23,6 +23,7 @@ import { SettingsPage } from "components/settings.slint";
 import { MatchesPage } from "components/matches.slint";
 import { AgentsPage } from "components/agents.slint";
 import { MapsPage } from "components/maps.slint";
+import { LivePage } from "components/live.slint";
 
 // Re-exported so the Rust side can address the same globals, push the titlebar
 // geometry, and use the row struct without the deprecated generated alias.
@@ -119,6 +120,7 @@ export component AppWindow inherits Window {
                     if Tracker.view == "tracker" && Tracker.tab == "matches": MatchesPage {}
                     if Tracker.view == "tracker" && Tracker.tab == "agents": AgentsPage {}
                     if Tracker.view == "tracker" && Tracker.tab == "maps": MapsPage {}
+                    if Tracker.view == "tracker" && Tracker.tab == "live": LivePage {}
                     if Tracker.view == "settings": SettingsPage {
                         toggle-hud => { root.toggle-hud(); }
                     }

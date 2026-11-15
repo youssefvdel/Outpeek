@@ -27,8 +27,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::account::{self, Account};
 use crate::assets::{Art, ArtRequest, ArtView, Fetcher, HttpFetcher};
-use crate::identity::{self, Identity};
+use crate::identity::{self, Entitlements, Identity};
+use crate::live_api::{self, Probe};
 use crate::live_facts::{derive_facts, find_local_presence};
+use crate::live_match;
+use crate::live_view::{self, LiveCache, LiveView};
 use crate::model::{format_player_tag, RankState, RankView, TrackerSnapshot};
 use crate::rank;
 use crate::trn;
@@ -66,6 +69,9 @@ pub enum Event {
     /// Agent and map breakdowns from the same profile payload. Published with
     /// every profile frame; rows carry cached art URLs, never raw TRN ones.
     Breakdown(BreakdownView),
+    /// The live lobby: two teams, names, agents, ranks. Only published on a
+    /// change; a failed read keeps the last board instead of blanking it.
+    Live(LiveView),
 }
 
 /// Rows plus the honesty label that belongs beside them.
@@ -132,8 +138,10 @@ where
     let _ = std::thread::Builder::new()
         .name("outpeek-live-poll".to_string())
         .spawn(move || {
+            // `enable_all`: the TRN transport is async reqwest (rustls + h2)
+            // and needs the IO driver, not just the timer.
             let Ok(rt) = tokio::runtime::Builder::new_current_thread()
-                .enable_time()
+                .enable_all()
                 .build()
             else {
                 return;
@@ -262,6 +270,269 @@ async fn breakdown_event(
     })
 }
 
+/// One live-lobby frame.
+///
+/// Order matters: presences name players and carry their parties, the probe
+/// finds the match, the payload carries the roster, `/mmr` answers ranks and
+/// the catalogue supplies agent art. Every step fails soft — a failed read
+/// returns a labelled view, never a board with invented cells.
+/// Debug-only board for hosts without VALORANT: `OUTPEEK_FAKE_LIVE=1` renders
+/// the Live Match page with the documented awkward cases (you, a party, an
+/// incognito player, an unresolved name, a hidden rank, an unrated player, a
+/// failed read). Never compiled into a release build.
+#[cfg(debug_assertions)]
+fn fake_live_frame() -> Option<LiveView> {
+    if std::env::var_os("OUTPEEK_FAKE_LIVE").is_none() {
+        return None;
+    }
+    let row = |name: &str,
+               agent: &str,
+               level: &str,
+               rank: &str,
+               rr: &str,
+               party: &str,
+               me: bool,
+               incognito: bool| live_view::LivePlayerUi {
+        name: name.to_string(),
+        agent: agent.to_string(),
+        agent_art: String::new(),
+        level: level.to_string(),
+        rank: rank.to_string(),
+        rr: rr.to_string(),
+        crest: String::new(),
+        party: party.to_string(),
+        me,
+        incognito,
+    };
+    Some(LiveView {
+        state: "coregame",
+        message: String::new(),
+        map: "Ascent".to_string(),
+        mode: "Competitive".to_string(),
+        blue_score: 6,
+        red_score: 4,
+        blue: vec![
+            row(
+                "Youssef#EUW",
+                "Jett",
+                "Lv 214",
+                "Diamond 3",
+                "26 RR",
+                "3",
+                true,
+                false,
+            ),
+            row(
+                "Shadow#EUW",
+                "Omen",
+                "Lv 187",
+                "Diamond 1",
+                "12 RR",
+                "3",
+                false,
+                false,
+            ),
+            row(
+                "Incognito#EUW",
+                "Raze",
+                "Lv 92",
+                "Platinum 3",
+                "74 RR",
+                "3",
+                false,
+                true,
+            ),
+            row(
+                "Player 4bad",
+                "Cypher",
+                "",
+                "NOT READ",
+                "",
+                "",
+                false,
+                false,
+            ),
+            row(
+                "Hidden#EUW",
+                "Sova",
+                "Lv 44",
+                "RANK HIDDEN",
+                "",
+                "",
+                false,
+                false,
+            ),
+        ],
+        red: vec![
+            row(
+                "Enemy 1#EUW",
+                "Reyna",
+                "Lv 310",
+                "Ascendant 1",
+                "40 RR",
+                "2",
+                false,
+                false,
+            ),
+            row(
+                "Enemy 2#EUW",
+                "Chamber",
+                "Lv 140",
+                "Platinum 1",
+                "8 RR",
+                "2",
+                false,
+                false,
+            ),
+            row("Enemy 3#EUW", "Viper", "", "UNRATED", "", "", false, false),
+            row(
+                "Enemy 4#NA1",
+                "Breach",
+                "Lv 61",
+                "Gold 2",
+                "55 RR",
+                "",
+                false,
+                false,
+            ),
+            row(
+                "Enemy 5#EUW",
+                "Skye",
+                "Lv 25",
+                "ERROR",
+                "",
+                "",
+                false,
+                false,
+            ),
+        ],
+    })
+}
+
+async fn live_frame(
+    art: &Art,
+    fetcher: Arc<dyn Fetcher>,
+    identity: Option<&Identity>,
+    snap: &TrackerSnapshot,
+    presences: &serde_json::Value,
+    ent_cache: &mut Option<(Entitlements, Instant)>,
+    cache: &mut LiveCache,
+) -> LiveView {
+    let Some(me) = identity else {
+        return LiveView::idle("No Riot Client — the live lobby needs one.");
+    };
+    // Names first: they are also the fallback for a lobby where the account
+    // service has nothing.
+    let presence_rows = live_match::presence_rows(presences);
+    for row in &presence_rows {
+        cache.set_name(&row.puuid, &row.name, &row.tag);
+    }
+
+    let now = Instant::now();
+    let ent = match ent_cache {
+        Some((ent, at)) if now.duration_since(*at) < Duration::from_secs(300) => ent.clone(),
+        _ => match identity::read_lockfile().and_then(|auth| identity::fetch_entitlements(&auth)) {
+            Ok(ent) => {
+                *ent_cache = Some((ent.clone(), now));
+                ent
+            }
+            Err(e) => return LiveView::idle(e),
+        },
+    };
+    let region =
+        rank::region_from_access_token(&ent.access_token).unwrap_or_else(|| "eu".to_string());
+
+    let matched = match live_api::probe(&ent, &region, &me.puuid) {
+        Ok(Probe::Idle) => return LiveView::idle("In menus — no live match."),
+        Ok(Probe::Match { phase, match_id }) => {
+            match live_api::match_by_id(&ent, &region, phase, &match_id) {
+                Ok(Some(matched)) => matched,
+                Ok(None) => return LiveView::idle("The match ended — back to the menu."),
+                Err(e) => {
+                    eprintln!("[live] roster: {e}");
+                    return LiveView::idle(e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[live] probe: {e}");
+            return LiveView::idle(e);
+        }
+    };
+    if !matched.has_roster() {
+        return LiveView::idle("The match has no roster yet.");
+    }
+
+    // Parties the payload omits come from the presences (the client puts the
+    // local party there); a party no source names stays a solo slot.
+    let mut matched = matched;
+    for player in &mut matched.players {
+        if player.party_id.is_empty() {
+            if let Some(row) = presence_rows
+                .iter()
+                .find(|r| r.puuid.eq_ignore_ascii_case(&player.puuid))
+            {
+                player.party_id = row.party_id.clone();
+            }
+        }
+    }
+
+    // Only PUUIDs no name source has answered go to the account service.
+    let missing: Vec<String> = matched
+        .players
+        .iter()
+        .map(|p| p.puuid.clone())
+        .filter(|puuid| cache.name(puuid).is_none())
+        .collect();
+    if !missing.is_empty() {
+        if let Ok(auth) = identity::read_lockfile() {
+            match live_api::namesets(&auth, &missing) {
+                Ok(rows) => {
+                    for row in rows {
+                        if row.error.is_empty() {
+                            cache.set_name(&row.puuid, &row.name, &row.tag);
+                        }
+                    }
+                }
+                Err(e) => eprintln!("[live] names: {e}"),
+            }
+        }
+    }
+    cache.retain(
+        &matched
+            .players
+            .iter()
+            .map(|p| p.puuid.clone())
+            .collect::<Vec<_>>(),
+    );
+
+    let mode = if snap.mode.is_empty() {
+        live_match::mode_label(&matched.queue_id, &matched.mode_id)
+    } else {
+        snap.mode.clone()
+    };
+    let mut rank_for = |puuid: &str| match live_api::player_rank(&ent, &region, puuid) {
+        Ok(row) => Some(row),
+        Err(e) => {
+            eprintln!("[live] rank {puuid}: {e}");
+            None
+        }
+    };
+    live_view::build(
+        &matched,
+        &me.puuid,
+        &snap.map,
+        &mode,
+        i64::from(snap.blue),
+        i64::from(snap.red),
+        cache,
+        &mut rank_for,
+        art,
+        fetcher,
+    )
+    .await
+}
+
 /// Resolve one frame of art for the current tier/peak/agent. Every step fails
 /// soft, so an offline host keeps the drawn fallbacks.
 async fn art_frame(
@@ -317,6 +588,27 @@ where
     // a supported state, not an error.
     let mut art = Art::new(crate::assets::art_dir());
     let fetcher: Arc<dyn Fetcher> = Arc::new(HttpFetcher);
+    // Live lobby state. Names and ranks are per player and cached; the board is
+    // only republished when it actually changed.
+    let mut live_cache = LiveCache::default();
+    let mut live_last: Option<LiveView> = None;
+    let mut live_ent: Option<(Entitlements, Instant)> = None;
+    // Debug board for a host without VALORANT: the poller never probes, so the
+    // fixture is published here and the live path is skipped entirely.
+    let fake_live: Option<LiveView> = {
+        #[cfg(debug_assertions)]
+        {
+            fake_live_frame()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            None
+        }
+    };
+    if let Some(view) = &fake_live {
+        live_last = Some(view.clone());
+        publish(Event::Live(view.clone()));
+    }
     if art.enabled() {
         let freed = art.cap();
         let (files, bytes) = art.usage();
@@ -467,7 +759,9 @@ where
                         "Reading Tracker Network…",
                     )));
                 }
-                match trn::fetch_profile(&profile_handle).and_then(|json| trn_profile::parse(&json))
+                match trn::fetch_profile(&profile_handle)
+                    .await
+                    .and_then(|json| trn_profile::parse(&json))
                 {
                     Ok(fresh) => {
                         profile_saved_at = now_ms();
@@ -563,7 +857,7 @@ where
                         "Reading recent matches…",
                     )));
                 }
-                match trn::fetch_matches(&profile_handle).and_then(|json| {
+                match trn::fetch_matches(&profile_handle).await.and_then(|json| {
                     trn_matches::parse(&json).ok_or_else(|| "TRN_HTTP_BAD_BODY".to_string())
                 }) {
                     Ok(rows) => {
@@ -652,6 +946,12 @@ where
                 snap = next;
                 publish(Event::Snapshot(snap.clone()));
             }
+            // No client, no lobby: say so once, not on every idle tick.
+            if fake_live.is_none() && live_last.as_ref().map(|v| v.state) != Some("idle") {
+                let view = LiveView::idle("No Riot Client — the live lobby needs one.");
+                live_last = Some(view.clone());
+                publish(Event::Live(view));
+            }
             // Rank falls back to the profile instead of WAITING.
             let next_rank = merged_rank(profile.as_ref(), None);
             if next_rank != rank_view {
@@ -734,6 +1034,23 @@ where
                     identity = None;
                     local_rank = None;
                     rank_pending = true;
+                } else if fake_live.is_none() {
+                    // The live lobby rides the same poll and the same presences:
+                    // one read feeds the strip, the names and the parties.
+                    let view = live_frame(
+                        &art,
+                        fetcher.clone(),
+                        identity.as_ref(),
+                        &snap,
+                        &root,
+                        &mut live_ent,
+                        &mut live_cache,
+                    )
+                    .await;
+                    if live_last.as_ref() != Some(&view) {
+                        live_last = Some(view.clone());
+                        publish(Event::Live(view));
+                    }
                 }
             }
             Err(e) => {

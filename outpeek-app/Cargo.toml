@@ -42,9 +42,14 @@ slint = { version = "1.18", default-features = false, features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
-# Loopback TLS: native-tls == Schannel on Windows, the same stack the Tauri
-# app uses. No second TLS implementation enters the build.
+# Loopback + Riot-remote TLS: native-tls == Schannel on Windows, the same stack
+# the Tauri app uses. `accept_invalid_certs` is what the loopback client needs.
 native-tls = "0.2"
+# Tracker Network only. Its edge refuses the Schannel + HTTP/1.1 fingerprint
+# Windows' native-tls sends (403 from the PC, 200 from OpenSSL here and from
+# curl.exe there), so this transport uses rustls + HTTP/2 — the combination
+# that answers on both hosts.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
 # Included by path: `paths.rs` logs through this crate.
 log = "0.4"
 

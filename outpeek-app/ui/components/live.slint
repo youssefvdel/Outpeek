@@ -1,0 +1,310 @@
+// Live Match tab: the lobby you are in right now — both teams, agent, level,
+// public rank + RR, party size and the incognito flag.
+//
+// Sources, one per column: the match payload (roster, agent, level, incognito,
+// party), the Riot Client's account service + presences (Riot ID), `/mmr` per
+// player (public tier + RR), and the valorant-api catalogue (agent art, crests).
+// A cell no source proved renders its own state — `RANK HIDDEN`, `UNRATED`,
+// `NOT READ` — never a guessed rank.
+//
+// The board is only drawn when the state is `pregame` or `coregame`; every
+// other state shows the note that says why (in menus, no client, read failed).
+
+import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
+import { Tracker, LivePlayerUi } from "../state.slint";
+import { Card, Chip, Glyph, PanelTitle, VCenter } from "widgets.slint";
+
+component TeamHeading inherits HorizontalLayout {
+    in property <string> label: "";
+    in property <int> count: 0;
+    height: 18px;
+    spacing: Space.sm;
+
+    PanelTitle { text: root.label; vertical-alignment: center; }
+    Rectangle { horizontal-stretch: 1; }
+    Text {
+        text: root.count + " players";
+        font-family: Theme.font-body;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
+        vertical-alignment: center;
+    }
+}
+
+component PlayerRow inherits Rectangle {
+    in property <LivePlayerUi> item;
+    height: 52px;
+    background: line-touch.has-hover ? Theme.container-low : transparent;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    line-touch := TouchArea {}
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            Rectangle {
+                width: 34px;
+                height: 34px;
+                border-radius: 9px;
+                background: Theme.primary-deep;
+                clip: true;
+
+                if root.item.agent-art.width > 0: Image {
+                    source: root.item.agent-art;
+                    width: 34px;
+                    height: 34px;
+                    image-fit: contain;
+                }
+                if root.item.agent-art.width == 0: Glyph {
+                    kind: "user";
+                    size: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 1px;
+
+            HorizontalLayout {
+                spacing: 5px;
+                Text {
+                    text: root.item.name;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    font-weight: 600;
+                    color: root.item.me ? Theme.primary : Theme.ink;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                if root.item.me: VCenter {
+                    Chip { text: "YOU"; tone: "neutral"; pad-x: 5px; pad-y: 0px; }
+                }
+                if root.item.incognito: VCenter {
+                    // Riot's own `Incognito` flag: the account hides its name.
+                    Chip { text: "INCOGNITO"; tone: "off"; pad-x: 5px; pad-y: 0px; }
+                }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Text {
+                    text: root.item.agent == "" ? "Selecting…" : root.item.agent;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
+                }
+                if root.item.level != "": Text {
+                    text: "· " + root.item.level;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Rank cell: crest (only when a tier is proven) + label + RR.
+        HorizontalLayout {
+            width: 128px;
+            spacing: 5px;
+
+            VCenter {
+                if root.item.crest.width > 0: Image {
+                    source: root.item.crest;
+                    width: 20px;
+                    height: 20px;
+                    image-fit: contain;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 0px;
+
+                Text {
+                    text: root.item.rank;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.micro;
+                    font-weight: 600;
+                    color: root.item.rank == "NOT READ" || root.item.rank == "RANK HIDDEN"
+                        ? Theme.ink-faint
+                        : Theme.ink;
+                    horizontal-alignment: right;
+                    overflow: elide;
+                }
+                if root.item.rr != "": Text {
+                    text: root.item.rr;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-dim;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+
+        // Party bracket: only when this player queued with someone.
+        if root.item.party != "": VCenter {
+            Chip { text: "×" + root.item.party; tone: "off"; pad-x: 6px; pad-y: 0px; }
+        }
+    }
+
+    Rectangle {
+        x: Space.md;
+        y: parent.height - 1px;
+        width: parent.width - Space.md * 2;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+}
+
+component TeamCard inherits Card {
+    in property <string> title: "";
+    in property <[LivePlayerUi]> players;
+    pad: 0px;
+    gap: 0px;
+
+    TeamHeading {
+        label: root.title;
+        count: root.players.length;
+    }
+
+    for entry in root.players: PlayerRow { item: entry; }
+}
+
+export component LivePage inherits VerticalLayout {
+    padding-left: Space.xl;
+    padding-right: Space.xl;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    spacing: Space.md;
+
+    // Note band: the only place the page explains itself.
+    Rectangle {
+        height: 34px;
+        border-radius: Shape.sm;
+        background: Theme.container-low;
+        border-width: 1px;
+        border-color: Theme.line-soft;
+
+        HorizontalLayout {
+            padding-left: Space.md;
+            padding-right: Space.md;
+            spacing: Space.sm;
+
+            VCenter {
+                Glyph { kind: "tracker"; size: 14px; stroke: Theme.ink-faint; }
+            }
+            Text {
+                text: Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame"
+                    ? (Tracker.live-note == ""
+                        ? "Live lobby · read-only · names, agents and public ranks"
+                        : Tracker.live-note)
+                    : Tracker.live-note;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-dim;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            VCenter {
+                Chip {
+                    text: Tracker.live-roster-state == "coregame"
+                        ? "LIVE"
+                        : Tracker.live-roster-state == "pregame"
+                            ? "SELECT"
+                            : Tracker.live-roster-state == "error" ? "ERROR" : "IN MENUS";
+                    tone: Tracker.live-roster-state == "coregame"
+                        ? "mint"
+                        : Tracker.live-roster-state == "pregame"
+                            ? "armed"
+                            : Tracker.live-roster-state == "error" ? "error" : "off";
+                    pad-x: 7px;
+                    pad-y: 1px;
+                }
+            }
+        }
+    }
+
+    // Match strip: map, mode, score. Score is the local presence's own picture
+    // of the game (Riot publishes no scoreboard endpoint we read).
+    HorizontalLayout {
+        height: 44px;
+        spacing: Space.md;
+
+        Text {
+            text: Tracker.live-map == "" ? "—" : Tracker.live-map;
+            font-family: Theme.font-display;
+            font-size: TypeScale.big;
+            font-weight: 700;
+            color: Theme.ink;
+            vertical-alignment: center;
+        }
+        VCenter {
+            Chip {
+                text: Tracker.live-mode == "" ? "—" : Tracker.live-mode;
+                tone: "neutral";
+                pad-y: 1px;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Text {
+            // A score is only a score in a match; in menus it would read 0 – 0
+            // and look like a read.
+            text: (Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame")
+                ? Tracker.live-blue-score + " – " + Tracker.live-red-score
+                : "—";
+            font-family: Theme.font-mono;
+            font-size: TypeScale.big;
+            font-weight: 700;
+            color: (Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame")
+                ? Theme.ink
+                : Theme.ink-faint;
+            vertical-alignment: center;
+        }
+    }
+
+    if Tracker.live-blue-team.length == 0 && Tracker.live-red-team.length == 0: Card {
+        pad: Space.lg;
+        Rectangle {
+            height: 140px;
+            background: transparent;
+
+            Text {
+                text: Tracker.live-note == ""
+                    ? "No live match read yet."
+                    : Tracker.live-note;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    if Tracker.live-blue-team.length > 0 || Tracker.live-red-team.length > 0: HorizontalLayout {
+        spacing: Space.md;
+        vertical-stretch: 1;
+
+        TeamCard {
+            title: "YOUR TEAM";
+            players: Tracker.live-blue-team;
+            horizontal-stretch: 1;
+        }
+        TeamCard {
+            title: "ENEMY";
+            players: Tracker.live-red-team;
+            horizontal-stretch: 1;
+        }
+    }
+}
