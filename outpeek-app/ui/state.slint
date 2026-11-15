@@ -249,6 +249,13 @@ export global Tracker {
     in-out property <string> display-refresh: "";
     in-out property <string> display-gpu: "";
 
+    // The window's preferred size. Rust sets these from the remembered size at
+    // boot: a page switch re-derives the window size from the layout, so a
+    // restore that only called `set_size` was discarded the moment a tab with
+    // different content opened.
+    in-out property <length> window-width: 1216px;
+    in-out property <length> window-height: 804px;
+
     // Titlebar geometry. Rust pushes `app_window::TITLEBAR_HEIGHT` and
     // `CONTROL_WIDTH` here so the drawn bar and the Win32 hit/region maths are
     // the same numbers, not two copies.

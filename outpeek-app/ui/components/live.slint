@@ -70,7 +70,11 @@ component PlayerRow inherits Rectangle {
         }
 
         VerticalLayout {
-            horizontal-stretch: 1;
+            // A fixed name column keeps the rank beside it at any window width;
+            // the slack goes after the party chip instead of between the two
+            // facts a row exists to show together.
+            preferred-width: 190px;
+            min-width: 110px;
             spacing: 1px;
 
             HorizontalLayout {
@@ -88,10 +92,6 @@ component PlayerRow inherits Rectangle {
                 if root.item.me: VCenter {
                     Chip { text: "YOU"; tone: "neutral"; pad-x: 5px; pad-y: 0px; }
                 }
-                if root.item.incognito: VCenter {
-                    // Riot's own `Incognito` flag: the account hides its name.
-                    Chip { text: "INCOGNITO"; tone: "off"; pad-x: 5px; pad-y: 0px; }
-                }
             }
             HorizontalLayout {
                 spacing: 6px;
@@ -108,6 +108,11 @@ component PlayerRow inherits Rectangle {
                     font-size: TypeScale.micro;
                     color: Theme.ink-faint;
                     vertical-alignment: center;
+                }
+                if root.item.incognito: VCenter {
+                    // Riot's own `Incognito` flag: the account hides its name.
+                    // On the second line so it cannot elide the Riot ID.
+                    Chip { text: "INCOGNITO"; tone: "off"; pad-x: 5px; pad-y: 0px; }
                 }
             }
         }
@@ -154,6 +159,7 @@ component PlayerRow inherits Rectangle {
         if root.item.party != "": VCenter {
             Chip { text: "×" + root.item.party; tone: "off"; pad-x: 6px; pad-y: 0px; }
         }
+        Rectangle { horizontal-stretch: 1; }
     }
 
     Rectangle {

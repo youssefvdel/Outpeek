@@ -80,8 +80,20 @@ fn main() {
     // this build does not understand falls back instead of opening a dead page.
     let stored = outpeek_app::settings::load_default();
     if let Some((width, height)) = stored.window_size() {
-        app.window()
-            .set_size(slint::LogicalSize::new(width as f32, height as f32));
+        app.global::<Tracker>().set_window_width(width as f32);
+        app.global::<Tracker>().set_window_height(height as f32);
+        // The layout sizes the window when it is created, so the resize has to
+        // land after the first loop turn; setting it before `run` is silently
+        // replaced by the layout's preferred size.
+        let weak = app.as_weak();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(app) = weak.upgrade() {
+                app.window().set_size(slint::LogicalSize::new(
+                    width as f32,
+                    height as f32,
+                ));
+            }
+        });
     }
     let boot_tab = initial_tab
         .clone()

@@ -39,8 +39,8 @@ export component AppWindow inherits Window {
     // pixels of an edge, so without it the window cannot be resized at all.
     resize-border-width: 6px;
     // The shipping app opens at 1216x804; the shell's grid is tuned to that.
-    preferred-width: 1216px;
-    preferred-height: 804px;
+    preferred-width: Tracker.window-width;
+    preferred-height: Tracker.window-height;
     // 1120 keeps the three-card row (title + state chip) on one line; below it
     // the dashboard would start eliding its own labels.
     min-width: 1120px;
