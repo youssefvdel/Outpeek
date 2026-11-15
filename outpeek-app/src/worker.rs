@@ -220,21 +220,32 @@ async fn breakdown_frame(
     (agents, maps)
 }
 
-/// Build one breakdown event for the current profile. Rows come from the
-/// same parsed payload as the Overview, so the two can never disagree; only
-/// the art URLs need the network. No profile means no rows, never guessed
-/// ones — but the placeholder still carries the reason.
-async fn breakdown_event(art: &Art, fetcher: Arc<dyn Fetcher>, profile: Option<&Profile>) -> Event {
+/// Build one breakdown event for the current profile. Rows come from the same
+/// parsed payload as the Overview, so the two can never disagree; only the art
+/// URLs need the network.
+///
+/// `state`/`message` are the profile frame's own honesty label: a failed
+/// refresh that keeps the cached profile must also keep its rows on screen
+/// (`cached` + the reason), never blank them.
+async fn breakdown_event(
+    art: &Art,
+    fetcher: Arc<dyn Fetcher>,
+    profile: Option<&Profile>,
+    state: &'static str,
+    message: impl Into<String>,
+) -> Event {
+    let message = message.into();
     let Some(profile) = profile else {
-        return Event::Breakdown(BreakdownView::placeholder(
-            "empty",
-            "No account yet — open the Riot Client once and Outpeek will remember it.",
-        ));
+        return Event::Breakdown(BreakdownView::placeholder(state, message));
     };
     if profile.agents.is_empty() && profile.maps.is_empty() {
         return Event::Breakdown(BreakdownView::placeholder(
-            "empty",
-            "Tracker Network reported no agent or map rows for this season.",
+            state,
+            if message.is_empty() {
+                "Tracker Network reported no agent or map rows for this season.".to_string()
+            } else {
+                message
+            },
         ));
     }
     let (agents, maps) = breakdown_frame(art, fetcher, profile).await;
@@ -246,8 +257,8 @@ async fn breakdown_event(art: &Art, fetcher: Arc<dyn Fetcher>, profile: Option<&
     Event::Breakdown(BreakdownView {
         agents,
         maps,
-        state: "ready",
-        message: String::new(),
+        state,
+        message,
     })
 }
 
@@ -288,6 +299,10 @@ where
     let mut fail_streak: u32 = 0;
     // Profile state, independent of the Riot Client.
     let mut profile: Option<Profile> = None;
+    // The cached frame's note, reused when the catalogue lands and the
+    // breakdown art is re-resolved: the rows are still that saved read, so the
+    // chip must keep saying SAVED.
+    let mut cached_note = String::new();
     let mut profile_handle = String::new();
     let mut profile_saved_at: u64 = 0;
     let mut profile_pending = true;
@@ -344,15 +359,26 @@ where
             }
         }
         profile_saved_at = cache.saved_at;
-        let mut view = cache.profile.to_view();
-        view.state = ProfileState::Cached;
-        view.message = format!(
+        let message = format!(
             "Showing the cached profile from {}.",
             trn_profile::age_label(now_ms().saturating_sub(cache.saved_at))
         );
+        let mut view = cache.profile.to_view();
+        view.state = ProfileState::Cached;
+        view.message = message.clone();
         publish(Event::Profile(view));
+        cached_note = message.clone();
+        publish(
+            breakdown_event(
+                &art,
+                fetcher.clone(),
+                Some(&cache.profile),
+                "cached",
+                message,
+            )
+            .await,
+        );
         profile = Some(cache.profile);
-        publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
         let next = merged_rank(profile.as_ref(), local_rank.as_ref());
         if next != rank_view {
             rank_view = next;
@@ -385,7 +411,18 @@ where
             // The first breakdown frame resolved art before the catalogues
             // landed; re-resolve so map cards fill in without waiting for a
             // profile refresh.
-            publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
+            if profile.is_some() {
+                publish(
+                    breakdown_event(
+                        &art,
+                        fetcher.clone(),
+                        profile.as_ref(),
+                        "cached",
+                        cached_note.clone(),
+                    )
+                    .await,
+                );
+            }
         } else {
             eprintln!(
                 "[art] catalogue: {} tiers, {} agents, {} maps — {}",
@@ -412,14 +449,13 @@ where
         if profile_pending {
             profile_pending = false;
             if profile_handle.is_empty() {
+                let note =
+                    "No account yet — open the Riot Client once and Outpeek will remember it.";
                 publish(Event::Profile(ProfileView::placeholder(
                     ProfileState::Empty,
-                    "No account yet — open the Riot Client once and Outpeek will remember it.",
+                    note,
                 )));
-                publish(Event::Breakdown(BreakdownView::placeholder(
-                    "empty",
-                    "No account yet — open the Riot Client once and Outpeek will remember it.",
-                )));
+                publish(Event::Breakdown(BreakdownView::placeholder("empty", note)));
             } else {
                 if profile.is_none() {
                     publish(Event::Profile(ProfileView::placeholder(
@@ -462,7 +498,10 @@ where
                             .map(Profile::to_view)
                             .unwrap_or_else(|| ProfileView::default());
                         publish(Event::Profile(view));
-                        publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
+                        publish(
+                            breakdown_event(&art, fetcher.clone(), profile.as_ref(), "ready", "")
+                                .await,
+                        );
                         if local_rank.is_none() {
                             let next = merged_rank(profile.as_ref(), None);
                             if next != rank_view {
@@ -477,29 +516,37 @@ where
                     }
                     Err(e) => {
                         // A failed read never wipes a shown profile: the cached
-                        // copy stays, with the reason on the line beside it.
-                        let view = match &profile {
+                        // copy stays, with the reason on the line beside it. The
+                        // agent/map rows come from that same copy, so they stay
+                        // too — blanking them would lose data a failure did not
+                        // touch.
+                        let (view, state, note) = match &profile {
                             Some(last) => {
-                                let mut view = last.to_view();
-                                view.state = ProfileState::Cached;
-                                view.message = format!(
+                                let note = format!(
                                     "{e} — showing the profile saved {}.",
                                     trn_profile::age_label(
                                         now_ms().saturating_sub(profile_saved_at)
                                     )
                                 );
-                                view
+                                let mut view = last.to_view();
+                                view.state = ProfileState::Cached;
+                                view.message = note.clone();
+                                (view, "cached", note)
                             }
-                            None => ProfileView::placeholder(
-                                ProfileState::Error,
-                                format!("Tracker Network did not answer ({e})."),
-                            ),
+                            None => {
+                                let note = format!("Tracker Network did not answer ({e}).");
+                                (
+                                    ProfileView::placeholder(ProfileState::Error, note.clone()),
+                                    "error",
+                                    note,
+                                )
+                            }
                         };
                         publish(Event::Profile(view));
-                        publish(Event::Breakdown(BreakdownView::placeholder(
-                            "error",
-                            format!("Tracker Network did not answer ({e})."),
-                        )));
+                        publish(
+                            breakdown_event(&art, fetcher.clone(), profile.as_ref(), state, note)
+                                .await,
+                        );
                     }
                 }
             }
@@ -768,5 +815,108 @@ async fn sleep_or_stop(flags: &Flags, total: Duration) {
         let chunk = SLEEP_STEP.min(total - slept);
         tokio::time::sleep(chunk).await;
         slept += chunk;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::trn_breakdown::BreakdownRow;
+
+    /// One agent row, shaped like the live profile. The poller's own tests are
+    /// end-to-end (fake client); these cover the decision the fail-soft path
+    /// makes between "keep the rows" and "say why there are none".
+    fn profile_with_one_agent() -> Profile {
+        Profile {
+            handle: "lil ga7ed#zngr".to_string(),
+            agents: vec![BreakdownRow {
+                key: "601dbbe7-43ce-be57-2a40-4abd24953621".to_string(),
+                name: "KAY/O".to_string(),
+                role: "Initiator".to_string(),
+                matches: Some(48),
+                win_pct: Some(43.8),
+                ..BreakdownRow::default()
+            }],
+            ..Profile::default()
+        }
+    }
+
+    fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(fut)
+    }
+
+    /// No cache directory on this host: every art slot is a soft miss, so the
+    /// event is decided by the profile alone and no request is attempted.
+    fn art_off() -> (Art, Arc<dyn Fetcher>) {
+        (Art::new(None), Arc::new(HttpFetcher))
+    }
+
+    fn as_breakdown(event: Event) -> BreakdownView {
+        match event {
+            Event::Breakdown(view) => view,
+            other => panic!("expected a breakdown event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_failed_refresh_keeps_the_rows_it_did_not_lose() {
+        let (art, fetcher) = art_off();
+        let profile = profile_with_one_agent();
+        let note = "TRN_TIMEOUT — showing the profile saved 2 hours ago.";
+        let view = as_breakdown(block_on(breakdown_event(
+            &art,
+            fetcher,
+            Some(&profile),
+            "cached",
+            note,
+        )));
+        assert_eq!(view.state, "cached");
+        assert_eq!(
+            view.agents.len(),
+            1,
+            "a network failure does not blank rows"
+        );
+        assert_eq!(view.agents[0].name, "KAY/O");
+        assert_eq!(view.agents[0].matches, "48 matches");
+        assert_eq!(view.message, note, "the reason travels with the rows");
+    }
+
+    #[test]
+    fn with_no_profile_the_placeholder_carries_the_reason_not_a_blank_table() {
+        let (art, fetcher) = art_off();
+        let view = as_breakdown(block_on(breakdown_event(
+            &art,
+            fetcher,
+            None,
+            "error",
+            "Tracker Network did not answer (TRN_HTTP_503).",
+        )));
+        assert!(view.agents.is_empty(), "no profile, no invented rows");
+        assert!(view.maps.is_empty());
+        assert_eq!(view.state, "error");
+        assert!(view.message.contains("TRN_HTTP_503"));
+    }
+
+    #[test]
+    fn a_ready_profile_with_no_rows_says_so_instead_of_an_empty_success() {
+        let (art, fetcher) = art_off();
+        let profile = Profile {
+            handle: "lil ga7ed#zngr".to_string(),
+            ..Profile::default()
+        };
+        let view = as_breakdown(block_on(breakdown_event(
+            &art,
+            fetcher,
+            Some(&profile),
+            "ready",
+            "",
+        )));
+        assert_eq!(view.state, "ready");
+        assert!(view.agents.is_empty());
+        assert!(view.message.contains("no agent or map rows"));
     }
 }
