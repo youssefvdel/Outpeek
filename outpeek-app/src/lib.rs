@@ -32,6 +32,7 @@ pub mod paths;
 #[path = "../../src-tauri/src/riot_http.rs"]
 pub mod riot_http;
 
+pub mod account;
 pub mod app_window;
 pub mod assets;
 pub mod badges;
@@ -41,6 +42,8 @@ pub mod identity;
 pub mod model;
 pub mod rank;
 pub mod settings_model;
+pub mod trn;
+pub mod trn_profile;
 pub mod worker;
 
 /// Product name shown in the window title and sidebar.

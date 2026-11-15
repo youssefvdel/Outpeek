@@ -88,6 +88,23 @@ impl TrackerSnapshot {
         }
     }
 
+    /// Fill the player card from the persisted account when the Riot Client is
+    /// not the source. A live identity always wins: this never overwrites a
+    /// name the client already answered with.
+    pub fn with_account_handle(&self, handle: &str) -> Self {
+        if !self.player_name.is_empty() {
+            return self.clone();
+        }
+        let Some((name, tag)) = crate::account::split_handle(handle) else {
+            return self.clone();
+        };
+        Self {
+            player_name: name.to_string(),
+            player_tag: tag.to_string(),
+            ..self.clone()
+        }
+    }
+
     /// Replace the live half with a derived fact set. Identity is preserved.
     pub(crate) fn with_facts(&self, facts: &LiveFacts) -> Self {
         Self {
@@ -253,13 +270,16 @@ pub fn phase_title(phase: &str) -> &'static str {
 }
 
 /// Rank panel states. `Unranked` is only valid after a *successful* `/mmr`
-/// answer with tier 0; an error must never be shown as Unrated.
+/// answer with tier 0; an error must never be shown as Unrated. `Unknown` is a
+/// successful TRN profile read that reported no rank at all — a state, not an
+/// error, and not "Unrated".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankState {
     Waiting,
     Loading,
     Ok,
     Unranked,
+    Unknown,
     Error,
 }
 
@@ -270,6 +290,7 @@ impl RankState {
             RankState::Loading => "loading",
             RankState::Ok => "ok",
             RankState::Unranked => "unranked",
+            RankState::Unknown => "unknown",
             RankState::Error => "error",
         }
     }
@@ -280,6 +301,10 @@ pub struct RankView {
     pub state: RankState,
     pub label: String,
     pub rr: i64,
+    /// False when the rank came from Tracker Network (no RR published) or the
+    /// read has not produced one; the player card then says NO RR rather than
+    /// printing a 0 nobody measured.
+    pub rr_known: bool,
     /// Best rank across the acts Riot reports, as display text. Empty when no
     /// act reported one — the peak cell then keeps its em dash.
     pub peak_label: String,
@@ -295,6 +320,7 @@ impl RankView {
             state: RankState::Waiting,
             label: String::new(),
             rr: 0,
+            rr_known: false,
             peak_label: String::new(),
             peak_tier: 0,
             message: "Waiting for the Riot Client.".to_string(),
@@ -306,6 +332,7 @@ impl RankView {
             state: RankState::Loading,
             label: String::new(),
             rr: 0,
+            rr_known: false,
             peak_label: String::new(),
             peak_tier: 0,
             message: "Reading your rank…".to_string(),
@@ -319,6 +346,7 @@ impl RankView {
                 state: RankState::Unranked,
                 label: "Unrated".to_string(),
                 rr: 0,
+                rr_known: false,
                 peak_label: peak_label(peak_tier),
                 peak_tier: peak_tier.max(0),
                 message: "No competitive rank this act.".to_string(),
@@ -328,10 +356,53 @@ impl RankView {
             state: RankState::Ok,
             label: tier_label(tier),
             rr,
+            rr_known: true,
             peak_label: peak_label(peak_tier),
             peak_tier: peak_tier.max(0),
             message: String::new(),
         }
+    }
+
+    /// The rank Tracker Network reports for the current act: tier and crest,
+    /// no RR (TRN does not publish it). Used when the Riot Client is offline;
+    /// a successful `/mmr` read overrides it with tier + live RR and keeps the
+    /// TRN peak.
+    pub fn from_profile(tier: Option<i64>, peak_tier: Option<i64>) -> Self {
+        let best = known_tier(peak_tier);
+        match tier {
+            None => Self {
+                state: RankState::Unknown,
+                label: String::new(),
+                rr: 0,
+                rr_known: false,
+                peak_label: peak_label(best),
+                peak_tier: best,
+                message: "No rank reported for this act.".to_string(),
+            },
+            Some(t) if t < 3 => Self {
+                state: RankState::Unranked,
+                label: "Unrated".to_string(),
+                rr: 0,
+                rr_known: false,
+                peak_label: peak_label(best),
+                peak_tier: best,
+                message: "No competitive rank this act.".to_string(),
+            },
+            Some(t) => Self {
+                state: RankState::Ok,
+                label: tier_label(t),
+                rr: 0,
+                rr_known: false,
+                peak_label: peak_label(best),
+                peak_tier: best,
+                message: String::new(),
+            },
+        }
+    }
+
+    /// A `/mmr` answer that must keep TRN's peak when Riot reported none.
+    pub fn from_rank_with_peak(tier: i64, rr: i64, riot_peak: i64, trn_peak: Option<i64>) -> Self {
+        Self::from_rank(tier, rr, known_tier(trn_peak).max(riot_peak.max(0)))
     }
 
     pub fn error(message: impl Into<String>) -> Self {
@@ -339,11 +410,17 @@ impl RankView {
             state: RankState::Error,
             label: String::new(),
             rr: 0,
+            rr_known: false,
             peak_label: String::new(),
             peak_tier: 0,
             message: message.into(),
         }
     }
+}
+
+/// A tier id worth resolving art for, or 0 when nothing usable was reported.
+fn known_tier(tier: Option<i64>) -> i64 {
+    tier.filter(|t| (3..=1000).contains(t)).unwrap_or(0)
 }
 
 /// Peak display text: a real tier label, or empty. A sub-Iron id is not a rank
@@ -523,6 +600,62 @@ mod tests {
         let unranked = RankView::from_rank(0, 0, 18);
         assert_eq!(unranked.state, RankState::Unranked);
         assert_eq!(unranked.peak_label, "Diamond 1");
+    }
+
+    #[test]
+    fn a_trn_rank_fills_the_crest_without_inventing_rr() {
+        let view = RankView::from_profile(Some(20), Some(23));
+        assert_eq!(view.state, RankState::Ok);
+        assert_eq!(view.label, "Diamond 3");
+        assert_eq!(view.rr, 0);
+        assert!(!view.rr_known, "TRN publishes no RR");
+        assert_eq!(view.peak_label, "Ascendant 3");
+        assert_eq!(view.peak_tier, 23);
+        // The local read is the only source allowed to claim RR.
+        let local = RankView::from_rank(20, 55, 23);
+        assert!(local.rr_known);
+        assert_eq!(local.rr, 55);
+        // No rank in the profile is a state, never "Unrated".
+        let unknown = RankView::from_profile(None, Some(23));
+        assert_eq!(unknown.state, RankState::Unknown);
+        assert_eq!(unknown.label, "");
+        assert_eq!(unknown.peak_label, "Ascendant 3");
+        // A real tier-0 answer is Unrated, with the peak kept.
+        let unranked = RankView::from_profile(Some(0), None);
+        assert_eq!(unranked.state, RankState::Unranked);
+        assert_eq!(unranked.label, "Unrated");
+        assert_eq!(unranked.peak_label, "");
+    }
+
+    #[test]
+    fn a_local_rank_keeps_the_trn_peak_when_riot_reports_none() {
+        let view = RankView::from_rank_with_peak(21, 40, 0, Some(23));
+        assert_eq!(view.label, "Ascendant 1");
+        assert_eq!(view.peak_label, "Ascendant 3");
+        // Riot's own peak wins when it is higher.
+        let higher = RankView::from_rank_with_peak(21, 40, 26, Some(23));
+        assert_eq!(higher.peak_label, "Immortal 3");
+        // No peak anywhere: the cell stays empty.
+        assert_eq!(
+            RankView::from_rank_with_peak(21, 40, 0, None).peak_label,
+            ""
+        );
+    }
+
+    #[test]
+    fn the_persisted_account_names_the_card_only_when_riot_is_silent() {
+        let offline = TrackerSnapshot::no_client().with_account_handle("lil ga7ed#zngr");
+        assert_eq!(offline.player_display(), "lil ga7ed#zngr");
+        assert_eq!(offline.player_initial(), "L");
+        assert_eq!(offline.client, ClientState::Missing);
+        // A live identity is never overwritten by the stored copy.
+        let live = offline.with_identity("Someone", "EUW");
+        assert_eq!(live.with_account_handle("old#tag").player_display(), "Someone#EUW");
+        // A malformed stored handle leaves the card empty, not half-filled.
+        assert_eq!(
+            TrackerSnapshot::no_client().with_account_handle("bare-name").player_display(),
+            ""
+        );
     }
 
     #[test]

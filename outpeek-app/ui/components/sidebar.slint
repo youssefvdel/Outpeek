@@ -188,8 +188,11 @@ component PlayerCard inherits Rectangle {
         height: 88px;
         crest: Tracker.rank-crest;
         label: Tracker.rank-label;
+        // RR only exists on a local `/mmr` read. A Tracker Network rank is a
+        // real Tier, but TRN publishes no RR, so the cell says so instead of
+        // printing a 0 nobody measured.
         sub: Tracker.rank-state == "ok"
-            ? Tracker.rank-rr + " RR"
+            ? (Tracker.rank-rr-known ? Tracker.rank-rr + " RR" : "NO RR")
             : Tracker.rank-state == "waiting" || Tracker.rank-state == "loading"
                 ? "WAITING"
                 : "—";

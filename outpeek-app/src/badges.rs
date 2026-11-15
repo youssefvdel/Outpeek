@@ -65,8 +65,11 @@ impl ScoreBadge {
 ///   which is the same emblem, so a `1K` letter is honoured too.
 /// * Letters are compared case-insensitively: a scraped `"s"` is not a reason
 ///   to fall back to the shield.
+/// * A numeric score with no letter (Tracker Network's performance score has
+///   none) is banded through the rest of React's `SCORE_TIERS`, so 148 is a D
+///   medal rather than an UNRATED shield beside a real number.
 ///
-/// Unknown or empty grade with no 1K score → `None`, the honest UNRATED state.
+/// Unknown or empty grade with no score → `None`, the honest UNRATED state.
 /// React's `?? scoreS` fallback would paint an S medal over an unknown tier;
 /// this build keeps the drawn shield instead of guessing.
 pub fn score_badge(grade: &str, score: Option<i32>) -> Option<ScoreBadge> {
@@ -74,7 +77,7 @@ pub fn score_badge(grade: &str, score: Option<i32>) -> Option<ScoreBadge> {
     if score.is_some_and(|s| s >= 1000) {
         return Some(ScoreBadge::OneK);
     }
-    match grade.trim().to_ascii_uppercase().as_str() {
+    let letter = match grade.trim().to_ascii_uppercase().as_str() {
         "1K" => Some(ScoreBadge::OneK),
         "S" => Some(ScoreBadge::S),
         "A" => Some(ScoreBadge::A),
@@ -82,7 +85,31 @@ pub fn score_badge(grade: &str, score: Option<i32>) -> Option<ScoreBadge> {
         "C" => Some(ScoreBadge::C),
         "D" => Some(ScoreBadge::D),
         _ => None,
+    };
+    if letter.is_some() {
+        return letter;
     }
+    // No letter, but a number: Tracker Network's performance score carries no
+    // letter grade, and React's `scoreTier()` maps the number through the rest
+    // of `SCORE_TIERS`. A letter still wins below 1K, so a scraped grade is
+    // never overridden by a rounded score.
+    score.and_then(score_band)
+}
+
+/// React `SCORE_TIERS` below the 1K band, as `Option` so an out-of-range or
+/// negative score declares no tier instead of the D fallback.
+fn score_band(score: i32) -> Option<ScoreBadge> {
+    if score < 0 {
+        return None;
+    }
+    Some(match score {
+        1000.. => ScoreBadge::OneK,
+        825.. => ScoreBadge::S,
+        650.. => ScoreBadge::A,
+        475.. => ScoreBadge::B,
+        300.. => ScoreBadge::C,
+        _ => ScoreBadge::D,
+    })
 }
 
 /// One-liner for `Tracker.set_score_badge`: the key, or `""` for unrated.
@@ -169,6 +196,29 @@ mod tests {
     }
 
     #[test]
+    fn a_score_without_a_letter_is_banded_like_the_react_tiers() {
+        // Tracker Network's score has no letter. React's SCORE_TIERS decide.
+        for (score, badge) in [
+            (0, ScoreBadge::D),
+            (148, ScoreBadge::D),
+            (299, ScoreBadge::D),
+            (300, ScoreBadge::C),
+            (475, ScoreBadge::B),
+            (650, ScoreBadge::A),
+            (825, ScoreBadge::S),
+            (999, ScoreBadge::S),
+        ] {
+            assert_eq!(score_badge("", Some(score)), Some(badge), "score {score}");
+        }
+        // A letter still wins below 1K; only 1K outranks it.
+        assert_eq!(score_badge("A", Some(148)), Some(ScoreBadge::A));
+        assert_eq!(score_badge("A", Some(1000)), Some(ScoreBadge::OneK));
+        // A negative score is not a band.
+        assert_eq!(score_badge("", Some(-1)), None);
+        assert_eq!(score_badge("", None), None);
+    }
+
+    #[test]
     fn combat_badges_are_the_png_artwork_not_glyphs() {
         for name in ["kills.png", "firstbloods.png", "aces.png"] {
             let bytes = asset_bytes(name);
@@ -190,23 +240,32 @@ mod tests {
     }
 
     #[test]
-    fn combat_rows_still_report_the_empty_state() {
-        // A badge is not data: the row's value default stays an em dash and no
-        // call site binds a number, so the card keeps saying NOT READ.
+    fn combat_rows_bind_real_values_and_default_to_an_em_dash() {
         let row = block(CARDS, "component HighlightRow", "component TopAgent");
-        assert!(row.contains("in property <string> value: \"—\";"));
+        // The default is empty, and the row draws the dash for it: absence is
+        // a dash, never a zero.
+        assert!(row.contains(r#"in property <string> value: "";"#));
+        assert!(row.contains(r#"text: root.value == "" ? "—" : root.value;"#));
 
         let card = block(CARDS, "component CombatHighlights", "component TopAgent");
         let calls: Vec<&str> = card.matches("HighlightRow {").collect();
         assert_eq!(calls.len(), 3, "three combat rows");
-        for call in card.split("HighlightRow {").skip(1) {
-            let body = call.split('}').next().unwrap_or_default();
-            assert!(
-                !body.contains("value:"),
-                "combat row binds a value, which would be invented data: {body}"
-            );
+        // Every row binds a Tracker Network value — the model's, not a literal
+        // written here, so the card cannot show a number the read did not make.
+        let bindings: Vec<&str> = card
+            .split("HighlightRow {")
+            .skip(1)
+            .map(|call| call.split('}').next().unwrap_or_default())
+            .collect();
+        for (body, key) in bindings.iter().zip([
+            "value: Tracker.best-kills;",
+            "value: Tracker.first-blood-deaths;",
+            "value: Tracker.aces;",
+        ]) {
+            assert!(body.contains(key), "row must bind {key}: {body}");
         }
-        assert!(card.contains("Chip { text: \"NOT READ\""));
+        // The chip reports the source state instead of a permanent NOT READ.
+        assert!(card.contains(r#"Tracker.profile-state == "ready""#));
     }
 
     /// Text from `start` up to the next `end` marker; panics if either is gone.

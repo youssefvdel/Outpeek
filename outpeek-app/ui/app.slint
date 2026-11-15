@@ -88,7 +88,9 @@ export component AppWindow inherits Window {
                 show-tabs: Tracker.view == "tracker";
                 subtitle: Tracker.view == "settings"
                     ? "What this build really does — and what it does not"
-                    : "Live from the Riot Client loopback — read-only";
+                    : (Tracker.profile-subtitle != ""
+                        ? Tracker.profile-subtitle
+                        : "Live from the Riot Client loopback — read-only");
             }
 
             // One scroll surface for both views: the tracker grid and the

@@ -2,9 +2,11 @@
 // filter row, four headline numerals, one wide metrics strip, then the three
 // analysis cards and the two history cards.
 //
-// Every numeral here is a slot, not a number. This build has no match history
-// (see ROADMAP.md), so each card prints an em dash and one line saying what it
-// would need; nothing is estimated and no row is faked.
+// The numbers are the remembered account's Tracker Network profile (direct,
+// keyless transport; works with the Riot Client closed) merged with the local
+// `/mmr` read when Riot answers. Every slot is a formatted string from Rust:
+// empty means "not reported" and the cell draws an em dash — never a zero.
+// A real zero (0 aces) arrives as "0" and is shown.
 
 import { Theme, TypeScale, Space } from "tokens.slint";
 import { Tracker } from "../state.slint";
@@ -65,12 +67,18 @@ component FilterRow inherits Rectangle {
             VCenter {
                 Chip { text: "SOON"; tone: "off"; pad-x: 7px; pad-y: 1px; }
             }
+            // One honest line: where the numbers came from, or why there are
+            // none. Never a second, invented filter state.
             Text {
-                text: "Filters open once match history is read.";
+                text: Tracker.profile-message == ""
+                    ? "Filters open once match history is read."
+                    : Tracker.profile-message;
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
                 vertical-alignment: center;
+                overflow: elide;
+                max-width: 520px;
             }
         }
     }
@@ -110,8 +118,8 @@ component StatCard inherits Card {
 
 component MetricCell inherits VerticalLayout {
     in property <string> label: "";
-    in property <string> value: "—";
-    in property <bool> known: false;
+    // Empty = not reported: the cell prints an em dash, not a zero.
+    in property <string> value: "";
     in property <brush> tone: Theme.ink;
 
     spacing: 2px;
@@ -121,11 +129,11 @@ component MetricCell inherits VerticalLayout {
         letter-spacing: 1px;
     }
     Text {
-        text: root.value;
+        text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-display;
         font-size: TypeScale.value;
         font-weight: 700;
-        color: root.known ? root.tone : Theme.ink-faint;
+        color: root.value == "" ? Theme.ink-faint : root.tone;
     }
 }
 
@@ -136,14 +144,14 @@ component MetricsStrip inherits Card {
     HorizontalLayout {
         spacing: Space.sm;
 
-        MetricCell { label: "WINS"; horizontal-stretch: 1; tone: Theme.mint; }
-        MetricCell { label: "LOSSES"; horizontal-stretch: 1; tone: Theme.coral; }
-        MetricCell { label: "KILLS"; horizontal-stretch: 1; }
-        MetricCell { label: "DEATHS"; horizontal-stretch: 1; }
-        MetricCell { label: "ASSISTS"; horizontal-stretch: 1; }
-        MetricCell { label: "HEADSHOTS"; horizontal-stretch: 1; }
-        MetricCell { label: "FLAWLESS"; horizontal-stretch: 1; }
-        MetricCell { label: "CLUTCHES"; horizontal-stretch: 1; }
+        MetricCell { label: "WINS"; value: Tracker.metric-wins; horizontal-stretch: 1; tone: Theme.mint; }
+        MetricCell { label: "LOSSES"; value: Tracker.metric-losses; horizontal-stretch: 1; tone: Theme.coral; }
+        MetricCell { label: "KILLS"; value: Tracker.metric-kills; horizontal-stretch: 1; }
+        MetricCell { label: "DEATHS"; value: Tracker.metric-deaths; horizontal-stretch: 1; }
+        MetricCell { label: "ASSISTS"; value: Tracker.metric-assists; horizontal-stretch: 1; }
+        MetricCell { label: "HEADSHOTS"; value: Tracker.metric-headshots; horizontal-stretch: 1; }
+        MetricCell { label: "FLAWLESS"; value: Tracker.metric-flawless; horizontal-stretch: 1; }
+        MetricCell { label: "CLUTCHES"; value: Tracker.metric-clutches; horizontal-stretch: 1; }
     }
 }
 
@@ -156,7 +164,8 @@ component HighlightRow inherits HorizontalLayout {
     // chip surface). Passed in as an image so the row draws no invented glyph.
     in property <image> badge;
     in property <string> label: "";
-    in property <string> value: "—";
+    // Empty = not reported: an em dash, never a zero.
+    in property <string> value: "";
 
     height: 36px;
     spacing: Space.md;
@@ -190,11 +199,11 @@ component HighlightRow inherits HorizontalLayout {
             color: Theme.ink-dim;
         }
         Text {
-            text: root.value;
+            text: root.value == "" ? "—" : root.value;
             font-family: Theme.font-display;
             font-size: TypeScale.value;
             font-weight: 700;
-            color: root.value == "—" ? Theme.ink-faint : Theme.ink;
+            color: root.value == "" ? Theme.ink-faint : Theme.ink;
         }
     }
 }
@@ -208,21 +217,30 @@ component CombatHighlights inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Combat Highlights"; horizontal-stretch: 1; }
         VCenter {
-            Chip { text: "NOT READ"; tone: "off"; pad-y: 1px; }
+            Chip {
+                text: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
+                    ? "THIS ACT" : "NOT READ";
+                tone: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
+                    ? "neutral" : "off";
+                pad-y: 1px;
+            }
         }
     }
 
     HighlightRow {
         badge: @image-url("../assets/badges/kills.png");
         label: "Match kills (best)";
+        value: Tracker.best-kills;
     }
     HighlightRow {
         badge: @image-url("../assets/badges/firstbloods.png");
         label: "First kills / deaths";
+        value: Tracker.first-blood-deaths;
     }
     HighlightRow {
         badge: @image-url("../assets/badges/aces.png");
         label: "Aces";
+        value: Tracker.aces;
     }
 
     Rectangle { vertical-stretch: 1; }
@@ -290,7 +308,9 @@ component TopAgent inherits Card {
                 overflow: elide;
             }
             Text {
-                text: Tracker.agent-name == "" ? "Needs this act's match details." : "";
+                text: Tracker.agent-line != ""
+                    ? Tracker.agent-line
+                    : (Tracker.agent-name == "" ? "Needs a Tracker Network profile." : "");
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
@@ -301,25 +321,26 @@ component TopAgent inherits Card {
 
     Rectangle { vertical-stretch: 1; }
 
+    // That agent's own numbers, not the season's: this card names one pick.
     HorizontalLayout {
         height: 34px;
         spacing: Space.md;
 
         VerticalLayout { horizontal-stretch: 1; spacing: 1px;
             PanelTitle { text: "WIN %"; letter-spacing: 0.8px; }
-            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+            Text { text: Tracker.agent-win-pct == "" ? "—" : Tracker.agent-win-pct; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Tracker.agent-win-pct == "" ? Theme.ink-faint : Theme.ink; }
         }
         VerticalLayout { horizontal-stretch: 1; spacing: 1px;
             PanelTitle { text: "K/D"; letter-spacing: 0.8px; }
-            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+            Text { text: Tracker.agent-kd == "" ? "—" : Tracker.agent-kd; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Tracker.agent-kd == "" ? Theme.ink-faint : Theme.ink; }
         }
         VerticalLayout { horizontal-stretch: 1; spacing: 1px;
             PanelTitle { text: "ADR"; letter-spacing: 0.8px; }
-            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+            Text { text: Tracker.agent-adr == "" ? "—" : Tracker.agent-adr; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Tracker.agent-adr == "" ? Theme.ink-faint : Theme.ink; }
         }
         VerticalLayout { horizontal-stretch: 1; spacing: 1px;
             PanelTitle { text: "ACS"; letter-spacing: 0.8px; }
-            Text { text: "—"; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Theme.ink-faint; }
+            Text { text: Tracker.agent-acs == "" ? "—" : Tracker.agent-acs; font-family: Theme.font-display; font-size: TypeScale.title; font-weight: 700; color: Tracker.agent-acs == "" ? Theme.ink-faint : Theme.ink; }
         }
     }
 }
@@ -374,8 +395,8 @@ component BodyChart inherits Rectangle {
 component AccuracyRow inherits HorizontalLayout {
     height: 23px;
     in property <string> label: "";
-    in property <string> value: "—";
-    in property <string> hits: "— hits";
+    in property <string> value: "";
+    in property <string> hits: "";
 
     spacing: Space.sm;
 
@@ -388,17 +409,17 @@ component AccuracyRow inherits HorizontalLayout {
         vertical-alignment: center;
     }
     Text {
-        text: root.value;
+        text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-display;
         font-size: TypeScale.value;
         font-weight: 700;
-        color: Theme.ink-faint;
+        color: root.value == "" ? Theme.ink-faint : Theme.ink;
         horizontal-alignment: right;
         horizontal-stretch: 1;
         vertical-alignment: center;
     }
     Text {
-        text: root.hits;
+        text: root.hits == "" ? "— hits" : root.hits + " hits";
         font-family: Theme.font-mono;
         font-size: TypeScale.micro;
         color: Theme.ink-faint;
@@ -417,7 +438,13 @@ component Accuracy inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Accuracy"; horizontal-stretch: 1; }
         VCenter {
-            Chip { text: "NOT READ"; tone: "off"; pad-y: 1px; }
+            Chip {
+                text: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
+                    ? "THIS ACT" : "NOT READ";
+                tone: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
+                    ? "neutral" : "off";
+                pad-y: 1px;
+            }
         }
     }
 
@@ -429,9 +456,21 @@ component Accuracy inherits Card {
         VerticalLayout {
             spacing: Space.sm;
             horizontal-stretch: 1;
-            AccuracyRow { label: "Head"; }
-            AccuracyRow { label: "Body"; }
-            AccuracyRow { label: "Legs"; }
+            AccuracyRow {
+                label: "Head";
+                value: Tracker.acc-head;
+                hits: Tracker.acc-head-hits;
+            }
+            AccuracyRow {
+                label: "Body";
+                value: Tracker.acc-body;
+                hits: Tracker.acc-body-hits;
+            }
+            AccuracyRow {
+                label: "Legs";
+                value: Tracker.acc-legs;
+                hits: Tracker.acc-legs-hits;
+            }
         }
     }
 
@@ -444,11 +483,14 @@ component Accuracy inherits Card {
 
 component ActColumn inherits VerticalLayout {
     height: 105px;
+    // The act TRN named (e.g. "V26: ACT V"); empty prints an em dash.
     in property <string> when: "";
+    // The rank that act's peak reached; empty prints an em dash.
+    in property <string> value: "";
     spacing: 2px;
 
     PanelTitle {
-        text: root.when;
+        text: root.when == "" ? "—" : root.when;
         letter-spacing: 0.8px;
         horizontal-alignment: center;
     }
@@ -465,8 +507,8 @@ component ActColumn inherits VerticalLayout {
                 size: 16px;
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
-                stroke: Theme.primary;
-                opacity: 0.45;
+                stroke: root.value == "" ? Theme.ink-faint : Theme.primary;
+                opacity: root.value == "" ? 0.45 : 1;
             }
         }
     }
@@ -477,15 +519,16 @@ component ActColumn inherits VerticalLayout {
         horizontal-alignment: center;
     }
     Text {
-        text: "—";
+        text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-display;
         font-size: TypeScale.title;
         font-weight: 700;
-        color: Theme.ink-faint;
+        color: root.value == "" ? Theme.ink-faint : Theme.ink;
         horizontal-alignment: center;
+        overflow: elide;
     }
     Text {
-        text: "not read";
+        text: root.value == "" ? "not read" : "";
         font-family: Theme.font-body;
         font-size: TypeScale.micro;
         color: Theme.ink-faint;
@@ -510,11 +553,23 @@ component PreviousActs inherits Card {
         height: 105px;
         spacing: Space.md;
 
-        ActColumn { when: "LAST ACT"; horizontal-stretch: 1; }
+        ActColumn {
+            when: Tracker.act1-label;
+            value: Tracker.act1-value;
+            horizontal-stretch: 1;
+        }
         Rectangle { width: 1px; background: Theme.line-soft; }
-        ActColumn { when: "2 ACTS AGO"; horizontal-stretch: 1; }
+        ActColumn {
+            when: Tracker.act2-label;
+            value: Tracker.act2-value;
+            horizontal-stretch: 1;
+        }
         Rectangle { width: 1px; background: Theme.line-soft; }
-        ActColumn { when: "3 ACTS AGO"; horizontal-stretch: 1; }
+        ActColumn {
+            when: Tracker.act3-label;
+            value: Tracker.act3-value;
+            horizontal-stretch: 1;
+        }
     }
 
     Rectangle { vertical-stretch: 1; }
@@ -522,15 +577,16 @@ component PreviousActs inherits Card {
 
 component ScoreMetric inherits VerticalLayout {
     in property <string> label: "";
+    in property <string> value: "";
     spacing: 1px;
 
     PanelTitle { text: root.label; letter-spacing: 0.8px; }
     Text {
-        text: "—";
+        text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-display;
         font-size: TypeScale.title;
         font-weight: 700;
-        color: Theme.ink-faint;
+        color: root.value == "" ? Theme.ink-faint : Theme.ink;
     }
 }
 
@@ -588,11 +644,13 @@ component TrackerScore inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Tracker Score"; horizontal-stretch: 1; }
         VCenter {
-            // UNRATED is the absence of a tier; once a tier exists the chip
-            // names it, so the badge and the chip can never disagree.
+            // UNRATED is the absence of a score; once a number exists the chip
+            // names its band, so the badge and the chip can never disagree.
             Chip {
-                text: Tracker.score-badge == "" ? "UNRATED" : "TIER " + Tracker.score-badge;
-                tone: Tracker.score-badge == "" ? "off" : "neutral";
+                text: Tracker.score-badge == ""
+                    ? (Tracker.score-value == "" ? "UNRATED" : "PER ACT")
+                    : "TIER " + Tracker.score-badge;
+                tone: Tracker.score-badge == "" && Tracker.score-value == "" ? "off" : "neutral";
                 pad-y: 1px;
             }
         }
@@ -607,15 +665,15 @@ component TrackerScore inherits Card {
         }
 
         Text {
-            text: "—";
+            text: Tracker.score-value == "" ? "—" : Tracker.score-value;
             font-family: Theme.font-display;
             font-size: TypeScale.metric;
             font-weight: 800;
-            color: Theme.ink-faint;
+            color: Tracker.score-value == "" ? Theme.ink-faint : Theme.ink;
         }
 
         Need {
-            text: Tracker.score-badge == "" ? "A tier needs the four metrics below." : "";
+            text: Tracker.score-value == "" ? "A score needs the four metrics below." : "";
             horizontal-stretch: 1;
         }
     }
@@ -625,10 +683,10 @@ component TrackerScore inherits Card {
     HorizontalLayout {
         height: 34px;
         spacing: Space.md;
-        ScoreMetric { label: "ROUND WIN %"; horizontal-stretch: 1; }
-        ScoreMetric { label: "KAST"; horizontal-stretch: 1; }
-        ScoreMetric { label: "ACS"; horizontal-stretch: 1; }
-        ScoreMetric { label: "DDA/ROUND"; horizontal-stretch: 1; }
+        ScoreMetric { label: "ROUND WIN %"; value: Tracker.score-round-win-pct; horizontal-stretch: 1; }
+        ScoreMetric { label: "KAST"; value: Tracker.score-kast; horizontal-stretch: 1; }
+        ScoreMetric { label: "ACS"; value: Tracker.score-acs; horizontal-stretch: 1; }
+        ScoreMetric { label: "DDA/ROUND"; value: Tracker.score-dda; horizontal-stretch: 1; }
     }
 }
 
@@ -648,10 +706,34 @@ export component TrackerPage inherits VerticalLayout {
     HorizontalLayout {
         height: 96px;
         spacing: Space.md;
-        StatCard { label: "WIN %"; horizontal-stretch: 1; need: "needs match outcomes"; }
-        StatCard { label: "K/D"; horizontal-stretch: 1; need: "needs kills and deaths"; }
-        StatCard { label: "HEADSHOT %"; horizontal-stretch: 1; need: "needs per-match hit data"; }
-        StatCard { label: "DAMAGE/ROUND"; horizontal-stretch: 1; need: "needs round damage"; }
+        StatCard {
+            label: "WIN %";
+            value: Tracker.win-pct == "" ? "—" : Tracker.win-pct;
+            known: Tracker.win-pct != "";
+            need: Tracker.win-pct == "" ? "Not reported for this act." : "";
+            horizontal-stretch: 1;
+        }
+        StatCard {
+            label: "K/D";
+            value: Tracker.kd == "" ? "—" : Tracker.kd;
+            known: Tracker.kd != "";
+            need: Tracker.kd == "" ? "Not reported for this act." : "";
+            horizontal-stretch: 1;
+        }
+        StatCard {
+            label: "HEADSHOT %";
+            value: Tracker.hs-pct == "" ? "—" : Tracker.hs-pct;
+            known: Tracker.hs-pct != "";
+            need: Tracker.hs-pct == "" ? "Not reported for this act." : "";
+            horizontal-stretch: 1;
+        }
+        StatCard {
+            label: "DAMAGE/ROUND";
+            value: Tracker.dmg-round == "" ? "—" : Tracker.dmg-round;
+            known: Tracker.dmg-round != "";
+            need: Tracker.dmg-round == "" ? "Not reported for this act." : "";
+            horizontal-stretch: 1;
+        }
     }
 
     MetricsStrip { height: 64px; }

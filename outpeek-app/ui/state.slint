@@ -27,15 +27,87 @@ export global Tracker {
     in-out property <string> player-display: "";
     in-out property <string> player-initial: "";
 
-    // Rank panel. state: waiting | loading | ok | unranked | error.
+    // Rank panel. state: waiting | loading | ok | unranked | unknown | error.
     in-out property <string> rank-state: "waiting";
     in-out property <string> rank-label: "";
     in-out property <int> rank-rr: 0;
+    // False when the rank cell is filled from Tracker Network, which publishes
+    // no RR. The card then prints NO RR instead of a zero nobody measured.
+    in-out property <bool> rank-rr-known: false;
     in-out property <string> rank-message: "Waiting for the Riot Client.";
     // Peak rank from Riot's own act history (the best tier across the acts the
     // `/mmr` payload reports). Empty = no act reported one: the cell keeps its
     // em dash rather than printing "Unrated".
     in-out property <string> peak-label: "";
+
+    // ---------------------------------------------------------------------
+    // Tracker Network profile (keyless direct transport; works with Riot off).
+    // Every string is a formatted value or empty. Empty is drawn as an em
+    // dash; it never means zero.
+    // ---------------------------------------------------------------------
+    // state: loading | ready | cached | empty | error.
+    in-out property <string> profile-state: "empty";
+    // One honest line: the cache age, the failure reason, or nothing.
+    in-out property <string> profile-message: "";
+    in-out property <string> profile-handle: "";
+    // Season the numbers belong to ("Season 26 Act 6").
+    in-out property <string> profile-season: "";
+    in-out property <string> profile-matches: "";
+    // Page-header subtitle while a profile is loaded (Rust owns the wording).
+    in-out property <string> profile-subtitle: "";
+
+    // Four headline numerals.
+    in-out property <string> win-pct: "";
+    in-out property <string> kd: "";
+    in-out property <string> hs-pct: "";
+    in-out property <string> dmg-round: "";
+
+    // Eight-cell strip.
+    in-out property <string> metric-wins: "";
+    in-out property <string> metric-losses: "";
+    in-out property <string> metric-kills: "";
+    in-out property <string> metric-deaths: "";
+    in-out property <string> metric-assists: "";
+    in-out property <string> metric-headshots: "";
+    in-out property <string> metric-flawless: "";
+    in-out property <string> metric-clutches: "";
+
+    // Combat highlights.
+    in-out property <string> best-kills: "";
+    // "first bloods / first deaths" as one ratio line.
+    in-out property <string> first-blood-deaths: "";
+    in-out property <string> aces: "";
+
+    // Accuracy: share of dealt shots and the raw hit count.
+    in-out property <string> acc-head: "";
+    in-out property <string> acc-head-hits: "";
+    in-out property <string> acc-body: "";
+    in-out property <string> acc-body-hits: "";
+    in-out property <string> acc-legs: "";
+    in-out property <string> acc-legs-hits: "";
+
+    // Top agent: the card's four metrics are that agent's, not the season's.
+    in-out property <string> agent-line: "";
+    in-out property <string> agent-win-pct: "";
+    in-out property <string> agent-kd: "";
+    in-out property <string> agent-adr: "";
+    in-out property <string> agent-acs: "";
+
+    // Previous acts: label = the act TRN named, value = the rank it reported.
+    // Empty slots keep em dashes; no act is ever guessed.
+    in-out property <string> act1-label: "";
+    in-out property <string> act1-value: "";
+    in-out property <string> act2-label: "";
+    in-out property <string> act2-value: "";
+    in-out property <string> act3-label: "";
+    in-out property <string> act3-value: "";
+
+    // Tracker Score (0–1000 band; the badge key comes from `badges.rs`).
+    in-out property <string> score-value: "";
+    in-out property <string> score-round-win-pct: "";
+    in-out property <string> score-kast: "";
+    in-out property <string> score-acs: "";
+    in-out property <string> score-dda: "";
 
     // Game art, fetched and cached at runtime (never bundled: see assets.rs).
     // An empty image means "no art cached", and the UI draws its own fallback

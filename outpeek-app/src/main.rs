@@ -27,6 +27,7 @@ use outpeek_app::hud::{self, PLATFORM_SUPPORTS_HUD};
 use outpeek_app::model::{self, ClientState, RankView, TrackerSnapshot};
 use outpeek_app::overlay_renderer::OverlayRendererSetting;
 use outpeek_app::settings_model::{self, McpPort, PathState};
+use outpeek_app::trn_profile::{ProfileState, ProfileView};
 use outpeek_app::worker::{self, Event, Flags};
 use outpeek_app::{paths, PRODUCT_NAME, VERSION};
 use outpeek_overlay::ui::OverlayWindow;
@@ -660,8 +661,70 @@ fn apply_rank(ui: &AppWindow, view: &RankView) {
     t.set_rank_state(view.state.as_str().into());
     t.set_rank_label(view.label.clone().into());
     t.set_rank_rr(view.rr as i32);
+    t.set_rank_rr_known(view.rr_known);
     t.set_rank_message(view.message.clone().into());
     t.set_peak_label(view.peak_label.clone().into());
+}
+
+/// Push one Tracker Network profile frame into every Overview slot.
+///
+/// The provider (worker) already formatted the strings and left `""` where a
+/// stat was not reported; this pass never invents a value or a zero.
+fn apply_profile(ui: &AppWindow, view: &ProfileView) {
+    let t = ui.global::<Tracker>();
+    t.set_profile_state(view.state.as_str().into());
+    t.set_profile_message(view.message.clone().into());
+    t.set_profile_handle(view.handle.clone().into());
+    t.set_profile_season(view.season.clone().into());
+    t.set_profile_matches(view.matches.clone().into());
+    t.set_win_pct(view.win_pct.clone().into());
+    t.set_kd(view.kd.clone().into());
+    t.set_hs_pct(view.hs_pct.clone().into());
+    t.set_dmg_round(view.dmg_round.clone().into());
+    t.set_metric_wins(view.wins.clone().into());
+    t.set_metric_losses(view.losses.clone().into());
+    t.set_metric_kills(view.kills.clone().into());
+    t.set_metric_deaths(view.deaths.clone().into());
+    t.set_metric_assists(view.assists.clone().into());
+    t.set_metric_headshots(view.headshots.clone().into());
+    t.set_metric_flawless(view.flawless.clone().into());
+    t.set_metric_clutches(view.clutches.clone().into());
+    t.set_best_kills(view.best_kills.clone().into());
+    t.set_first_blood_deaths(view.first_blood_deaths.clone().into());
+    t.set_aces(view.aces.clone().into());
+    t.set_acc_head(view.acc_head.clone().into());
+    t.set_acc_head_hits(view.acc_head_hits.clone().into());
+    t.set_acc_body(view.acc_body.clone().into());
+    t.set_acc_body_hits(view.acc_body_hits.clone().into());
+    t.set_acc_legs(view.acc_legs.clone().into());
+    t.set_acc_legs_hits(view.acc_legs_hits.clone().into());
+    t.set_agent_name(view.agent_name.clone().into());
+    t.set_agent_role(view.agent_role.clone().into());
+    t.set_agent_line(view.agent_line.clone().into());
+    t.set_agent_win_pct(view.agent_win_pct.clone().into());
+    t.set_agent_kd(view.agent_kd.clone().into());
+    t.set_agent_adr(view.agent_adr.clone().into());
+    t.set_agent_acs(view.agent_acs.clone().into());
+    t.set_act1_label(view.act1_label.clone().into());
+    t.set_act1_value(view.act1_value.clone().into());
+    t.set_act2_label(view.act2_label.clone().into());
+    t.set_act2_value(view.act2_value.clone().into());
+    t.set_act3_label(view.act3_label.clone().into());
+    t.set_act3_value(view.act3_value.clone().into());
+    t.set_score_value(view.score.clone().into());
+    t.set_score_badge(view.score_badge.clone().into());
+    t.set_score_round_win_pct(view.round_win_pct.clone().into());
+    t.set_score_kast(view.kast.clone().into());
+    t.set_score_acs(view.acs.clone().into());
+    t.set_score_dda(view.dda_round.clone().into());
+    // The header says where the numbers came from while a profile is loaded.
+    let subtitle = match view.state {
+        ProfileState::Ready | ProfileState::Cached if !view.handle.is_empty() => {
+            format!("Tracker Network · {} · read-only", view.handle)
+        }
+        _ => String::new(),
+    };
+    t.set_profile_subtitle(subtitle.into());
 }
 
 /// Decode the cached art this event names into the window's image slots.
@@ -689,8 +752,13 @@ fn apply_art(ui: &AppWindow, art: &ArtView) {
     t.set_rank_crest(load(&art.rank_crest));
     t.set_peak_crest(load(&art.peak_crest));
     t.set_agent_icon(load(&art.agent_icon));
-    t.set_agent_name(art.agent_name.clone().into());
-    t.set_agent_role(art.agent_role.clone().into());
+    // The catalogue's name/role beat the payload's hints, but an empty art
+    // frame (no network, agent not in the catalogue) must not erase the names
+    // the profile frame already set.
+    if !art.agent_name.is_empty() {
+        t.set_agent_name(art.agent_name.clone().into());
+        t.set_agent_role(art.agent_role.clone().into());
+    }
 }
 
 fn start_worker(
@@ -717,6 +785,7 @@ fn start_worker(
                     }
                     Event::Rank(view) => apply_rank(&app, &view),
                     Event::Art(art) => apply_art(&app, &art),
+                    Event::Profile(view) => apply_profile(&app, &view),
                 }
             });
         },
