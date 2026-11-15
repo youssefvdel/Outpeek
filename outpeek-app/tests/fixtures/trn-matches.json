@@ -1,0 +1,1906 @@
+{
+ "data": {
+  "matches": [
+   {
+    "attributes": {
+     "id": "cadcc206-9d07-4695-b792-4215ec6ef341"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-14T09:58:26.274+00:00",
+     "result": "defeat",
+     "mapName": "Bind",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "569fdd95-4d10-43ab-ca70-79becc718b46",
+       "agentName": "Sage"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 16,
+        "displayValue": "16",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4375,
+        "displayValue": "4,375",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 23,
+        "displayValue": "23",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1091,
+        "displayValue": "-1,091",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "ef5082cf-d838-443b-9402-5b050e10f3ab"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-13T12:15:53.749+00:00",
+     "result": "defeat",
+     "mapName": "Summit",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "569fdd95-4d10-43ab-ca70-79becc718b46",
+       "agentName": "Sage"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4775,
+        "displayValue": "4,775",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 6,
+        "displayValue": "6",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 270,
+        "displayValue": "270",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "818e512a-840e-492d-b8bc-101cf7a809f2"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T08:18:06.964+00:00",
+     "result": "defeat",
+     "mapName": "Lotus",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "569fdd95-4d10-43ab-ca70-79becc718b46",
+       "agentName": "Sage"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4119,
+        "displayValue": "4,119",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 1,
+        "displayValue": "1",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -580,
+        "displayValue": "-580",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "ca7b2a76-df01-4c00-8026-f1cba0c2cae3"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T07:23:21.868+00:00",
+     "result": "defeat",
+     "mapName": "Summit",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4987,
+        "displayValue": "4,987",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 331,
+        "displayValue": "331",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "92efe4e0-3876-4e80-b802-993fea1e9532"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T06:44:25.388+00:00",
+     "result": "defeat",
+     "mapName": "Abyss",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4766,
+        "displayValue": "4,766",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 18,
+        "displayValue": "18",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 6,
+        "displayValue": "6",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -256,
+        "displayValue": "-256",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "34b6c2a3-d682-439e-bcd4-ed6ed58fd203"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T06:12:50.619+00:00",
+     "result": "defeat",
+     "mapName": "Sunset",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3187,
+        "displayValue": "3,187",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 19,
+        "displayValue": "19",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 6,
+        "displayValue": "6",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1078,
+        "displayValue": "-1,078",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "fa23988f-e35b-4717-91c5-1bf88af89ea6"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T05:34:40.248+00:00",
+     "result": "victory",
+     "mapName": "Haven",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4074,
+        "displayValue": "4,074",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 401,
+        "displayValue": "401",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "b5a468c1-7056-44d5-8582-ef7aad1b9d69"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-11T04:58:43.644+00:00",
+     "result": "defeat",
+     "mapName": "Haven",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3743,
+        "displayValue": "3,743",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -640,
+        "displayValue": "-640",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "192364f1-0be9-44fd-9535-6b3dc21a7428"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-10T04:55:05.264+00:00",
+     "result": "defeat",
+     "mapName": "Summit",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7853,
+        "displayValue": "7,853",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 27,
+        "displayValue": "27",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 22,
+        "displayValue": "22",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 24,
+        "displayValue": "24",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 1052,
+        "displayValue": "1,052",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "9d4d8d6f-5c90-4eab-a4ca-7ddacdcfe6bb"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-09T02:02:23.158+00:00",
+     "result": "victory",
+     "mapName": "Summit",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3480,
+        "displayValue": "3,480",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -949,
+        "displayValue": "-949",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "a735eb7a-5cd0-4d67-ae97-5f9c79ab0f64"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-09T01:29:13.405+00:00",
+     "result": "victory",
+     "mapName": "Sunset",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4599,
+        "displayValue": "4,599",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 501,
+        "displayValue": "501",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "4b49d707-8b9f-4a95-987e-b57f618ad5eb"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-09T00:57:09.313+00:00",
+     "result": "victory",
+     "mapName": "Abyss",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4,
+        "displayValue": "4",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3839,
+        "displayValue": "3,839",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 5,
+        "displayValue": "5",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": 183,
+        "displayValue": "183",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "011a9d64-0f60-4907-b0b4-eb5fbe1dcbca"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-09T00:21:07.575+00:00",
+     "result": "defeat",
+     "mapName": "Bind",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "ddd5a15c-4fbe-42fa-3789-11a55ca5ee04",
+       "agentName": "Hush"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 2,
+        "displayValue": "2",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 1382,
+        "displayValue": "1,382",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 5,
+        "displayValue": "5",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 2,
+        "displayValue": "2",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 5,
+        "displayValue": "5",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1244,
+        "displayValue": "-1,244",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "f5b7c122-396e-4a4c-be67-3f3dfd7bb9a4"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-08T23:33:31.669+00:00",
+     "result": "defeat",
+     "mapName": "Corrode",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3803,
+        "displayValue": "3,803",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 19,
+        "displayValue": "19",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1067,
+        "displayValue": "-1,067",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "78b2ab52-4216-4c92-aa96-128168a61d71"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-08T00:25:22.148+00:00",
+     "result": "defeat",
+     "mapName": "Haven",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 5,
+        "displayValue": "5",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 2427,
+        "displayValue": "2,427",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 1,
+        "displayValue": "1",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -758,
+        "displayValue": "-758",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "5fd20dee-b140-4572-9bac-28adb1fd0adf"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-07T23:37:47.664+00:00",
+     "result": "defeat",
+     "mapName": "Corrode",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 11,
+        "displayValue": "11",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4638,
+        "displayValue": "4,638",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 16,
+        "displayValue": "16",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -3,
+        "displayValue": "-3",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "101f78f9-66e3-47c2-8df5-6b9997ea060b"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-06T23:25:53.225+00:00",
+     "result": "victory",
+     "mapName": "Sunset",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4054,
+        "displayValue": "4,054",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 20,
+        "displayValue": "20",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -914,
+        "displayValue": "-914",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "2b886356-ff15-435b-b8d4-c15660f00b6a"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-06T22:42:13.041+00:00",
+     "result": "victory",
+     "mapName": "Sunset",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 3083,
+        "displayValue": "3,083",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 15,
+        "displayValue": "15",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 18,
+        "displayValue": "18",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 7,
+        "displayValue": "7",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1209,
+        "displayValue": "-1,209",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "6cfaba15-cf36-4c9c-90b7-b143b2e8cebf"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-06T22:00:57.475+00:00",
+     "result": "victory",
+     "mapName": "Bind",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "victory",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 10,
+        "displayValue": "10",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 4504,
+        "displayValue": "4,504",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 14,
+        "displayValue": "14",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 12,
+        "displayValue": "12",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -289,
+        "displayValue": "-289",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "attributes": {
+     "id": "04dccb20-545f-4ec0-bfcc-4d8803c5f1da"
+    },
+    "metadata": {
+     "modeKey": "bomb",
+     "modeName": "Competitive",
+     "timestamp": "2026-11-06T01:19:41.786+00:00",
+     "result": "defeat",
+     "mapName": "Summit",
+     "seasonName": "V26: A6"
+    },
+    "segments": [
+     {
+      "type": "overview",
+      "metadata": {
+       "result": "defeat",
+       "agent": "601dbbe7-43ce-be57-2a40-4abd24953621",
+       "agentName": "KAY/O"
+      },
+      "stats": {
+       "roundsWon": {
+        "displayName": "Rounds Won",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "roundsLost": {
+        "displayName": "Rounds Lost",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 13,
+        "displayValue": "13",
+        "displayType": "Number"
+       },
+       "score": {
+        "displayName": "Score",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 2498,
+        "displayValue": "2,498",
+        "displayType": "Number"
+       },
+       "kills": {
+        "displayName": "Kills",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 8,
+        "displayValue": "8",
+        "displayType": "Number"
+       },
+       "deaths": {
+        "displayName": "Deaths",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 17,
+        "displayValue": "17",
+        "displayType": "Number"
+       },
+       "assists": {
+        "displayName": "Assists",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
+       },
+       "headshots": {
+        "displayName": "Headshots",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 6,
+        "displayValue": "6",
+        "displayType": "Number"
+       },
+       "damageDelta": {
+        "displayName": "Damage Delta \u0394",
+        "metadata": {},
+        "value": -1359,
+        "displayValue": "-1,359",
+        "displayType": "Number"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

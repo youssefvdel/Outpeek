@@ -20,6 +20,7 @@ import { Header } from "components/header.slint";
 import { TitleBar } from "components/titlebar.slint";
 import { TrackerPage } from "components/cards.slint";
 import { SettingsPage } from "components/settings.slint";
+import { MatchesPage } from "components/matches.slint";
 
 // Re-exported so the Rust side can address the same globals, push the titlebar
 // geometry, and use the row struct without the deprecated generated alias.
@@ -55,6 +56,8 @@ export component AppWindow inherits Window {
     // Navigation goes through Rust so the view state has one owner (and one
     // debug log line per click).
     callback navigate(string);
+    // Tracker tab (Overview | Matches). Rust owns it, like the sidebar view.
+    callback select-tab(string);
     // Window commands. Rust calls Win32 and reads the state back; the UI never
     // pretends a window was minimised because a button was pressed.
     callback minimize-window();
@@ -86,6 +89,7 @@ export component AppWindow inherits Window {
                 title: Tracker.view == "settings" ? "Settings" : "Tracker";
                 icon: Tracker.view == "settings" ? "settings" : "tracker";
                 show-tabs: Tracker.view == "tracker";
+                select-tab(tab) => { root.select-tab(tab); }
                 subtitle: Tracker.view == "settings"
                     ? "What this build really does — and what it does not"
                     : (Tracker.profile-subtitle != ""
@@ -104,7 +108,8 @@ export component AppWindow inherits Window {
                 page := VerticalLayout {
                     width: flick.content-width;
 
-                    if Tracker.view == "tracker": TrackerPage {}
+                    if Tracker.view == "tracker" && Tracker.tab == "overview": TrackerPage {}
+                    if Tracker.view == "tracker" && Tracker.tab == "matches": MatchesPage {}
                     if Tracker.view == "settings": SettingsPage {
                         toggle-hud => { root.toggle-hud(); }
                     }

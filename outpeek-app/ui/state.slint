@@ -14,10 +14,32 @@ export global Shell {
     in-out property <length> rail-width: 272px;
 }
 
+/// One played match, pre-formatted by Rust. Every field is a string so the
+/// view cannot re-derive or invent a number; `won` only picks the colour.
+export struct MatchRowUi {
+    id: string,
+    map: string,
+    mode: string,
+    result: string,
+    agent: string,
+    kda: string,
+    rounds: string,
+    date: string,
+    won: bool,
+}
+
 export global Tracker {
     // Shell navigation. UI state, not a fact: Rust sets it from the sidebar's
     // `navigate` callback. "tracker" | "settings".
     in-out property <string> view: "tracker";
+    // Active tracker tab: "overview" | "matches". Rust owns it.
+    in-out property <string> tab: "overview";
+
+    // Recent matches (Tracker Network). `matches-state` is ready|cached|
+    // loading|empty|error and `matches-note` carries the reason/age line.
+    in-out property <[MatchRowUi]> matches: [];
+    in-out property <string> matches-state: "empty";
+    in-out property <string> matches-note: "No matches read yet.";
 
     // Riot Client / poll state.
     in-out property <string> client-line: "Starting…";

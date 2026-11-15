@@ -55,7 +55,7 @@ fn main() {
     // it exactly once when the platform is created. Font registration below
     // touches Slint's font collection, which creates that platform — so a flag
     // parsed after it never starts the MCP server.
-    parse_args();
+    let initial_tab = parse_args();
     // Pin the one proven renderer before any window exists.
     outpeek_overlay::force_femtovg();
     // Embedded OFL fonts: without them Windows falls back to Segoe UI and the
@@ -69,6 +69,9 @@ fn main() {
     let _ = outpeek_app::settings::migrate_legacy_default();
 
     let app = AppWindow::new().expect("outpeek-app: app window");
+    if let Some(tab) = initial_tab {
+        app.global::<Tracker>().set_tab(tab.into());
+    }
     // Frame styling is best-effort and logged: a refused DWM attribute costs a
     // cosmetic detail, never the app. The HWND can be absent before the event
     // loop starts, so the first tick retries once.
@@ -207,8 +210,9 @@ fn main() {
 /// init; the flag only fills it when the environment did not. A port the app
 /// cannot use is rejected here instead of being handed to Slint, which would
 /// print its own error and leave MCP silently off.
-fn parse_args() {
+fn parse_args() -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
+    let mut tab: Option<String> = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -234,6 +238,20 @@ fn parse_args() {
                     }
                 }
             }
+            "--tab" => {
+                i += 1;
+                let Some(value) = args.get(i) else {
+                    eprintln!("outpeek-app: --tab needs a value (overview|matches)");
+                    std::process::exit(2);
+                };
+                match value.as_str() {
+                    "overview" | "matches" => tab = Some(value.clone()),
+                    other => {
+                        eprintln!("outpeek-app: --tab '{other}' is not ported (overview|matches)");
+                        std::process::exit(2);
+                    }
+                }
+            }
             "--help" | "-h" => {
                 eprintln!(
                     "usage: outpeek-app [--mcp-port PORT]\n\
@@ -251,6 +269,7 @@ fn parse_args() {
         }
         i += 1;
     }
+    tab
 }
 
 fn load_enabled() -> bool {
@@ -290,6 +309,22 @@ fn wire_callbacks(
             }
             #[cfg(debug_assertions)]
             eprintln!("[{PRODUCT_NAME}] nav -> {view}");
+        });
+
+        // Tracker tabs. Only the two ported tabs can be selected; the header
+        // marks the rest SOON, so a click there never reaches this handler.
+        let app_weak_tab = app.as_weak();
+        app.on_select_tab(move |tab| {
+            let tab = if tab == "matches" {
+                "matches"
+            } else {
+                "overview"
+            };
+            if let Some(app) = app_weak_tab.upgrade() {
+                app.global::<Tracker>().set_tab(tab.into());
+            }
+            #[cfg(debug_assertions)]
+            eprintln!("[{PRODUCT_NAME}] tab -> {tab}");
         });
     }
 
@@ -727,6 +762,31 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     t.set_profile_subtitle(subtitle.into());
 }
 
+/// Push the recent-match rows into the Matches tab. The rows arrive already
+/// formatted; an absent stat is an em dash from `trn_matches`, never a zero.
+fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
+    use outpeek_app::trn_matches::MatchRow;
+    let t = ui.global::<Tracker>();
+    let rows: Vec<MatchRowUi> = view
+        .rows
+        .iter()
+        .map(|r: &MatchRow| MatchRowUi {
+            id: r.id.clone().into(),
+            map: r.map.clone().into(),
+            mode: r.mode.clone().into(),
+            result: r.result_label().into(),
+            agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
+            kda: r.kda().into(),
+            rounds: r.rounds().into(),
+            date: r.date_label().into(),
+            won: r.won(),
+        })
+        .collect();
+    t.set_matches(ModelRc::new(VecModel::from(rows)));
+    t.set_matches_state(view.state.into());
+    t.set_matches_note(view.message.clone().into());
+}
+
 /// Decode the cached art this event names into the window's image slots.
 ///
 /// The worker cannot send `slint::Image` (it is not `Send`), so it publishes the
@@ -786,6 +846,7 @@ fn start_worker(
                     Event::Rank(view) => apply_rank(&app, &view),
                     Event::Art(art) => apply_art(&app, &art),
                     Event::Profile(view) => apply_profile(&app, &view),
+                    Event::Matches(view) => apply_matches(&app, &view),
                 }
             });
         },

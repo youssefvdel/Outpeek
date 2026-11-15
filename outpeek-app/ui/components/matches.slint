@@ -1,0 +1,182 @@
+// Matches tab: the last 20 played games, straight from the same keyless
+// Tracker Network read that fills the Overview. Every cell is pre-formatted by
+// Rust (`MatchRowUi`), so this view cannot round, re-derive or invent a value.
+//
+// When there is nothing to show, the note says why: no account read yet, a
+// network failure with the saved list's age, or a genuinely empty history are
+// three different sentences on purpose.
+
+import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
+import { Tracker, MatchRowUi } from "../state.slint";
+import { Card, Chip, VCenter, Glyph } from "widgets.slint";
+
+component ColumnLabel inherits Text {
+    in property <length> col-width: 80px;
+    width: root.col-width;
+    font-family: Theme.font-body;
+    font-size: TypeScale.micro;
+    font-weight: 600;
+    color: Theme.ink-faint;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+component Cell inherits Text {
+    in property <length> col-width: 80px;
+    in property <brush> ink: Theme.ink-dim;
+    in property <int> weight: 500;
+    in property <bool> mono: false;
+    width: root.col-width;
+    font-family: root.mono ? Theme.font-mono : Theme.font-body;
+    font-size: TypeScale.caption;
+    font-weight: root.weight;
+    color: root.ink;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+component ResultChip inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> won: false;
+    width: 74px;
+    height: 22px;
+    border-radius: Shape.sm;
+    background: root.won ? Theme.mint-wash : Theme.coral-wash;
+    border-width: 1px;
+    border-color: root.won ? Theme.mint-edge : Theme.coral-edge;
+
+    Text {
+        text: root.label;
+        font-family: Theme.font-body;
+        font-size: TypeScale.micro;
+        font-weight: 700;
+        color: root.won ? Theme.mint : Theme.coral;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component MatchLine inherits Rectangle {
+    in property <MatchRowUi> item;
+    height: 44px;
+    background: line-touch.has-hover ? Theme.container-low : transparent;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    line-touch := TouchArea {}
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.md;
+
+        Cell { col-width: 62px; text: root.item.date; ink: Theme.ink-faint; mono: true; }
+        Cell { col-width: 94px; text: root.item.mode; }
+        Cell { col-width: 116px; text: root.item.map; ink: Theme.ink; weight: 600; }
+        VCenter { ResultChip { label: root.item.result; won: root.item.won; } }
+        Cell { col-width: 92px; text: root.item.agent; }
+        Cell { col-width: 92px; text: root.item.kda; mono: true; }
+        Cell { col-width: 58px; text: root.item.rounds; mono: true; ink: Theme.ink-faint; }
+        Rectangle { horizontal-stretch: 1; }
+    }
+
+    Rectangle {
+        x: Space.md;
+        y: parent.height - 1px;
+        width: parent.width - Space.md * 2;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+}
+
+export component MatchesPage inherits VerticalLayout {
+    spacing: Space.md;
+
+    // Note band: the only place the page explains itself.
+    Rectangle {
+        height: 34px;
+        border-radius: Shape.sm;
+        background: Theme.container-low;
+        border-width: 1px;
+        border-color: Theme.line-soft;
+
+        HorizontalLayout {
+            padding-left: Space.md;
+            padding-right: Space.md;
+            spacing: Space.sm;
+
+            VCenter {
+                Glyph {
+                    kind: "tracker";
+                    size: 14px;
+                    stroke: Theme.ink-faint;
+                }
+            }
+            Text {
+                text: Tracker.matches-state == "ready"
+                    ? "Last 20 matches · Tracker Network, read-only"
+                    : Tracker.matches-note;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-dim;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            VCenter {
+                Chip {
+                    text: Tracker.matches-state == "ready"
+                        ? "LIVE"
+                        : Tracker.matches-state == "cached" ? "SAVED" : "NOT READ";
+                    tone: Tracker.matches-state == "ready"
+                        ? "mint"
+                        : Tracker.matches-state == "cached" ? "neutral" : "off";
+                    pad-x: 7px;
+                    pad-y: 1px;
+                }
+            }
+        }
+    }
+
+    Card {
+        pad: 0px;
+        gap: 0px;
+
+        // Header row.
+        Rectangle {
+            height: 34px;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                spacing: Space.md;
+
+                ColumnLabel { col-width: 62px; text: "DATE"; }
+                ColumnLabel { col-width: 94px; text: "MODE"; }
+                ColumnLabel { col-width: 116px; text: "MAP"; }
+                ColumnLabel { col-width: 74px; text: "RESULT"; }
+                ColumnLabel { col-width: 92px; text: "AGENT"; }
+                ColumnLabel { col-width: 92px; text: "K / D / A"; }
+                ColumnLabel { col-width: 58px; text: "ROUNDS"; }
+            }
+        }
+
+        if Tracker.matches.length == 0: Rectangle {
+            height: 120px;
+            background: transparent;
+
+            Text {
+                text: Tracker.matches-state == "error"
+                    ? "No matches could be read, and none are saved yet."
+                    : "No matches yet.";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        for entry in Tracker.matches: MatchLine { item: entry; }
+    }
+}

@@ -32,6 +32,7 @@ use crate::live_facts::{derive_facts, find_local_presence};
 use crate::model::{format_player_tag, RankState, RankView, TrackerSnapshot};
 use crate::rank;
 use crate::trn;
+use crate::trn_matches::{self, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
 /// Agent select is short and round transitions are quick.
@@ -57,6 +58,28 @@ pub enum Event {
     /// Tracker Network profile for the remembered account. Independent of the
     /// Riot Client: pushed even when no lockfile exists.
     Profile(ProfileView),
+    /// Recent matches from the same keyless endpoint. `state` names what the
+    /// rows are (`ready`, `cached`, `loading`, `empty`, `error`) so the view can
+    /// say "showing the saved list" instead of pretending it is live.
+    Matches(MatchesView),
+}
+
+/// Rows plus the honesty label that belongs beside them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchesView {
+    pub rows: Vec<MatchRow>,
+    pub state: &'static str,
+    pub message: String,
+}
+
+impl MatchesView {
+    fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            rows: Vec::new(),
+            state,
+            message: message.into(),
+        }
+    }
 }
 
 /// Cross-thread switches owned by the app (UI) and read by the poller.
@@ -98,26 +121,19 @@ where
 /// otherwise the TRN profile's tier + peak, otherwise an honest unknown.
 fn merged_rank(profile: Option<&Profile>, local: Option<&rank::RankRow>) -> RankView {
     match local {
-        Some(row) => RankView::from_rank_with_peak(
-            row.tier,
-            row.rr,
-            row.peak_tier,
-            trn_peak(profile),
-        ),
+        Some(row) => {
+            RankView::from_rank_with_peak(row.tier, row.rr, row.peak_tier, trn_peak(profile))
+        }
         None => RankView::from_profile(trn_tier(profile), trn_peak(profile)),
     }
 }
 
 fn trn_tier(profile: Option<&Profile>) -> Option<i64> {
-    profile
-        .and_then(|p| p.rank.as_ref())
-        .and_then(|r| r.tier)
+    profile.and_then(|p| p.rank.as_ref()).and_then(|r| r.tier)
 }
 
 fn trn_peak(profile: Option<&Profile>) -> Option<i64> {
-    profile
-        .and_then(|p| p.peak.as_ref())
-        .and_then(|r| r.tier)
+    profile.and_then(|p| p.peak.as_ref()).and_then(|r| r.tier)
 }
 
 /// Crest inputs: local tier when Riot answered, else TRN's; peak from either
@@ -180,6 +196,12 @@ where
     let mut profile_handle = String::new();
     let mut profile_saved_at: u64 = 0;
     let mut profile_pending = true;
+    let mut matches_pending = true;
+    let mut matches: Option<Vec<MatchRow>> = None;
+    let mut matches_saved_at: u64 = 0;
+    // The cache read is a first-frame read, not a per-tick one: repeating it
+    // would overwrite a fresh `ready` frame with `cached` on every poll.
+    let mut matches_cache_loaded = false;
     // Game art: one catalogue in memory, one cache directory. A host without an
     // app-data directory gets `None`, and every art slot then stays empty —
     // a supported state, not an error.
@@ -280,6 +302,7 @@ where
         // `/mmr` read.
         if flags.refresh_rank.swap(false, Ordering::Relaxed) {
             profile_pending = true;
+            matches_pending = true;
             rank_pending = true;
         }
 
@@ -299,14 +322,12 @@ where
                         "Reading Tracker Network…",
                     )));
                 }
-                match trn::fetch_profile(&profile_handle)
-                    .and_then(|json| trn_profile::parse(&json))
+                match trn::fetch_profile(&profile_handle).and_then(|json| trn_profile::parse(&json))
                 {
                     Ok(fresh) => {
                         profile_saved_at = now_ms();
                         if let Some(path) = trn_profile::cache_path() {
-                            if let Err(e) =
-                                trn_profile::save_cache(&path, &fresh, profile_saved_at)
+                            if let Err(e) = trn_profile::save_cache(&path, &fresh, profile_saved_at)
                             {
                                 eprintln!("[trn] profile cache write failed: {e}");
                             }
@@ -370,6 +391,88 @@ where
             }
         }
 
+        // Recent matches: same trigger as the profile, same keyless path. A
+        // failure keeps the shown rows and says why; it never blanks the list.
+        if matches_pending {
+            matches_pending = false;
+            if !profile_handle.is_empty() {
+                if matches.is_none() {
+                    publish(Event::Matches(MatchesView::placeholder(
+                        "loading",
+                        "Reading recent matches…",
+                    )));
+                }
+                match trn::fetch_matches(&profile_handle).and_then(|json| {
+                    trn_matches::parse(&json).ok_or_else(|| "TRN_HTTP_BAD_BODY".to_string())
+                }) {
+                    Ok(rows) => {
+                        matches_saved_at = now_ms();
+                        if let Some(path) = trn_matches::cache_path() {
+                            if let Err(e) = trn_matches::save_cache(
+                                &path,
+                                &profile_handle,
+                                &rows,
+                                matches_saved_at,
+                            ) {
+                                eprintln!("[trn] matches cache write failed: {e}");
+                            }
+                        }
+                        eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
+                        matches = Some(rows.clone());
+                        publish(Event::Matches(MatchesView {
+                            rows,
+                            state: "ready",
+                            message: String::new(),
+                        }));
+                    }
+                    Err(e) => {
+                        let (rows, state, message) = match &matches {
+                            Some(last) => (
+                                last.clone(),
+                                "cached",
+                                format!(
+                                    "{e} — showing the list saved {}.",
+                                    trn_profile::age_label(
+                                        now_ms().saturating_sub(matches_saved_at)
+                                    )
+                                ),
+                            ),
+                            None => (
+                                Vec::new(),
+                                "error",
+                                format!("Tracker Network did not answer ({e})."),
+                            ),
+                        };
+                        publish(Event::Matches(MatchesView {
+                            rows,
+                            state,
+                            message,
+                        }));
+                    }
+                }
+            }
+        }
+
+        // Matches cache: the last read is the first frame, like the profile.
+        // Loaded once; the network replaces it below.
+        if !matches_cache_loaded && matches.is_none() {
+            matches_cache_loaded = true;
+            if let Some(cache) = trn_matches::cache_path().and_then(|path| {
+                trn_matches::load_cache(&path, now_ms(), trn_matches::CACHE_TTL_MS)
+            }) {
+                matches_saved_at = cache.saved_at;
+                matches = Some(cache.matches.clone());
+                publish(Event::Matches(MatchesView {
+                    rows: cache.matches,
+                    state: "cached",
+                    message: format!(
+                        "Showing the saved list from {}.",
+                        trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
+                    ),
+                }));
+            }
+        }
+
         // Cheap gate first: no lockfile means no Riot client, so there is
         // nothing to ask. A client that closed mid-match cannot still be in
         // one — reset the live half rather than keep a stale score on screen.
@@ -423,6 +526,7 @@ where
                                 }
                                 profile_handle = handle;
                                 profile_pending = true;
+                                matches_pending = true;
                             }
                             Err(e) => eprintln!("[account] not stored: {e}"),
                         }

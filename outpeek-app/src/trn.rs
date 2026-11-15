@@ -136,7 +136,29 @@ pub fn status_error(status: u16) -> Option<String> {
 /// `TRN_HTTP_BAD_BODY`. Bodies are never logged.
 pub fn fetch_profile(handle: &str) -> Result<Value, String> {
     let path = profile_path(handle)?;
+    fetch_json(&path)
+}
+
+/// Path of the recent-matches endpoint for `handle`.
+pub fn matches_path(handle: &str) -> Result<String, String> {
+    let path = append_source(&format!(
+        "/api/v2/valorant/standard/matches/riot/{}",
+        encode_segment(handle)
+    ));
     validate_path(&path)?;
+    Ok(path)
+}
+
+/// One matches read, parsed (limit 20 as sent by the endpoint).
+pub fn fetch_matches(handle: &str) -> Result<Value, String> {
+    let path = matches_path(handle)?;
+    fetch_json(&path)
+}
+
+/// Shared GET for every TRN endpoint: allowlisted path, Overwolf UA, bounded
+/// body, no logging of bodies.
+fn fetch_json(path: &str) -> Result<Value, String> {
+    validate_path(path)?;
     let headers = vec![
         ("User-Agent".to_string(), USER_AGENT.to_string()),
         ("Accept".to_string(), "application/json".to_string()),
@@ -144,7 +166,7 @@ pub fn fetch_profile(handle: &str) -> Result<Value, String> {
     let response = riot_http::send(&Request {
         host: HOST,
         port: 443,
-        path: &path,
+        path,
         method: "GET",
         headers: &headers,
         body: None,
@@ -174,7 +196,10 @@ mod tests {
         assert_eq!(encode_segment("  lil ga7ed#zngr  "), "lil%20ga7ed%23zngr");
         assert_eq!(encode_segment("Plain-Name_1.2~"), "Plain-Name_1.2~");
         // UTF-8 bytes are encoded one at a time, not mangled as chars.
-        assert_eq!(encode_segment("ناروتو#123"), "%D9%86%D8%A7%D8%B1%D9%88%D8%AA%D9%88%23123");
+        assert_eq!(
+            encode_segment("ناروتو#123"),
+            "%D9%86%D8%A7%D8%B1%D9%88%D8%AA%D9%88%23123"
+        );
         assert_eq!(encode_segment("a/b?c&d"), "a%2Fb%3Fc%26d");
     }
 
@@ -195,10 +220,7 @@ mod tests {
             "/x?source=overwolf-2"
         );
         // A different source value is replaced, not kept beside ours.
-        assert_eq!(
-            append_source("/x?source=browser"),
-            "/x?source=overwolf-2"
-        );
+        assert_eq!(append_source("/x?source=browser"), "/x?source=overwolf-2");
         assert_eq!(
             append_source("/x?a=1&source=browser&b=2"),
             "/x?a=1&b=2&source=overwolf-2"

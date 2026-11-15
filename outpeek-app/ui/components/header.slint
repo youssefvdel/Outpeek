@@ -15,6 +15,9 @@ export component Header inherits Rectangle {
     in property <string> subtitle: "";
     in property <string> icon: "tracker";
     in property <bool> show-tabs: true;
+    // Tracker tab switching: the shell forwards this to Rust, which owns the
+    // state (one writer), so the underline can never disagree with the page.
+    callback select-tab(string);
 
     height: 54px + (root.show-tabs ? 44px : 0px);
     background: Theme.surface;
@@ -104,8 +107,16 @@ export component Header inherits Rectangle {
                 padding-right: Space.xl;
                 spacing: 22px;
 
-                Tab { label: "Overview"; active: true; }
-                Tab { label: "Matches"; soon: true; }
+                Tab {
+                    label: "Overview";
+                    active: Tracker.tab == "overview";
+                    clicked => { root.select-tab("overview"); }
+                }
+                Tab {
+                    label: "Matches";
+                    active: Tracker.tab == "matches";
+                    clicked => { root.select-tab("matches"); }
+                }
                 Tab { label: "Agents"; soon: true; }
                 Tab { label: "Maps"; soon: true; }
                 Tab {
@@ -117,7 +128,7 @@ export component Header inherits Rectangle {
                 Rectangle { horizontal-stretch: 1; }
 
                 Text {
-                    text: "Overview is the only tab with data in this build.";
+                    text: "Overview and Matches are live; the rest are not ported.";
                     font-family: Theme.font-body;
                     font-size: TypeScale.micro;
                     color: Theme.ink-faint;
