@@ -65,6 +65,8 @@ fn main() {
     // Copy-only migrations, exactly once per launch (same rules as the Tauri app).
     paths::migrate_previous_app_data();
     paths::migrate_legacy_data();
+    // Plain-text flags are retired: fold overlay_renderer.txt into settings.json once.
+    let _ = outpeek_app::settings::migrate_legacy_default();
 
     let app = AppWindow::new().expect("outpeek-app: app window");
     // Frame styling is best-effort and logged: a refused DWM attribute costs a
@@ -252,16 +254,14 @@ fn parse_args() {
 }
 
 fn load_enabled() -> bool {
-    !matches!(
-        paths::read_data_file(RENDERER_FILE)
-            .as_deref()
-            .map(str::trim),
-        Some("ts")
-    )
+    // One JSON store; the old overlay_renderer.txt is migrated once at startup.
+    outpeek_app::settings::load_default().hud_enabled()
 }
 
 fn save_enabled(enabled: bool) {
-    let _ = paths::write_data_file(RENDERER_FILE, if enabled { "native" } else { "ts" });
+    let mut s = outpeek_app::settings::load_default();
+    s.set_hud_enabled(enabled);
+    let _ = outpeek_app::settings::save_default(&s);
 }
 
 fn setting(enabled: bool) -> OverlayRendererSetting {

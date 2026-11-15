@@ -41,6 +41,7 @@ pub mod hud;
 pub mod identity;
 pub mod model;
 pub mod rank;
+pub mod settings;
 pub mod settings_model;
 pub mod trn;
 pub mod trn_profile;

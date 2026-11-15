@@ -16,8 +16,9 @@ use std::path::{Path, PathBuf};
 
 /// Directory name under `%APPDATA%` (same constant the shipping app uses).
 pub const APP_DIR_NAME: &str = "Outpeek";
-/// File the HUD toggle persists to (same file the Tauri app's settings read).
-pub const RENDERER_FILE: &str = "overlay_renderer.txt";
+/// Structured settings file the HUD toggle persists to. A plain-text flag per
+/// setting is how the old build ended up with four files and no authority.
+pub const RENDERER_FILE: &str = crate::settings::SETTINGS_FILE;
 /// `tauri.conf.json` identifier; the Tauri build's log dir is `<id>\logs`.
 pub const LOG_IDENTIFIER: &str = "com.outpeek.utility";
 
