@@ -26,6 +26,16 @@ pub const LEGACY_RENDERER_FILE: &str = "overlay_renderer.txt";
 /// The renamed legacy file, kept for the user's records.
 pub const LEGACY_RENDERER_MIGRATED: &str = "overlay_renderer.txt.migrated";
 
+/// Tracker tabs this build can open. A remembered tab outside this list is
+/// ignored rather than trusted: an old file must not open a dead page.
+pub const TABS: [&str; 5] = ["overview", "matches", "agents", "maps", "live"];
+
+/// The shell's own size bounds, mirroring `ui/app.slint`'s min/max. Used to
+/// clamp a restored window size, so a hand-edited `40x40` cannot open an
+/// unusable window.
+pub const MIN_WINDOW: (u32, u32) = (1120, 680);
+pub const MAX_WINDOW: (u32, u32) = (3840, 2160);
+
 /// Persisted settings. Every field needs a `default` so an older or newer file
 /// still loads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +44,17 @@ pub struct AppSettings {
     /// webview owns the HUD). Unknown values resolve to `native` at read time.
     #[serde(default = "renderer_default")]
     pub overlay_renderer: String,
+    /// Last shell view ("tracker" | "settings"); empty = never recorded.
+    #[serde(default)]
+    pub last_view: String,
+    /// Last tracker tab; empty or unknown = Overview.
+    #[serde(default)]
+    pub last_tab: String,
+    /// Window size in logical pixels; 0 = never recorded.
+    #[serde(default)]
+    pub window_width: u32,
+    #[serde(default)]
+    pub window_height: u32,
 }
 
 fn renderer_default() -> String {
@@ -44,6 +65,10 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             overlay_renderer: renderer_default(),
+            last_view: String::new(),
+            last_tab: String::new(),
+            window_width: 0,
+            window_height: 0,
         }
     }
 }
@@ -57,6 +82,42 @@ impl AppSettings {
 
     pub fn set_hud_enabled(&mut self, enabled: bool) {
         self.overlay_renderer = if enabled { "native" } else { "ts" }.to_string();
+    }
+
+    /// The view to open: the remembered one when it is one this build has.
+    pub fn start_view(&self) -> &str {
+        match self.last_view.trim() {
+            "settings" => "settings",
+            _ => "tracker",
+        }
+    }
+
+    /// The tab to open: the remembered one when it is a tab this build has,
+    /// Overview otherwise.
+    pub fn start_tab(&self) -> &str {
+        let tab = self.last_tab.trim();
+        if TABS.contains(&tab) {
+            tab
+        } else {
+            "overview"
+        }
+    }
+
+    /// The remembered window size, clamped to the shell's bounds. `None` when
+    /// nothing was recorded (the layout's own size then applies).
+    pub fn window_size(&self) -> Option<(u32, u32)> {
+        if self.window_width == 0 || self.window_height == 0 {
+            return None;
+        }
+        Some((
+            self.window_width.clamp(MIN_WINDOW.0, MAX_WINDOW.0),
+            self.window_height.clamp(MIN_WINDOW.1, MAX_WINDOW.1),
+        ))
+    }
+
+    pub fn set_window_size(&mut self, width: u32, height: u32) {
+        self.window_width = width.clamp(MIN_WINDOW.0, MAX_WINDOW.0);
+        self.window_height = height.clamp(MIN_WINDOW.1, MAX_WINDOW.1);
     }
 }
 
@@ -170,6 +231,51 @@ mod tests {
         assert!(raw.contains("\"overlay_renderer\": \"ts\""));
         assert_eq!(load(&dir), s);
         assert!(!load(&dir).hud_enabled());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_file_from_before_this_version_still_loads_and_opens_overview() {
+        // The pre-window-state shape: only the renderer.
+        let raw = br#"{"overlay_renderer":"native"}"#;
+        let s = parse(raw);
+        assert_eq!(s.start_tab(), "overview");
+        assert_eq!(s.start_view(), "tracker");
+        assert_eq!(s.window_size(), None, "nothing recorded, nothing restored");
+        assert!(s.hud_enabled());
+    }
+
+    #[test]
+    fn a_remembered_tab_and_size_are_restored_within_bounds() {
+        let raw = br#"{"last_view":"settings","last_tab":"maps",
+                       "window_width":1300,"window_height":900}"#;
+        let s = parse(raw);
+        assert_eq!(s.start_view(), "settings");
+        assert_eq!(s.start_tab(), "maps");
+        assert_eq!(s.window_size(), Some((1300, 900)));
+
+        // A tab this build does not have falls back to Overview instead of
+        // opening a dead page; a size outside the shell's bounds is clamped.
+        let odd = parse(
+            br#"{"last_tab":"live-match-v2","last_view":"store",
+                 "window_width":40,"window_height":9000}"#,
+        );
+        assert_eq!(odd.start_tab(), "overview");
+        assert_eq!(odd.start_view(), "tracker");
+        assert_eq!(odd.window_size(), Some((MIN_WINDOW.0, MAX_WINDOW.1)));
+    }
+
+    #[test]
+    fn last_view_and_size_round_trip() {
+        let dir = temp_dir("window-state");
+        let mut s = AppSettings::default();
+        s.last_tab = "live".to_string();
+        s.last_view = "tracker".to_string();
+        s.set_window_size(1440, 1000);
+        save(&dir, &s).unwrap();
+        let back = load(&dir);
+        assert_eq!(back.start_tab(), "live");
+        assert_eq!(back.window_size(), Some((1440, 1000)));
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -31,6 +31,12 @@ transparent/topmost/click-through/toolwindow, the app window never does. A test
 enforces it — applying the overlay recipe to the app window looks like a frozen
 UI.
 
+Session state lives in `settings.json` beside the HUD toggle: the window size,
+the shell view and the active tab. A relaunch opens where the last one closed,
+and a stored value this build does not understand (an old tab id, a 40 px
+window) falls back instead of opening a dead page or an unusable window.
+`--tab` still wins over the remembered tab — it is the CI/screenshot override.
+
 ## Data flow
 
 One poller in `worker.rs` (2.5 s, 30 s idle backoff, skipped when no Riot client)

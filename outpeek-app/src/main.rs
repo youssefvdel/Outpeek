@@ -75,8 +75,20 @@ fn main() {
     let _ = outpeek_app::settings::migrate_legacy_default();
 
     let app = AppWindow::new().expect("outpeek-app: app window");
-    if let Some(tab) = initial_tab {
-        app.global::<Tracker>().set_tab(tab.into());
+    // Open where the last session was left: window size, shell view and tab.
+    // `--tab` (debug/CI) still wins over the remembered tab, and a stored value
+    // this build does not understand falls back instead of opening a dead page.
+    let stored = outpeek_app::settings::load_default();
+    if let Some((width, height)) = stored.window_size() {
+        app.window()
+            .set_size(slint::LogicalSize::new(width as f32, height as f32));
+    }
+    let boot_tab = initial_tab
+        .clone()
+        .unwrap_or_else(|| stored.start_tab().to_string());
+    app.global::<Tracker>().set_tab(boot_tab.into());
+    if initial_tab.is_none() {
+        app.global::<Tracker>().set_view(stored.start_view().into());
     }
     // Frame styling is best-effort and logged: a refused DWM attribute costs a
     // cosmetic detail, never the app. The HWND can be absent before the event
@@ -130,10 +142,18 @@ fn main() {
     apply_window_state(&app);
 
     // Overlay close does not kill the app; app close kills the process.
-    app.window().on_close_requested(|| {
-        let _ = slint::quit_event_loop();
-        slint::CloseRequestResponse::HideWindow
-    });
+    {
+        // Remember the size before the window goes: the last honest read, not
+        // a value cached at startup.
+        let app_weak_close = app.as_weak();
+        app.window().on_close_requested(move || {
+            if let Some(app) = app_weak_close.upgrade() {
+                save_window_size(&app);
+            }
+            let _ = slint::quit_event_loop();
+            slint::CloseRequestResponse::HideWindow
+        });
+    }
 
     // What the Win32 chrome pass learned, so a resize or a maximise can never
     // leave a stale corner clip or a wrong glyph behind.
@@ -345,6 +365,49 @@ fn load_enabled() -> bool {
     outpeek_app::settings::load_default().hud_enabled()
 }
 
+/// Persist the shell view. Cheap (a few hundred bytes) and only on a real
+/// change: a click that lands on the same view must not rewrite the file.
+fn save_last_view(view: &str) {
+    let mut settings = outpeek_app::settings::load_default();
+    if settings.last_view == view {
+        return;
+    }
+    settings.last_view = view.to_string();
+    if let Err(e) = outpeek_app::settings::save_default(&settings) {
+        eprintln!("[{PRODUCT_NAME}] could not save the last view: {e}");
+    }
+}
+
+/// Persist the tracker tab, same rule.
+fn save_last_tab(tab: &str) {
+    let mut settings = outpeek_app::settings::load_default();
+    if settings.last_tab == tab {
+        return;
+    }
+    settings.last_tab = tab.to_string();
+    if let Err(e) = outpeek_app::settings::save_default(&settings) {
+        eprintln!("[{PRODUCT_NAME}] could not save the last tab: {e}");
+    }
+}
+
+/// Persist the window size in logical pixels. A maximised window reports the
+/// work area — that is still the size the user left it at, and restoring it
+/// un-maximised is the honest reading of what was recorded.
+fn save_window_size(app: &AppWindow) {
+    let physical = app.window().size();
+    let scale = app.window().scale_factor();
+    if scale <= 0.0 {
+        return;
+    }
+    let width = (f64::from(physical.width) / f64::from(scale)).round() as u32;
+    let height = (f64::from(physical.height) / f64::from(scale)).round() as u32;
+    let mut settings = outpeek_app::settings::load_default();
+    settings.set_window_size(width, height);
+    if let Err(e) = outpeek_app::settings::save_default(&settings) {
+        eprintln!("[{PRODUCT_NAME}] could not save the window size: {e}");
+    }
+}
+
 fn save_enabled(enabled: bool) {
     let mut s = outpeek_app::settings::load_default();
     s.set_hud_enabled(enabled);
@@ -375,6 +438,7 @@ fn wire_callbacks(
             if let Some(app) = app_weak.upgrade() {
                 app.global::<Tracker>().set_view(view.clone());
             }
+            save_last_view(&view);
             #[cfg(debug_assertions)]
             eprintln!("[{PRODUCT_NAME}] nav -> {view}");
         });
@@ -393,6 +457,7 @@ fn wire_callbacks(
             if let Some(app) = app_weak_tab.upgrade() {
                 app.global::<Tracker>().set_tab(tab.into());
             }
+            save_last_tab(tab);
             #[cfg(debug_assertions)]
             eprintln!("[{PRODUCT_NAME}] tab -> {tab}");
         });
