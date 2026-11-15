@@ -81,6 +81,13 @@ agents, 7 maps), not a full roster; both pages say so in their note band rather
 than implying completeness. Rust owns the active tab (`--tab` at launch, the
 header tabs at runtime), so the underline and the page are one state.
 
+The Live Match board reads the `glz` match payload, the Riot Client's account
+service and `/mmr` per player — all proven against the documented wire shapes in
+`docs/v2/live-fixture-contract.md`. The transport itself is proven on the PC
+(`--trn-probe`); an actual in-game roster has not been observed yet, so treat
+the first match as the field test: every miss logs its endpoint and status, and
+no cell is guessed.
+
 ## Rendering and Windows integration
 
 - Slint 1.18, winit backend, `renderer-femtovg-wgpu` (DX12 on Windows). The
