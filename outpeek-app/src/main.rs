@@ -34,9 +34,6 @@ use outpeek_overlay::ui::OverlayWindow;
 use slint::{ComponentHandle as _, ModelRc, VecModel};
 
 /// Persisted HUD toggle. Missing file = on: this app's own HUD is the point.
-/// Same file the Settings page reports, from one constant.
-const RENDERER_FILE: &str = settings_model::RENDERER_FILE;
-
 /// Build profile the Settings page reports. Compile-time fact, not runtime env.
 const BUILD_PROFILE: &str = if cfg!(debug_assertions) {
     "debug"
@@ -241,13 +238,16 @@ fn parse_args() -> Option<String> {
             "--tab" => {
                 i += 1;
                 let Some(value) = args.get(i) else {
-                    eprintln!("outpeek-app: --tab needs a value (overview|matches)");
+                    eprintln!("outpeek-app: --tab needs a value (overview|matches|agents|maps)");
                     std::process::exit(2);
                 };
                 match value.as_str() {
-                    "overview" | "matches" => tab = Some(value.clone()),
+                    "overview" | "matches" | "agents" | "maps" => tab = Some(value.clone()),
                     other => {
-                        eprintln!("outpeek-app: --tab '{other}' is not ported (overview|matches)");
+                        eprintln!(
+                            "outpeek-app: --tab '{other}' is not ported \
+                             (overview|matches|agents|maps)"
+                        );
                         std::process::exit(2);
                     }
                 }
@@ -311,14 +311,15 @@ fn wire_callbacks(
             eprintln!("[{PRODUCT_NAME}] nav -> {view}");
         });
 
-        // Tracker tabs. Only the two ported tabs can be selected; the header
+        // Tracker tabs. Only the four ported tabs can be selected; the header
         // marks the rest SOON, so a click there never reaches this handler.
         let app_weak_tab = app.as_weak();
         app.on_select_tab(move |tab| {
-            let tab = if tab == "matches" {
-                "matches"
-            } else {
-                "overview"
+            let tab = match tab.as_str() {
+                "matches" => "matches",
+                "agents" => "agents",
+                "maps" => "maps",
+                _ => "overview",
             };
             if let Some(app) = app_weak_tab.upgrade() {
                 app.global::<Tracker>().set_tab(tab.into());
@@ -787,6 +788,72 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     t.set_matches_note(view.message.clone().into());
 }
 
+/// Push the agent and map rows into the Agents/Maps tabs. Rows arrive already
+/// formatted and already sharing the Overview's season; only the art needs
+/// decoding here, at the size the views actually draw it (128 px portraits,
+/// 320 px map cards) instead of the full-size files.
+fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
+    use outpeek_app::trn_breakdown::{AgentRow, MapRow};
+    let t = ui.global::<Tracker>();
+    let any_art = view.agents.iter().any(|r| !r.art_url.is_empty())
+        || view.maps.iter().any(|r| !r.art_url.is_empty());
+    // No art to load means no directory to create: an empty frame must not
+    // touch the disk.
+    let dir = if any_art {
+        outpeek_app::assets::art_dir()
+    } else {
+        None
+    };
+    let load = |url: &str, edge: u32| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) => outpeek_overlay::image_cache::load_from_scaled(dir, url, edge),
+            None => slint::Image::default(),
+        }
+    };
+    let agents: Vec<AgentRowUi> = view
+        .agents
+        .iter()
+        .map(|r: &AgentRow| AgentRowUi {
+            name: r.name.clone().into(),
+            role: r.role.clone().into(),
+            matches: r.matches.clone().into(),
+            win: r.win.clone().into(),
+            kd: r.kd.clone().into(),
+            acs: r.acs.clone().into(),
+            adr: r.adr.clone().into(),
+            hs: r.hs.clone().into(),
+            pick: r.pick.clone().into(),
+            win_share: r.win_share,
+            art: load(&r.art_url, 128),
+        })
+        .collect();
+    let maps: Vec<MapRowUi> = view
+        .maps
+        .iter()
+        .map(|r: &MapRow| MapRowUi {
+            name: r.name.clone().into(),
+            matches: r.matches.clone().into(),
+            win: r.win.clone().into(),
+            kd: r.kd.clone().into(),
+            acs: r.acs.clone().into(),
+            adr: r.adr.clone().into(),
+            hs: r.hs.clone().into(),
+            win_share: r.win_share,
+            art: load(&r.art_url, 320),
+        })
+        .collect();
+    // Three cards per row, grouped here: Slint's GridLayout does not honour a
+    // runtime column inside a `for`, so the row grouping is data.
+    let map_grid: Vec<ModelRc<MapRowUi>> = maps
+        .chunks(3)
+        .map(|row| ModelRc::new(VecModel::from(row.to_vec())))
+        .collect();
+    t.set_agents(ModelRc::new(VecModel::from(agents)));
+    t.set_map_grid(ModelRc::new(VecModel::from(map_grid)));
+    t.set_breakdown_state(view.state.into());
+    t.set_breakdown_note(view.message.clone().into());
+}
+
 /// Decode the cached art this event names into the window's image slots.
 ///
 /// The worker cannot send `slint::Image` (it is not `Send`), so it publishes the
@@ -847,6 +914,7 @@ fn start_worker(
                     Event::Art(art) => apply_art(&app, &art),
                     Event::Profile(view) => apply_profile(&app, &view),
                     Event::Matches(view) => apply_matches(&app, &view),
+                    Event::Breakdown(view) => apply_breakdown(&app, &view),
                 }
             });
         },

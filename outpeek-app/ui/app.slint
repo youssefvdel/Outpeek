@@ -21,6 +21,8 @@ import { TitleBar } from "components/titlebar.slint";
 import { TrackerPage } from "components/cards.slint";
 import { SettingsPage } from "components/settings.slint";
 import { MatchesPage } from "components/matches.slint";
+import { AgentsPage } from "components/agents.slint";
+import { MapsPage } from "components/maps.slint";
 
 // Re-exported so the Rust side can address the same globals, push the titlebar
 // geometry, and use the row struct without the deprecated generated alias.
@@ -101,6 +103,11 @@ export component AppWindow inherits Window {
             // settings bands both exceed a short window, and neither view
             // should clip its last row instead of scrolling to it.
             flick := Flickable {
+                // `width: 100%` is load-bearing: a Flickable's preferred width
+                // is its content's, so without it the column shrank to the
+                // widest row (Matches/Agents/Maps stopped ~156 px short of the
+                // window edge). The page below is then the viewport's width.
+                width: 100%;
                 vertical-stretch: 1;
                 content-width: self.width;
                 content-height: page.preferred-height;
@@ -110,6 +117,8 @@ export component AppWindow inherits Window {
 
                     if Tracker.view == "tracker" && Tracker.tab == "overview": TrackerPage {}
                     if Tracker.view == "tracker" && Tracker.tab == "matches": MatchesPage {}
+                    if Tracker.view == "tracker" && Tracker.tab == "agents": AgentsPage {}
+                    if Tracker.view == "tracker" && Tracker.tab == "maps": MapsPage {}
                     if Tracker.view == "settings": SettingsPage {
                         toggle-hud => { root.toggle-hud(); }
                     }

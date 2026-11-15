@@ -228,12 +228,12 @@ mod tests {
         std::fs::write(&path, "{ not json").unwrap();
         assert_eq!(load(&path), None);
         assert!(parse("").is_err());
-        assert!(parse(r#"{"handle":"lil ga7ed#zngr"}"#).is_err(), "missing fields");
+        assert!(
+            parse(r#"{"handle":"lil ga7ed#zngr"}"#).is_err(),
+            "missing fields"
+        );
         // A JSON body with an invalid handle is refused, not normalized.
-        assert!(parse(
-            r#"{"handle":"no-tag-here","platform":"riot","saved_at":1}"#
-        )
-        .is_err());
+        assert!(parse(r#"{"handle":"no-tag-here","platform":"riot","saved_at":1}"#).is_err());
         assert!(temp_files(dir.path()).is_empty());
     }
 
@@ -278,7 +278,10 @@ mod tests {
         std::fs::create_dir(&blocked).unwrap();
         let second = Account::new("second#tag", PLATFORM_RIOT, 2).unwrap();
         assert!(save(&blocked, &second).is_err());
-        assert!(temp_files(dir.path()).is_empty(), "temp file must be cleaned up");
+        assert!(
+            temp_files(dir.path()).is_empty(),
+            "temp file must be cleaned up"
+        );
         // The earlier file is untouched by the failed write.
         assert_eq!(load(&path), Some(first));
     }

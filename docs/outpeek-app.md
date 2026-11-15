@@ -39,6 +39,34 @@ loop. The HUD reads the same in-memory state — no IPC, no second process, no
 NDJSON in the app path. The standalone overlay binary keeps stdin NDJSON for
 headless gates.
 
+Two sources, deliberately separate:
+
+- **Riot Client (loopback)** — identity, presence, phase, and the on-demand
+  `/mmr` rank read. Only available while the client runs.
+- **Tracker Network (keyless HTTPS)** — the season profile, the last 20
+  matches, and the agent/map breakdowns. Always tried, with or without Riot.
+  The request carries the `OverwolfClient` user agent and `?source=overwolf-2`
+  (the shape the RE'd Overwolf client uses). Parsed results are cached
+  (`trn-cache.json`, `trn-matches.json`, 24 h TTL) so the last read is the
+  first frame of a Riot-less launch.
+
+A local `/mmr` row wins rank + RR; TRN fills everything else and the RR cell
+then prints `NO RR` instead of a zero nobody measured.
+
+### Tabs
+
+| Tab | Source | Notes |
+|---|---|---|
+| Overview | TRN profile + `/mmr` | four headline numerals, metric strip, top agent, peak acts, score |
+| Matches | TRN `matches` | last 20 games, every cell pre-formatted by Rust |
+| Agents | TRN `agent` segments | same profile payload as Overview — never a second request, so the season cannot disagree |
+| Maps | TRN `map` segments | map card art from valorant-api `listViewIcon`; TRN's own map URL is a 3840×2160 splash, past the art budget |
+
+The Agents and Maps rows are what Tracker Network's endpoint returns (today 5
+agents, 7 maps), not a full roster; both pages say so in their note band rather
+than implying completeness. Rust owns the active tab (`--tab` at launch, the
+header tabs at runtime), so the underline and the page are one state.
+
 ## Rendering and Windows integration
 
 - Slint 1.18, winit backend, `renderer-femtovg-wgpu` (DX12 on Windows). The
@@ -65,8 +93,12 @@ headless gates.
   (verified by rendering both and diffing ink pixels).
 - Badges: the app's own artwork (`src/assets/...`) copied byte-identical into
   `ui/assets/badges/`, provenance in its README.
-- Riot art (rank crests, agent portraits) is **never bundled** — fetched at
-  runtime and cached under the app data dir, with drawn fallbacks.
+- Riot art (rank crests, agent portraits, map cards) is **never bundled** —
+  fetched at runtime and cached under the app data dir, with drawn fallbacks.
+  Fetching is allowlisted to exactly `media.valorant-api.com`,
+  `titles.trackercdn.com` and `trackercdn.com` (the last carries the `_thumb`
+  art for agents the mirror does not list yet). The worker resolves URLs; the
+  UI thread decodes them scaled (128 px portraits, 320 px map cards).
 
 ## Verification workflow
 
@@ -77,8 +109,11 @@ the user's PC.
 cargo test --manifest-path outpeek-app/Cargo.toml      # pure model + assets
 cargo xwin check --manifest-path outpeek-app/Cargo.toml \
   --target x86_64-pc-windows-msvc                      # Win32 paths compile
-xvfb-run -a ./outpeek-app/target/debug/outpeek-app --mcp-port 8099
+xvfb-run -a ./outpeek-app/target/debug/outpeek-app --mcp-port 8099 --tab agents
 ```
+
+`--tab overview|matches|agents|maps` opens a page directly: Rust owns the tab,
+so a screenshot cannot disagree with the underline.
 
 With `--features ui-debug` the app's embedded Slint MCP server exposes
 `list_windows`, `get_element_tree`, `click_element`, `take_screenshot`; that is
@@ -103,8 +138,7 @@ stripped. Size is fonts + badges + MCP + renderer, not the toolkit.
 ## Not ported yet
 
 Store, Crosshair, Resolution Switch, Riot Chat, Pre-Picker, Accounts, the
-config editor, GPU report, updates and installer. Match history is the next
-pipeline: `/match-history/v1/history` + `/match-details/v1/matches/{id}`, which
-fills WIN%/K/D/HS%/DMG, the eight-metric strip, Recent Matches, Previous Acts
-and the Tracker Score inputs. Until it lands those blocks render an em dash with
-what they need — never a fabricated number.
+config editor, GPU report, updates and installer, plus the in-game Live Match
+tab and the HUD edit mode. Overview, Matches, Agents and Maps are live; the
+remaining blocks render an em dash with what they need — never a fabricated
+number.

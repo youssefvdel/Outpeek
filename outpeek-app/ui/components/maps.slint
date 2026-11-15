@@ -1,0 +1,169 @@
+// Maps tab: every map Tracker Network reports for the current act, read from
+// the same profile payload as the Overview. Card art comes from valorant-api's
+// `listViewIcon` (456×100), not from TRN's 3840×2160 splash: the splash is past
+// the art budget and the wrong shape for a card.
+//
+// The endpoint caps its list (7 maps today), so the band says "reported by
+// Tracker Network" and never implies a full map pool. Every value is
+// pre-formatted by Rust; an absent stat is an em dash, never a zero.
+
+import { Theme, Space, Shape, TypeScale } from "tokens.slint";
+import { Tracker, MapRowUi } from "../state.slint";
+import { Card, Chip, Glyph, PanelTitle, SourceBand, VCenter } from "widgets.slint";
+
+component MetricCell inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> value: "";
+    spacing: 1px;
+
+    PanelTitle { text: root.label; }
+    Text {
+        text: root.value == "" ? "—" : root.value;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.caption;
+        color: Theme.ink;
+        overflow: elide;
+    }
+}
+
+component MapCard inherits Card {
+    in property <MapRowUi> item;
+    pad: Space.sm;
+    gap: Space.sm;
+
+    // Card art plate: the PNG's own colours on a container floor, rounded so it
+    // reads as an inset rather than a square pasted over the card corner.
+    Rectangle {
+        height: 64px;
+        border-radius: Shape.sm;
+        background: Theme.container-low;
+        clip: true;
+
+        if root.item.art.width > 0: Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.item.art;
+            image-fit: cover;
+        }
+        if root.item.art.width == 0: Glyph {
+            kind: "tracker";
+            size: 18px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            stroke: Theme.ink-faint;
+        }
+    }
+
+    HorizontalLayout {
+        height: 20px;
+        spacing: Space.sm;
+
+        Text {
+            text: root.item.name == "" ? "—" : root.item.name;
+            font-family: Theme.font-display;
+            font-size: TypeScale.title;
+            font-weight: 600;
+            color: Theme.ink;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        VCenter {
+            Chip {
+                text: root.item.matches == "" ? "NOT READ" : root.item.matches;
+                tone: "off";
+                pad-x: 6px;
+                pad-y: 1px;
+            }
+        }
+    }
+
+    HorizontalLayout {
+        height: 16px;
+        spacing: 6px;
+
+        PanelTitle { text: "WIN"; vertical-alignment: center; }
+        Text {
+            text: root.item.win == "" ? "—" : root.item.win;
+            font-family: Theme.font-body;
+            font-size: TypeScale.caption;
+            font-weight: 600;
+            color: Theme.ink;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+
+    Rectangle {
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.line;
+
+        Rectangle {
+            width: parent.width * root.item.win-share;
+            height: parent.height;
+            border-radius: 1.5px;
+            background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
+        }
+    }
+
+    GridLayout {
+        spacing: 4px;
+
+        MetricCell { label: "K/D"; value: root.item.kd; col: 0; }
+        MetricCell { label: "ACS"; value: root.item.acs; col: 1; }
+        MetricCell { label: "ADR"; value: root.item.adr; col: 2; }
+        MetricCell { label: "HS %"; value: root.item.hs; col: 3; }
+    }
+}
+
+export component MapsPage inherits VerticalLayout {
+    padding-left: Space.xl;
+    padding-right: Space.xl;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    spacing: Space.md;
+
+    SourceBand {
+        live-text: "Maps reported by Tracker Network for "
+            + (Tracker.profile-season == "" ? "the current act" : Tracker.profile-season)
+            + " — the rows its endpoint returns, not a full map pool";
+        note: Tracker.breakdown-note;
+        state: Tracker.breakdown-state;
+    }
+
+    if Tracker.map-grid.length == 0: Card {
+        pad: Space.lg;
+        Rectangle {
+            height: 120px;
+            background: transparent;
+
+            Text {
+                text: Tracker.breakdown-state == "error"
+                    ? "No map rows could be read, and none are saved yet."
+                    : "No map rows for this act yet.";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Three cards per row: the chunking is done in Rust (`map-grid`), so the
+    // rows are data and a short last row is simply short. A fixed card width
+    // keeps every card the same size instead of stretching the lone last one.
+    VerticalLayout {
+        spacing: Space.md;
+
+        for map-row in Tracker.map-grid: HorizontalLayout {
+            spacing: Space.md;
+
+            for card in map-row: MapCard {
+                item: card;
+                width: (parent.width - Space.md * 2) / 3;
+            }
+        }
+    }
+}

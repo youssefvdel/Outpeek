@@ -127,6 +127,19 @@ pub fn load(url: &str) -> Image {
     load_from(&cache_dir(), url)
 }
 
+/// [`load_from`] downscaled so its longest edge is at most `max_edge` pixels.
+///
+/// Row art is drawn at 32–48 px but the files are 256×256 portraits and
+/// 456×100 map cards: decoding them at full size and letting the renderer
+/// shrink them costs memory on every row. The scale happens once, here, before
+/// the pixel buffer is handed to Slint.
+pub fn load_from_scaled(dir: &Path, url: &str, max_edge: u32) -> Image {
+    if url.is_empty() {
+        return Image::default();
+    }
+    load_path_scaled(&path_for_url_in(dir, url), max_edge)
+}
+
 /// Decode a local image file for Slint.
 ///
 /// Riot's art is PNG with real alpha (rank crests sit on variables backgrounds,
@@ -134,18 +147,58 @@ pub fn load(url: &str) -> Image {
 /// premultiplies it — `Image::from_rgba8` requires premultiplied pixels, and
 /// feeding it straight alpha renders every cut-out with a dark fringe.
 pub fn load_path(path: &Path) -> Image {
-    // Sniff content, not the filename: hash names may carry `.bin`.
-    let Ok(bytes) = std::fs::read(path) else {
+    match decode_rgba(path) {
+        Some(rgba) => rgba_to_image(rgba),
+        None => Image::default(),
+    }
+}
+
+/// [`load_path`] downscaled to `max_edge` on the longer side, preserving the
+/// aspect ratio. Same alpha handling as [`load_path`]; a file that fails to
+/// decode is the empty image, never an error.
+pub fn load_path_scaled(path: &Path, max_edge: u32) -> Image {
+    let Some(rgba) = decode_rgba(path) else {
         return Image::default();
     };
-    let Ok(dyn_img) = image::load_from_memory(&bytes) else {
-        return Image::default();
-    };
+    let (w, h) = (rgba.width(), rgba.height());
+    let (dw, dh) = fit_within(w, h, max_edge);
+    if (dw, dh) == (w, h) {
+        return rgba_to_image(rgba);
+    }
+    let resized = image::imageops::resize(&rgba, dw, dh, image::imageops::FilterType::Triangle);
+    rgba_to_image(resized)
+}
+
+/// The longest edge clamped to `max_edge`, ratio preserved, never zero.
+fn fit_within(w: u32, h: u32, max_edge: u32) -> (u32, u32) {
+    let longest = w.max(h);
+    if max_edge == 0 || longest <= max_edge {
+        return (w, h);
+    }
+    let scale = max_edge as f64 / longest as f64;
+    let dw = ((w as f64 * scale).round() as u32).max(1);
+    let dh = ((h as f64 * scale).round() as u32).max(1);
+    (dw, dh)
+}
+
+/// Read and decode a file into RGBA. Content is sniffed, not trusted from the
+/// filename (hash names may carry `.bin`), and anything past 1024 px on an edge
+/// is refused: the guard is what keeps a hostile 20k-px image from allocating.
+fn decode_rgba(path: &Path) -> Option<image::RgbaImage> {
+    let bytes = std::fs::read(path).ok()?;
+    let dyn_img = image::load_from_memory(&bytes).ok()?;
     let rgba = dyn_img.to_rgba8();
     let (w, h) = (rgba.width(), rgba.height());
     if w == 0 || h == 0 || w > 1024 || h > 1024 {
-        return Image::default();
+        return None;
     }
+    Some(rgba)
+}
+
+/// RGBA → Slint image, premultiplying alpha; fully opaque buffers drop the
+/// alpha channel to save a third of the memory.
+fn rgba_to_image(rgba: image::RgbaImage) -> Image {
+    let (w, h) = (rgba.width(), rgba.height());
     if rgba.pixels().all(|p| p.0[3] == u8::MAX) {
         // Fully opaque: RGB is enough and saves a third of the buffer.
         let mut buf: SharedPixelBuffer<Rgb8Pixel> = SharedPixelBuffer::new(w, h);
@@ -268,6 +321,45 @@ mod tests {
             .write_image(img.as_raw(), 4, 4, image::ExtendedColorType::Rgba8)
             .unwrap();
         png
+    }
+
+    /// An opaque PNG of an exact size, for the scaling assertions.
+    fn png_sized(w: u32, h: u32) -> Vec<u8> {
+        use image::ImageEncoder;
+        let mut png: Vec<u8> = Vec::new();
+        let img = image::RgbaImage::from_fn(w, h, |x, y| {
+            image::Rgba([(x % 256) as u8, (y % 256) as u8, 64, u8::MAX])
+        });
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgba8)
+            .unwrap();
+        png
+    }
+
+    #[test]
+    fn row_art_scales_to_the_longest_edge_and_never_upscales() {
+        let dir = TmpDir::new("scaled");
+        let url = "https://example.com/map-card.png";
+        // 456×100 map card → 128 px wide row art.
+        store_bytes_in(dir.path(), url, &png_sized(64, 20)).unwrap();
+        let scaled = load_from_scaled(dir.path(), url, 32);
+        assert_eq!((scaled.size().width, scaled.size().height), (32, 10));
+        // Under the cap: decoded at its own size, not blown up.
+        let small = load_from_scaled(dir.path(), url, 128);
+        assert_eq!((small.size().width, small.size().height), (64, 20));
+        // 0 means "no scale", not "zero pixels".
+        let none = load_from_scaled(dir.path(), url, 0);
+        assert_eq!((none.size().width, none.size().height), (64, 20));
+        // Tall art scales by height, same rule.
+        assert_eq!(fit_within(20, 64, 32), (10, 32));
+        // Missing art is the empty image, never a placeholder or a panic.
+        assert_eq!(load_from_scaled(dir.path(), "", 32).size().width, 0);
+        assert_eq!(
+            load_from_scaled(dir.path(), "https://example.com/none.png", 32)
+                .size()
+                .width,
+            0
+        );
     }
 
     #[test]

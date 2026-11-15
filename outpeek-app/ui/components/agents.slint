@@ -1,0 +1,155 @@
+// Agents tab: every agent Tracker Network reports for the current act, read
+// from the **same** profile payload as the Overview (no second request), so
+// this page can never describe a different season than the headline numbers.
+//
+// The endpoint caps its list (5 agents today). The note band says so instead of
+// implying a full roster. Every cell is pre-formatted by Rust; an absent stat is
+// drawn as an em dash, never a zero.
+
+import { Theme, Space, TypeScale, Motion } from "tokens.slint";
+import { Tracker, AgentRowUi } from "../state.slint";
+import { Card, Cell, ColumnLabel, Glyph, SourceBand, VCenter, WinCell } from "widgets.slint";
+
+component AgentLine inherits Rectangle {
+    in property <AgentRowUi> item;
+    height: 54px;
+    background: line-touch.has-hover ? Theme.container-low : transparent;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    line-touch := TouchArea {}
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.md;
+
+        VCenter {
+            Rectangle {
+                width: 38px;
+                height: 38px;
+                border-radius: 10px;
+                background: Theme.primary-deep;
+                clip: true;
+
+                // 38px slot, `contain`: portraits are square cut-outs and must
+                // keep their aspect; the tinted plate is the fallback floor.
+                if root.item.art.width > 0: Image {
+                    source: root.item.art;
+                    width: 38px;
+                    height: 38px;
+                    image-fit: contain;
+                }
+                if root.item.art.width == 0: Glyph {
+                    kind: "user";
+                    size: 18px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        VerticalLayout {
+            // The agent block absorbs the card's slack so the numeric columns
+            // sit flush with the card's right edge. The header row carries the
+            // same stretch spacer, so the two can never drift apart.
+            horizontal-stretch: 1;
+            spacing: 1px;
+
+            Text {
+                text: root.item.name == "" ? "—" : root.item.name;
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 600;
+                color: Theme.ink;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.role == "" ? "NOT READ" : root.item.role;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                overflow: elide;
+            }
+        }
+
+        Cell { col-width: 72px; value: root.item.matches; }
+        VCenter { WinCell { col-width: 96px; value: root.item.win; share: root.item.win-share; } }
+        Cell { col-width: 54px; value: root.item.kd; mono: true; }
+        Cell { col-width: 54px; value: root.item.acs; mono: true; }
+        Cell { col-width: 58px; value: root.item.adr; mono: true; }
+        Cell { col-width: 54px; value: root.item.hs; mono: true; }
+        Cell { col-width: 64px; value: root.item.pick; mono: true; ink: Theme.ink; weight: 600; }
+    }
+
+    Rectangle {
+        x: Space.md;
+        y: parent.height - 1px;
+        width: parent.width - Space.md * 2;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+}
+
+export component AgentsPage inherits VerticalLayout {
+    padding-left: Space.xl;
+    padding-right: Space.xl;
+    padding-top: 20px;
+    padding-bottom: 20px;
+    spacing: Space.md;
+
+    SourceBand {
+        live-text: "Agents reported by Tracker Network for "
+            + (Tracker.profile-season == "" ? "the current act" : Tracker.profile-season)
+            + " — the rows its endpoint returns, not a full roster";
+        note: Tracker.breakdown-note;
+        state: Tracker.breakdown-state;
+    }
+
+    Card {
+        pad: 0px;
+        gap: 0px;
+
+        // Header row. Column widths are the row's identical numbers.
+        Rectangle {
+            height: 34px;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                spacing: Space.md;
+
+                ColumnLabel { col-width: 38px; text: ""; }
+                ColumnLabel { col-width: 148px; text: "AGENT"; }
+                Rectangle { horizontal-stretch: 1; }
+                ColumnLabel { col-width: 72px; text: "MATCHES"; }
+                ColumnLabel { col-width: 96px; text: "WIN %"; }
+                ColumnLabel { col-width: 54px; text: "K/D"; }
+                ColumnLabel { col-width: 54px; text: "ACS"; }
+                ColumnLabel { col-width: 58px; text: "ADR"; }
+                ColumnLabel { col-width: 54px; text: "HS %"; }
+                ColumnLabel { col-width: 64px; text: "PICK %"; }
+            }
+        }
+
+        if Tracker.agents.length == 0: Rectangle {
+            height: 120px;
+            background: transparent;
+
+            Text {
+                text: Tracker.breakdown-state == "error"
+                    ? "No agent rows could be read, and none are saved yet."
+                    : "No agent rows for this act yet.";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        for entry in Tracker.agents: AgentLine { item: entry; }
+    }
+}

@@ -386,6 +386,70 @@ export component PanelTitle inherits Text {
     color: Theme.ink-faint;
 }
 
+/// Table column header. `col-width` is the same number the row cell under it
+/// uses, so a header can never drift away from its column.
+export component ColumnLabel inherits Text {
+    in property <length> col-width: 80px;
+    width: root.col-width;
+    font-family: Theme.font-body;
+    font-size: TypeScale.micro;
+    font-weight: 600;
+    color: Theme.ink-faint;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+/// One pre-formatted value in a fixed-width column. An empty string is drawn as
+/// an em dash: "not reported", never a zero.
+export component Cell inherits Text {
+    in property <length> col-width: 80px;
+    in property <string> value: "";
+    in property <brush> ink: Theme.ink-dim;
+    in property <int> weight: 500;
+    in property <bool> mono: false;
+    width: root.col-width;
+    text: root.value == "" ? "—" : root.value;
+    font-family: root.mono ? Theme.font-mono : Theme.font-body;
+    font-size: TypeScale.caption;
+    font-weight: root.weight;
+    color: root.ink;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
+/// Win percentage with the 3px share bar beneath it. `value` is the reported
+/// string; `share` (0–1) only widths the fill, and its colour only says whether
+/// the bar crossed half — no number is derived here.
+export component WinCell inherits VerticalLayout {
+    in property <length> col-width: 96px;
+    in property <string> value: "";
+    in property <float> share: 0;
+    width: root.col-width;
+    spacing: 3px;
+
+    Text {
+        text: root.value == "" ? "—" : root.value;
+        font-family: Theme.font-body;
+        font-size: TypeScale.caption;
+        font-weight: 600;
+        color: Theme.ink;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        width: root.col-width - 14px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.line;
+
+        Rectangle {
+            width: parent.width * root.share;
+            height: parent.height;
+            border-radius: 1.5px;
+            background: root.share >= 0.5 ? Theme.mint : Theme.coral;
+        }
+    }
+}
+
 /// Body copy for panels: wraps, never shouts.
 export component Caption inherits Text {
     text: "";
@@ -430,6 +494,63 @@ export component SelectBox inherits Rectangle {
         x: parent.width - self.width - 10px;
         y: (parent.height - self.height) / 2;
         stroke: Theme.ink-faint;
+    }
+}
+
+/// Note band above a Tracker Network page: one sentence saying where the rows
+/// came from, plus the state chip. `state` is the worker's ready|cached|
+/// loading|empty|error — the chip's word and tone follow from it, never from a
+/// guess here. `ready` shows `live-text`; every other state shows `note`, which
+/// the worker has already phrased as a reason or an age.
+export component SourceBand inherits Rectangle {
+    in property <string> live-text: "";
+    in property <string> note: "";
+    in property <string> state: "empty";
+    in property <string> glyph: "tracker";
+
+    height: 34px;
+    border-radius: Shape.sm;
+    background: Theme.container-low;
+    border-width: 1px;
+    border-color: Theme.line-soft;
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            Glyph {
+                kind: root.glyph;
+                size: 14px;
+                stroke: Theme.ink-faint;
+            }
+        }
+        Text {
+            text: root.state == "ready" ? root.live-text : root.note;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            color: Theme.ink-dim;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        VCenter {
+            Chip {
+                text: root.state == "ready"
+                    ? "LIVE"
+                    : root.state == "cached"
+                        ? "SAVED"
+                        : root.state == "loading" ? "READING" : "NOT READ";
+                tone: root.state == "ready"
+                    ? "mint"
+                    : root.state == "cached"
+                        ? "neutral"
+                        : root.state == "loading" ? "armed" : "off";
+                pad-x: 7px;
+                pad-y: 1px;
+            }
+        }
     }
 }
 

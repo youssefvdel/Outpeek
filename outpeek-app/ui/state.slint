@@ -28,11 +28,44 @@ export struct MatchRowUi {
     won: bool,
 }
 
+/// One agent row on the Agents tab, pre-formatted by Rust from the same
+/// Tracker Network payload as the Overview. `win-share` (0–1) only widths the
+/// bar; the percentage beside it is the reported number. `art` is the cached
+/// portrait — an empty image draws the fallback glyph.
+export struct AgentRowUi {
+    name: string,
+    role: string,
+    matches: string,
+    win: string,
+    kd: string,
+    acs: string,
+    adr: string,
+    hs: string,
+    pick: string,
+    win-share: float,
+    art: image,
+}
+
+/// One map card on the Maps tab. Art is valorant-api's `listViewIcon`, cached
+/// locally; the numbers come from the same profile payload as the agents.
+export struct MapRowUi {
+    name: string,
+    matches: string,
+    win: string,
+    kd: string,
+    acs: string,
+    adr: string,
+    hs: string,
+    win-share: float,
+    art: image,
+}
+
 export global Tracker {
     // Shell navigation. UI state, not a fact: Rust sets it from the sidebar's
     // `navigate` callback. "tracker" | "settings".
     in-out property <string> view: "tracker";
-    // Active tracker tab: "overview" | "matches". Rust owns it.
+    // Active tracker tab: "overview" | "matches" | "agents" | "maps". Rust owns
+    // it, so the underline and the page can never disagree.
     in-out property <string> tab: "overview";
 
     // Recent matches (Tracker Network). `matches-state` is ready|cached|
@@ -40,6 +73,16 @@ export global Tracker {
     in-out property <[MatchRowUi]> matches: [];
     in-out property <string> matches-state: "empty";
     in-out property <string> matches-note: "No matches read yet.";
+
+    // Agent and map breakdowns (same Tracker Network payload as the profile,
+    // never a second request). Maps arrive pre-chunked three per row: Slint's
+    // GridLayout ignores runtime `col:` inside a `for`, so the row grouping is
+    // data, not layout arithmetic. `breakdown-state` shares the five states;
+    // `breakdown-note` carries the reason/age line when the rows are not live.
+    in-out property <[AgentRowUi]> agents: [];
+    in-out property <[[MapRowUi]]> map-grid: [];
+    in-out property <string> breakdown-state: "empty";
+    in-out property <string> breakdown-note: "No profile read yet.";
 
     // Riot Client / poll state.
     in-out property <string> client-line: "Starting…";

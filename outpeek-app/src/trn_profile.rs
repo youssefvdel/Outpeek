@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::trn_breakdown::{self, BreakdownRow};
+
 /// Cache file under the app data directory. Holds the parsed profile, never the
 /// ~1.8 MB response body: the body is a transport detail, the profile is data.
 pub const CACHE_FILE: &str = "trn-cache.json";
@@ -106,6 +108,16 @@ pub struct Profile {
     pub acts: Vec<RankRef>,
     pub season: SeasonStats,
     pub top_agent: Option<AgentPick>,
+    /// Every agent segment for this season, most played first. The Agents page
+    /// lists these; `top_agent` is the pick-rate leader among the same rows, so
+    /// the card and the list can never disagree.
+    #[serde(default)]
+    pub agents: Vec<BreakdownRow>,
+    /// Every map segment for this season, most played first. Map art is
+    /// resolved separately (`assets::map_icon_url`): TRN's own map URL is a
+    /// 3840×2160 splash far past the art budget.
+    #[serde(default)]
+    pub maps: Vec<BreakdownRow>,
     pub score: Option<i64>,
 }
 
@@ -159,7 +171,9 @@ impl Profile {
             agent_line: agent.map(agent_line).unwrap_or_default(),
             agent_win_pct: agent.map(|a| percent(a.win_pct)).unwrap_or_default(),
             agent_kd: agent.map(|a| decimal(a.kd, 2)).unwrap_or_default(),
-            agent_adr: agent.map(|a| decimal(a.dmg_per_round, 1)).unwrap_or_default(),
+            agent_adr: agent
+                .map(|a| decimal(a.dmg_per_round, 1))
+                .unwrap_or_default(),
             agent_acs: agent.map(|a| decimal(a.acs, 0)).unwrap_or_default(),
             act1_label: acts[0].0.clone(),
             act1_value: acts[0].1.clone(),
@@ -339,7 +353,8 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
 
     let rank = rank_stat(&stats, "rank");
     let peak = rank_stat(&stats, "peakRank");
-    let agent = top_agent(segments, &season_id);
+    let (agents, maps) = trn_breakdown::parse(segments, &season_id);
+    let agent = top_agent(&agents);
     let mut acts = peak_rows(segments);
     if acts.is_empty() {
         if let Some(peak) = &peak {
@@ -360,6 +375,8 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
         acts,
         season: season_stats(&stats),
         top_agent: agent,
+        agents,
+        maps,
         score: stat_i64(&stats, "trnPerformanceScore"),
     })
 }
@@ -367,9 +384,7 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
 fn pick_season<'a>(segments: &'a [Value], default_season: &str) -> Option<&'a Value> {
     let competitive = |s: &&Value| {
         s.get("type").and_then(Value::as_str) == Some("season")
-            && s.pointer("/attributes/playlist")
-                .and_then(Value::as_str)
-                == Some("competitive")
+            && s.pointer("/attributes/playlist").and_then(Value::as_str) == Some("competitive")
     };
     if !default_season.is_empty() {
         if let Some(segment) = segments.iter().filter(competitive).find(|s| {
@@ -487,73 +502,39 @@ fn peak_rows(segments: &[Value]) -> Vec<RankRef> {
     rows
 }
 
-fn top_agent(segments: &[Value], season_id: &str) -> Option<AgentPick> {
-    let mut best: Option<AgentPick> = None;
-    for segment in segments {
-        if segment.get("type").and_then(Value::as_str) != Some("agent") {
-            continue;
-        }
-        if !season_id.is_empty()
-            && segment
-                .pointer("/attributes/seasonId")
-                .and_then(Value::as_str)
-                .map(|id| id != season_id)
-                .unwrap_or(false)
-        {
-            continue;
-        }
-        let Some(uuid) = segment
-            .pointer("/attributes/key")
-            .and_then(Value::as_str)
-            .map(|k| k.trim().to_lowercase())
-            .filter(|k| !k.is_empty())
-        else {
-            continue;
+/// The pick-rate leader among the parsed agent rows: it is what the player
+/// actually chose. Matches played breaks a tie, and the rows are already sorted
+/// so the result is stable. `None` when no agent was reported.
+fn top_agent(agents: &[BreakdownRow]) -> Option<AgentPick> {
+    let best = agents.iter().reduce(|a, b| {
+        let b_wins = match (a.pick_rate, b.pick_rate) {
+            (Some(x), Some(y)) if x != y => y > x,
+            _ => b.matches.unwrap_or(0) > a.matches.unwrap_or(0),
         };
-        let stats = segment.get("stats").cloned().unwrap_or(Value::Null);
-        let metadata = segment.get("metadata").cloned().unwrap_or(Value::Null);
-        let pick = AgentPick {
-            uuid,
-            name: metadata
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string(),
-            role: metadata
-                .get("role")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string(),
-            matches: stat_i64(&stats, "matchesPlayed"),
-            win_pct: stat_f64(&stats, "matchesWinPct"),
-            kd: stat_f64(&stats, "kDRatio"),
-            dmg_per_round: stat_f64(&stats, "damagePerRound"),
-            acs: stat_f64(&stats, "scorePerRound"),
-            pick_rate: stat_f64(&stats, "pickRate"),
-        };
-        // Pick rate is the card's "top agent" definition (it is what the player
-        // actually chose); matches played breaks a tie, then a stable order.
-        let better = match &best {
-            None => true,
-            Some(current) => match (pick.pick_rate, current.pick_rate) {
-                (Some(a), Some(b)) if a != b => a > b,
-                _ => pick.matches.unwrap_or(0) > current.matches.unwrap_or(0),
-            },
-        };
-        if better {
-            best = Some(pick);
+        if b_wins {
+            b
+        } else {
+            a
         }
-    }
-    best
+    })?;
+    Some(AgentPick {
+        uuid: best.key.clone(),
+        name: best.name.clone(),
+        role: best.role.clone(),
+        matches: best.matches,
+        win_pct: best.win_pct,
+        kd: best.kd,
+        dmg_per_round: best.dmg_per_round,
+        acs: best.acs,
+        pick_rate: best.pick_rate,
+    })
 }
 
-fn stat_f64(stats: &Value, key: &str) -> Option<f64> {
+pub(crate) fn stat_f64(stats: &Value, key: &str) -> Option<f64> {
     stats.get(key)?.get("value")?.as_f64()
 }
 
-fn stat_i64(stats: &Value, key: &str) -> Option<i64> {
+pub(crate) fn stat_i64(stats: &Value, key: &str) -> Option<i64> {
     let value = stats.get(key)?.get("value")?;
     value
         .as_i64()
@@ -585,21 +566,21 @@ fn count(value: Option<i64>) -> String {
     value.map(with_commas).unwrap_or_default()
 }
 
-fn decimal(value: Option<f64>, places: usize) -> String {
+pub(crate) fn decimal(value: Option<f64>, places: usize) -> String {
     value
         .filter(|v| v.is_finite())
         .map(|v| format!("{v:.places$}"))
         .unwrap_or_default()
 }
 
-fn percent(value: Option<f64>) -> String {
+pub(crate) fn percent(value: Option<f64>) -> String {
     value
         .filter(|v| v.is_finite())
         .map(|v| format!("{v:.1}%"))
         .unwrap_or_default()
 }
 
-fn count_line(value: Option<i64>, one: &str, many: &str) -> String {
+pub(crate) fn count_line(value: Option<i64>, one: &str, many: &str) -> String {
     value
         .map(|n| format!("{} {}", with_commas(n), if n == 1 { one } else { many }))
         .unwrap_or_default()
@@ -701,8 +682,8 @@ pub fn save_cache(path: &Path, profile: &Profile, now_ms: u64) -> Result<(), Str
         handle: profile.handle.clone(),
         profile: profile.clone(),
     };
-    let mut json =
-        serde_json::to_string(&cache).map_err(|_| "Could not encode the profile cache.".to_string())?;
+    let mut json = serde_json::to_string(&cache)
+        .map_err(|_| "Could not encode the profile cache.".to_string())?;
     json.push('\n');
     crate::account::write_atomic(path, json.as_bytes())
 }
@@ -721,10 +702,7 @@ mod tests {
 
     fn close(actual: Option<f64>, expected: f64) {
         let actual = actual.expect("value present");
-        assert!(
-            (actual - expected).abs() < 1e-6,
-            "{actual} != {expected}"
-        );
+        assert!((actual - expected).abs() < 1e-6, "{actual} != {expected}");
     }
 
     #[test]
@@ -732,10 +710,7 @@ mod tests {
         let profile = profile();
         assert_eq!(profile.handle, "lil ga7ed#zngr");
         assert_eq!(profile.country, "EG");
-        assert_eq!(
-            profile.season_id,
-            "d816f426-48ea-f052-117f-9697a155b319"
-        );
+        assert_eq!(profile.season_id, "d816f426-48ea-f052-117f-9697a155b319");
         assert_eq!(profile.season_name, "Season 26 Act 6");
 
         let season = &profile.season;
@@ -913,8 +888,14 @@ mod tests {
             tier_from_icon("https://trackercdn.com/cdn/tracker.gg/valorant/icons/tiersv2/23.png"),
             Some(23)
         );
-        assert_eq!(tier_from_icon("https://trackercdn.com/x/tiersv2/.png"), None);
-        assert_eq!(tier_from_icon("https://trackercdn.com/x/other/20.png"), None);
+        assert_eq!(
+            tier_from_icon("https://trackercdn.com/x/tiersv2/.png"),
+            None
+        );
+        assert_eq!(
+            tier_from_icon("https://trackercdn.com/x/other/20.png"),
+            None
+        );
         assert_eq!(tier_from_icon(""), None);
     }
 

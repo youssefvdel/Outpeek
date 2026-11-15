@@ -8,32 +8,7 @@
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
 import { Tracker, MatchRowUi } from "../state.slint";
-import { Card, Chip, VCenter, Glyph } from "widgets.slint";
-
-component ColumnLabel inherits Text {
-    in property <length> col-width: 80px;
-    width: root.col-width;
-    font-family: Theme.font-body;
-    font-size: TypeScale.micro;
-    font-weight: 600;
-    color: Theme.ink-faint;
-    vertical-alignment: center;
-    overflow: elide;
-}
-
-component Cell inherits Text {
-    in property <length> col-width: 80px;
-    in property <brush> ink: Theme.ink-dim;
-    in property <int> weight: 500;
-    in property <bool> mono: false;
-    width: root.col-width;
-    font-family: root.mono ? Theme.font-mono : Theme.font-body;
-    font-size: TypeScale.caption;
-    font-weight: root.weight;
-    color: root.ink;
-    vertical-alignment: center;
-    overflow: elide;
-}
+import { Card, Cell, Chip, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
 component ResultChip inherits Rectangle {
     in property <string> label: "";
@@ -69,13 +44,13 @@ component MatchLine inherits Rectangle {
         padding-right: Space.md;
         spacing: Space.md;
 
-        Cell { col-width: 62px; text: root.item.date; ink: Theme.ink-faint; mono: true; }
-        Cell { col-width: 94px; text: root.item.mode; }
-        Cell { col-width: 116px; text: root.item.map; ink: Theme.ink; weight: 600; }
+        Cell { col-width: 62px; value: root.item.date; ink: Theme.ink-faint; mono: true; }
+        Cell { col-width: 94px; value: root.item.mode; }
+        Cell { col-width: 116px; value: root.item.map; ink: Theme.ink; weight: 600; }
         VCenter { ResultChip { label: root.item.result; won: root.item.won; } }
-        Cell { col-width: 92px; text: root.item.agent; }
-        Cell { col-width: 92px; text: root.item.kda; mono: true; }
-        Cell { col-width: 58px; text: root.item.rounds; mono: true; ink: Theme.ink-faint; }
+        Cell { col-width: 92px; value: root.item.agent; }
+        Cell { col-width: 92px; value: root.item.kda; mono: true; }
+        Cell { col-width: 58px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
         Rectangle { horizontal-stretch: 1; }
     }
 

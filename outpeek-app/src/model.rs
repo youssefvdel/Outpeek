@@ -650,10 +650,15 @@ mod tests {
         assert_eq!(offline.client, ClientState::Missing);
         // A live identity is never overwritten by the stored copy.
         let live = offline.with_identity("Someone", "EUW");
-        assert_eq!(live.with_account_handle("old#tag").player_display(), "Someone#EUW");
+        assert_eq!(
+            live.with_account_handle("old#tag").player_display(),
+            "Someone#EUW"
+        );
         // A malformed stored handle leaves the card empty, not half-filled.
         assert_eq!(
-            TrackerSnapshot::no_client().with_account_handle("bare-name").player_display(),
+            TrackerSnapshot::no_client()
+                .with_account_handle("bare-name")
+                .player_display(),
             ""
         );
     }

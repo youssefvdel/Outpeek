@@ -32,6 +32,22 @@ pub const TIERS_URL: &str = "https://valorant-api.com/v1/competitivetiers";
 /// Playable agents only: the URL filter and the `isPlayableCharacter` field are
 /// both checked, so a non-playable entry can never reach the roster.
 pub const AGENTS_URL: &str = "https://valorant-api.com/v1/agents?isPlayableCharacter=true";
+/// Map catalogue, used only for `listViewIcon` row art. Tracker Network's own
+/// map URL is a 3840×2160 splash (Lotus 443 KB JPEG, Summit 4.4 MB PNG) — past
+/// the art budget and the wrong aspect for a row — so the small official card
+/// art fills the Maps page instead.
+pub const MAPS_URL: &str = "https://valorant-api.com/v1/maps";
+
+/// The only hosts this app will fetch row art from. Agent portraits travel with
+/// the TRN payload: `titles.trackercdn.com` is its valorant-api mirror, and
+/// `trackercdn.com` carries the `_thumb` art for an agent the mirror does not
+/// list yet (Hush today). A URL outside this list is refused before any
+/// request: the payload is remote data and must not be able to name a host.
+pub const ART_HOSTS: &[&str] = &[
+    "media.valorant-api.com",
+    "titles.trackercdn.com",
+    "trackercdn.com",
+];
 
 /// How long a cached art file stays usable. Media responses carry
 /// `cache-control: public, max-age=1209600` (14 days); 30 days is the loose
@@ -127,6 +143,79 @@ pub fn parse_tiers(json: &str) -> Result<Vec<Tier>, String> {
             })
         })
         .collect())
+}
+
+/// One map from `/v1/maps`, reduced to what row art needs.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MapArt {
+    /// Normalised display name (`lotus`, `split`, `summit`): the TRN segment key
+    /// is the same codename, so a match needs no act-specific table.
+    pub key: String,
+    pub name: String,
+    /// `listViewIcon` (456×100, ~62 KB), empty when the map has no card art.
+    pub icon: String,
+}
+
+/// Lowercase, alphanumerics only. "Split" and "split" are one map; a stored
+/// key with punctuation cannot miss because of a space.
+fn normalize_map_key(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Parse `/v1/maps`. Rows without a name or card art are dropped: an entry the
+/// page cannot draw is not a map row.
+pub fn parse_maps(json: &str) -> Result<Vec<MapArt>, String> {
+    let root: Value =
+        serde_json::from_str(json).map_err(|_| "Unreadable map payload.".to_string())?;
+    let rows = root
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or("Map payload has no data array.")?;
+    Ok(rows
+        .iter()
+        .filter_map(|m| {
+            let name = m
+                .get("displayName")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let icon = m
+                .get("listViewIcon")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let key = normalize_map_key(&name);
+            if name.is_empty() || key.is_empty() || icon.is_empty() {
+                return None;
+            }
+            Some(MapArt { key, name, icon })
+        })
+        .collect())
+}
+
+/// Card art for a map by its codename or display name ("lotus"/"Lotus").
+pub fn map_icon_url<'a>(maps: &'a [MapArt], name_or_key: &str) -> Option<&'a str> {
+    let wanted = normalize_map_key(name_or_key);
+    if wanted.is_empty() {
+        return None;
+    }
+    maps.iter()
+        .find(|m| m.key == wanted)
+        .map(|m| m.icon.as_str())
+        .filter(|url| !url.is_empty())
+}
+
+/// HTTPS and a host this module named itself. Anything else is refused before
+/// a request is attempted, so a payload cannot point the cache at a new host.
+pub fn art_url_allowed(url: &str) -> bool {
+    split_https_url(url)
+        .map(|(host, _)| ART_HOSTS.contains(&host))
+        .unwrap_or(false)
 }
 
 /// Parse `/v1/agents?isPlayableCharacter=true`. Entries that are not playable,
@@ -294,6 +383,7 @@ async fn fetch(fetcher: Arc<dyn Fetcher>, url: String) -> Result<Vec<u8>, String
 pub struct MetaReport {
     pub tiers: usize,
     pub agents: usize,
+    pub maps: usize,
     /// Families actually fetched this call (0 or 1 each): 0 means the in-memory
     /// copy was still inside its TTL, i.e. a poll did not re-download.
     pub fetched: u8,
@@ -320,6 +410,7 @@ pub struct Index {
     ttl_ms: u64,
     tiers: Option<Timed<Vec<Tier>>>,
     agents: Option<Timed<Vec<AgentArt>>>,
+    maps: Option<Timed<Vec<MapArt>>>,
 }
 
 impl Index {
@@ -328,6 +419,7 @@ impl Index {
             ttl_ms: META_TTL_MS,
             tiers: None,
             agents: None,
+            maps: None,
         }
     }
 
@@ -348,6 +440,13 @@ impl Index {
 
     pub fn agents(&self) -> &[AgentArt] {
         self.agents
+            .as_ref()
+            .map(|t| t.value.as_slice())
+            .unwrap_or(&[])
+    }
+
+    pub fn maps(&self) -> &[MapArt] {
+        self.maps
             .as_ref()
             .map(|t| t.value.as_slice())
             .unwrap_or(&[])
@@ -388,7 +487,7 @@ impl Index {
             .as_ref()
             .is_some_and(|a| a.fresh(now_ms, self.ttl_ms))
         {
-            match fetch(fetcher, AGENTS_URL.to_string()).await {
+            match fetch(fetcher.clone(), AGENTS_URL.to_string()).await {
                 Ok(body) => match parse_agents(&String::from_utf8_lossy(&body)) {
                     Ok(agents) if !agents.is_empty() => {
                         self.agents = Some(Timed {
@@ -405,8 +504,31 @@ impl Index {
                 }
             }
         }
+        if !self
+            .maps
+            .as_ref()
+            .is_some_and(|m| m.fresh(now_ms, self.ttl_ms))
+        {
+            match fetch(fetcher, MAPS_URL.to_string()).await {
+                Ok(body) => match parse_maps(&String::from_utf8_lossy(&body)) {
+                    Ok(maps) if !maps.is_empty() => {
+                        self.maps = Some(Timed {
+                            at_ms: now_ms,
+                            value: maps,
+                        });
+                        report.fetched += 1;
+                    }
+                    Ok(_) => report.error = "map payload was empty".to_string(),
+                    Err(e) => report.error = e,
+                },
+                Err(e) => {
+                    report.error = format!("maps: {e}");
+                }
+            }
+        }
         report.tiers = self.tiers().len();
         report.agents = self.agents().len();
+        report.maps = self.maps().len();
         report
     }
 }
@@ -621,6 +743,54 @@ impl Art {
         self.index.ensure(fetcher, now_ms).await
     }
 
+    /// Cache one row-art URL and return it when the bytes are on disk. The URL
+    /// may come from the TRN payload, so the host allowlist is enforced here —
+    /// before a request, not after. Missing art is `None`, never an error.
+    pub async fn ensure_url(
+        &self,
+        fetcher: Arc<dyn Fetcher>,
+        url: &str,
+        now: SystemTime,
+    ) -> Option<String> {
+        let cache = self.cache.as_ref()?;
+        if url.is_empty() {
+            return None;
+        }
+        if !art_url_allowed(url) {
+            eprintln!("[art] refused host for row art: {url}");
+            return None;
+        }
+        if cache.ensure(fetcher, url, now).await.usable() {
+            Some(url.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Map card art for a codename (`lotus`), resolved from the catalogue.
+    pub async fn map_icon(
+        &self,
+        fetcher: Arc<dyn Fetcher>,
+        key: &str,
+        now: SystemTime,
+    ) -> Option<String> {
+        let url = map_icon_url(self.index.maps(), key)?.to_string();
+        self.ensure_url(fetcher, &url, now).await
+    }
+
+    /// Agent portrait for a uuid, resolved from the catalogue. The mirror is the
+    /// fallback for rows whose TRN art is absent; most portraits arrive with
+    /// the payload and never reach here.
+    pub async fn agent_icon(
+        &self,
+        fetcher: Arc<dyn Fetcher>,
+        uuid: &str,
+        now: SystemTime,
+    ) -> Option<String> {
+        let url = agent_icon_url(self.index.agents(), uuid)?.to_string();
+        self.ensure_url(fetcher, &url, now).await
+    }
+
     /// Resolve one frame of art. Every step fails soft: a missing catalogue or a
     /// dead network yields an empty URL for that slot and nothing else.
     pub async fn view(
@@ -704,6 +874,15 @@ mod tests {
         {"uuid":"E370FA57-4757-3604-3648-499E1F642D3F","displayName":"Gekko","displayIcon":"https://media/a/gekko.png","isPlayableCharacter":true,"role":{"displayName":"Initiator"}},
         {"uuid":"dade69b4-4f5a-8528-247b-219e5a1facd6","displayName":"Fade","displayIcon":"https://media/a/fade.png","isPlayableCharacter":true,"role":{"displayName":"Initiator"}},
         {"uuid":"00000000-0000-0000-0000-000000000000","displayName":"Training Bot","displayIcon":"","isPlayableCharacter":false,"role":null}
+    ]}"#;
+
+    /// The real `/v1/maps` shape, trimmed: card art for every map TRN reports,
+    /// plus rows without art (which must be dropped, not half-rendered).
+    const MAPS_JSON: &str = r#"{"status":200,"data":[
+        {"uuid":"m1","displayName":"Lotus","listViewIcon":"https://media.valorant-api.com/maps/m1/listviewicon.png"},
+        {"uuid":"m2","displayName":"Summit","listViewIcon":"https://media.valorant-api.com/maps/m2/listviewicon.png"},
+        {"uuid":"m3","displayName":"Skirmish A","listViewIcon":"https://media.valorant-api.com/maps/m3/listviewicon.png"},
+        {"uuid":"m4","displayName":"Range","listViewIcon":""}
     ]}"#;
 
     fn png() -> Vec<u8> {
@@ -841,12 +1020,62 @@ mod tests {
     }
 
     #[test]
+    fn a_map_resolves_by_codename_and_rows_without_art_are_dropped() {
+        let maps = parse_maps(MAPS_JSON).unwrap();
+        assert_eq!(maps.len(), 3, "the art-less Range row is not a card");
+        // The TRN segment key is the codename; both spellings must resolve.
+        assert_eq!(
+            map_icon_url(&maps, "lotus"),
+            Some("https://media.valorant-api.com/maps/m1/listviewicon.png")
+        );
+        assert_eq!(
+            map_icon_url(&maps, "Lotus"),
+            Some("https://media.valorant-api.com/maps/m1/listviewicon.png")
+        );
+        assert_eq!(
+            map_icon_url(&maps, "SUMMIT"),
+            Some("https://media.valorant-api.com/maps/m2/listviewicon.png")
+        );
+        assert_eq!(
+            map_icon_url(&maps, "skirmish a"),
+            Some("https://media.valorant-api.com/maps/m3/listviewicon.png")
+        );
+        assert_eq!(map_icon_url(&maps, "range"), None, "no art, no URL");
+        assert_eq!(map_icon_url(&maps, ""), None);
+        assert_eq!(map_icon_url(&maps, "not-a-map"), None);
+    }
+
+    #[test]
+    fn only_the_three_art_hosts_are_ever_fetched_from() {
+        assert!(art_url_allowed(
+            "https://titles.trackercdn.com/valorant-api/agents/abc/displayicon.png"
+        ));
+        assert!(art_url_allowed(
+            "https://trackercdn.com/cdn/tracker.gg/valorant/db/agents/hush_thumb.png"
+        ));
+        assert!(art_url_allowed(
+            "https://media.valorant-api.com/maps/x/listviewicon.png"
+        ));
+        // A payload naming any other host is refused, not requested.
+        assert!(!art_url_allowed("https://evil.example/agent.png"));
+        assert!(!art_url_allowed(
+            "https://media.valorant-api.com.evil.example/maps/x/listviewicon.png"
+        ));
+        assert!(!art_url_allowed(
+            "http://media.valorant-api.com/maps/x/listviewicon.png"
+        ));
+        assert!(!art_url_allowed(""));
+    }
+
+    #[test]
     fn unreadable_payloads_are_errors_or_empty_never_panics() {
         assert!(parse_tiers("not json").is_err());
         assert!(parse_tiers(r#"{"status":200}"#).is_err());
         assert!(parse_tiers(r#"{"data":[]}"#).is_err());
         assert!(parse_agents("not json").is_err());
         assert!(parse_agents(r#"{"status":200}"#).is_err());
+        assert!(parse_maps("not json").is_err());
+        assert!(parse_maps(r#"{"status":200}"#).is_err());
         // A tier row without an id is dropped, not defaulted to tier 0.
         let rows = parse_tiers(r#"{"data":[{"tiers":[{"divisionName":"X"}]}]}"#).unwrap();
         assert!(rows.is_empty());
@@ -994,25 +1223,27 @@ mod tests {
         let fetcher = FakeFetcher::ok(&[
             (TIERS_URL, TIERS_JSON.into()),
             (AGENTS_URL, AGENTS_JSON.into()),
+            (MAPS_URL, MAPS_JSON.into()),
         ]);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
         let first = rt.block_on(index.ensure(fetcher.clone(), 1_000));
-        assert_eq!(first.fetched, 2);
+        assert_eq!(first.fetched, 3);
         assert_eq!(first.tiers, 4);
         assert_eq!(first.agents, 2);
+        assert_eq!(first.maps, 3);
         assert!(first.error.is_empty());
         // Inside the TTL: no request at all, same catalogue.
         let second = rt.block_on(index.ensure(fetcher.clone(), 1_000 + META_TTL_MS - 1));
         assert_eq!(second.fetched, 0);
         assert_eq!(second.tiers, 4);
-        assert_eq!(fetcher.calls(), 2);
+        assert_eq!(fetcher.calls(), 3);
         // Past it: one refetch per family.
         let third = rt.block_on(index.ensure(fetcher.clone(), 1_000 + META_TTL_MS));
-        assert_eq!(third.fetched, 2);
-        assert_eq!(fetcher.calls(), 4);
+        assert_eq!(third.fetched, 3);
+        assert_eq!(fetcher.calls(), 6);
     }
 
     #[test]
@@ -1021,6 +1252,7 @@ mod tests {
         let good = FakeFetcher::ok(&[
             (TIERS_URL, TIERS_JSON.into()),
             (AGENTS_URL, AGENTS_JSON.into()),
+            (MAPS_URL, MAPS_JSON.into()),
         ]);
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -1044,6 +1276,7 @@ mod tests {
         let fetcher = FakeFetcher::ok(&[
             (TIERS_URL, TIERS_JSON.into()),
             (AGENTS_URL, AGENTS_JSON.into()),
+            (MAPS_URL, MAPS_JSON.into()),
             ("https://media/n/3/l.png", png()),
             ("https://media/n/27/l.png", png()),
             ("https://media/a/gekko.png", png()),
@@ -1108,6 +1341,63 @@ mod tests {
             .await;
         assert_eq!(no_peak.rank_crest, "https://media/n/3/l.png");
         assert_eq!(no_peak.peak_crest, "");
+    }
+
+    #[tokio::test]
+    async fn row_art_is_cached_only_from_an_allowed_host() {
+        let tmp = TmpDir::new("rowart");
+        let mut art = Art::new(Some(tmp.path().to_path_buf()));
+        let portrait = "https://titles.trackercdn.com/valorant-api/agents/x/displayicon.png";
+        let thumb = "https://trackercdn.com/cdn/tracker.gg/valorant/db/agents/hush_thumb.png";
+        let map = "https://media.valorant-api.com/maps/m1/listviewicon.png";
+        let evil = "https://evil.example/agent.png";
+        let fetcher = FakeFetcher::ok(&[
+            (TIERS_URL, TIERS_JSON.into()),
+            (AGENTS_URL, AGENTS_JSON.into()),
+            (MAPS_URL, MAPS_JSON.into()),
+            (portrait, png()),
+            (thumb, png()),
+            (map, png()),
+            (evil, png()),
+        ]);
+        let report = art.ensure_catalogue(fetcher.clone(), 1_000).await;
+        assert_eq!((report.agents, report.maps), (2, 3));
+        let now = SystemTime::now();
+        assert_eq!(
+            art.ensure_url(fetcher.clone(), portrait, now)
+                .await
+                .as_deref(),
+            Some(portrait)
+        );
+        // Hush: only TRN's `_thumb` carries this agent's art today.
+        assert_eq!(
+            art.ensure_url(fetcher.clone(), thumb, now).await.as_deref(),
+            Some(thumb)
+        );
+        // A host the module did not name is refused without a request, even
+        // though this fetcher would happily answer it.
+        let calls_before = fetcher.calls();
+        assert_eq!(art.ensure_url(fetcher.clone(), evil, now).await, None);
+        assert_eq!(
+            fetcher.calls(),
+            calls_before,
+            "no request for a refused host"
+        );
+        // Map art resolves through the catalogue by codename.
+        assert_eq!(
+            art.map_icon(fetcher.clone(), "lotus", now).await.as_deref(),
+            Some(map)
+        );
+        // Cached now: a second frame makes zero requests.
+        let calls_before = fetcher.calls();
+        assert!(art
+            .ensure_url(fetcher.clone(), portrait, now)
+            .await
+            .is_some());
+        assert!(art.map_icon(fetcher.clone(), "Lotus", now).await.is_some());
+        assert_eq!(fetcher.calls(), calls_before);
+        // A map the catalogue does not know is empty, not a guessed URL.
+        assert_eq!(art.map_icon(fetcher, "Haven", now).await, None);
     }
 
     #[tokio::test]

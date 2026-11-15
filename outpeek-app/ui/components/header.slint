@@ -117,8 +117,16 @@ export component Header inherits Rectangle {
                     active: Tracker.tab == "matches";
                     clicked => { root.select-tab("matches"); }
                 }
-                Tab { label: "Agents"; soon: true; }
-                Tab { label: "Maps"; soon: true; }
+                Tab {
+                    label: "Agents";
+                    active: Tracker.tab == "agents";
+                    clicked => { root.select-tab("agents"); }
+                }
+                Tab {
+                    label: "Maps";
+                    active: Tracker.tab == "maps";
+                    clicked => { root.select-tab("maps"); }
+                }
                 Tab {
                     label: "Live Match";
                     soon: true;
@@ -128,7 +136,7 @@ export component Header inherits Rectangle {
                 Rectangle { horizontal-stretch: 1; }
 
                 Text {
-                    text: "Overview and Matches are live; the rest are not ported.";
+                    text: "Overview, Matches, Agents and Maps are live; the rest are not ported.";
                     font-family: Theme.font-body;
                     font-size: TypeScale.micro;
                     color: Theme.ink-faint;

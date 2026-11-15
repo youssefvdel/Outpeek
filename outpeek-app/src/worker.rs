@@ -32,6 +32,7 @@ use crate::live_facts::{derive_facts, find_local_presence};
 use crate::model::{format_player_tag, RankState, RankView, TrackerSnapshot};
 use crate::rank;
 use crate::trn;
+use crate::trn_breakdown::{self, AgentRow, MapRow};
 use crate::trn_matches::{self, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
@@ -62,6 +63,9 @@ pub enum Event {
     /// rows are (`ready`, `cached`, `loading`, `empty`, `error`) so the view can
     /// say "showing the saved list" instead of pretending it is live.
     Matches(MatchesView),
+    /// Agent and map breakdowns from the same profile payload. Published with
+    /// every profile frame; rows carry cached art URLs, never raw TRN ones.
+    Breakdown(BreakdownView),
 }
 
 /// Rows plus the honesty label that belongs beside them.
@@ -76,6 +80,27 @@ impl MatchesView {
     fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
         Self {
             rows: Vec::new(),
+            state,
+            message: message.into(),
+        }
+    }
+}
+
+/// Agent + map rows with the same honesty label as [`MatchesView`]. `state` is
+/// ready|cached|loading|empty|error and `message` carries the reason/age line.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BreakdownView {
+    pub agents: Vec<AgentRow>,
+    pub maps: Vec<MapRow>,
+    pub state: &'static str,
+    pub message: String,
+}
+
+impl BreakdownView {
+    fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            agents: Vec::new(),
+            maps: Vec::new(),
             state,
             message: message.into(),
         }
@@ -154,6 +179,76 @@ fn trn_agent(profile: Option<&Profile>) -> Option<String> {
         .and_then(|p| p.top_agent.as_ref())
         .map(|a| a.uuid.clone())
         .filter(|u| !u.is_empty())
+}
+
+/// Resolve one frame of breakdown art: agent portraits come straight from the
+/// TRN row URLs (allowlist-gated inside `ensure_url`), map art comes from the
+/// valorant-api catalogue. Every miss is an empty URL; the views draw their
+/// own fallbacks.
+async fn breakdown_frame(
+    art: &Art,
+    fetcher: Arc<dyn Fetcher>,
+    profile: &Profile,
+) -> (Vec<AgentRow>, Vec<MapRow>) {
+    let mut agents = trn_breakdown::agent_rows(&profile.agents);
+    for (row, breakdown) in agents.iter_mut().zip(profile.agents.iter()) {
+        // TRN's portrait wins: it is the only source that names an agent the
+        // mirror does not list yet (Hush today). The catalogue fills in the
+        // uuid rows whose payload art is absent.
+        let url = if !breakdown.image_url.is_empty() {
+            art.ensure_url(fetcher.clone(), &breakdown.image_url, SystemTime::now())
+                .await
+        } else {
+            None
+        };
+        let url = match url {
+            Some(url) => Some(url),
+            None => {
+                art.agent_icon(fetcher.clone(), &breakdown.key, SystemTime::now())
+                    .await
+            }
+        };
+        row.art_url = url.unwrap_or_default();
+    }
+    let mut maps = trn_breakdown::map_rows(&profile.maps);
+    for (row, breakdown) in maps.iter_mut().zip(profile.maps.iter()) {
+        row.art_url = art
+            .map_icon(fetcher.clone(), &breakdown.key, SystemTime::now())
+            .await
+            .unwrap_or_default();
+    }
+    (agents, maps)
+}
+
+/// Build one breakdown event for the current profile. Rows come from the
+/// same parsed payload as the Overview, so the two can never disagree; only
+/// the art URLs need the network. No profile means no rows, never guessed
+/// ones — but the placeholder still carries the reason.
+async fn breakdown_event(art: &Art, fetcher: Arc<dyn Fetcher>, profile: Option<&Profile>) -> Event {
+    let Some(profile) = profile else {
+        return Event::Breakdown(BreakdownView::placeholder(
+            "empty",
+            "No account yet — open the Riot Client once and Outpeek will remember it.",
+        ));
+    };
+    if profile.agents.is_empty() && profile.maps.is_empty() {
+        return Event::Breakdown(BreakdownView::placeholder(
+            "empty",
+            "Tracker Network reported no agent or map rows for this season.",
+        ));
+    }
+    let (agents, maps) = breakdown_frame(art, fetcher, profile).await;
+    eprintln!(
+        "[trn] breakdown: {} agent row(s), {} map row(s)",
+        agents.len(),
+        maps.len()
+    );
+    Event::Breakdown(BreakdownView {
+        agents,
+        maps,
+        state: "ready",
+        message: String::new(),
+    })
 }
 
 /// Resolve one frame of art for the current tier/peak/agent. Every step fails
@@ -257,6 +352,7 @@ where
         );
         publish(Event::Profile(view));
         profile = Some(cache.profile);
+        publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
         let next = merged_rank(profile.as_ref(), local_rank.as_ref());
         if next != rank_view {
             rank_view = next;
@@ -277,18 +373,23 @@ where
         let report = art.ensure_catalogue(fetcher.clone(), now_ms()).await;
         if report.error.is_empty() {
             eprintln!(
-                "[art] catalogue: {} tiers, {} agents ({} fetch(es), dir {})",
+                "[art] catalogue: {} tiers, {} agents, {} maps ({} fetch(es), dir {})",
                 report.tiers,
                 report.agents,
+                report.maps,
                 report.fetched,
                 art.dir()
                     .map(|d| d.display().to_string())
                     .unwrap_or_default()
             );
+            // The first breakdown frame resolved art before the catalogues
+            // landed; re-resolve so map cards fill in without waiting for a
+            // profile refresh.
+            publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
         } else {
             eprintln!(
-                "[art] catalogue: {} tiers, {} agents — {}",
-                report.tiers, report.agents, report.error
+                "[art] catalogue: {} tiers, {} agents, {} maps — {}",
+                report.tiers, report.agents, report.maps, report.error
             );
         }
     }
@@ -315,10 +416,18 @@ where
                     ProfileState::Empty,
                     "No account yet — open the Riot Client once and Outpeek will remember it.",
                 )));
+                publish(Event::Breakdown(BreakdownView::placeholder(
+                    "empty",
+                    "No account yet — open the Riot Client once and Outpeek will remember it.",
+                )));
             } else {
                 if profile.is_none() {
                     publish(Event::Profile(ProfileView::placeholder(
                         ProfileState::Loading,
+                        "Reading Tracker Network…",
+                    )));
+                    publish(Event::Breakdown(BreakdownView::placeholder(
+                        "loading",
                         "Reading Tracker Network…",
                     )));
                 }
@@ -353,6 +462,7 @@ where
                             .map(Profile::to_view)
                             .unwrap_or_else(|| ProfileView::default());
                         publish(Event::Profile(view));
+                        publish(breakdown_event(&art, fetcher.clone(), profile.as_ref()).await);
                         if local_rank.is_none() {
                             let next = merged_rank(profile.as_ref(), None);
                             if next != rank_view {
@@ -386,6 +496,10 @@ where
                             ),
                         };
                         publish(Event::Profile(view));
+                        publish(Event::Breakdown(BreakdownView::placeholder(
+                            "error",
+                            format!("Tracker Network did not answer ({e})."),
+                        )));
                     }
                 }
             }
