@@ -235,8 +235,10 @@ export component LivePage inherits VerticalLayout {
     }
 
     // Match strip: map, mode, score. Score is the local presence's own picture
-    // of the game (Riot publishes no scoreboard endpoint we read).
-    HorizontalLayout {
+    // of the game (Riot publishes no scoreboard endpoint we read). Only drawn
+    // with a board: outside a match every cell would read "—", which looks like
+    // a failed read instead of "no match".
+    if Tracker.live-blue-team.length > 0 || Tracker.live-red-team.length > 0: HorizontalLayout {
         height: 44px;
         spacing: Space.md;
 

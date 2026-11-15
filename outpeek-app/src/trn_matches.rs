@@ -70,6 +70,46 @@ impl MatchRow {
         )
     }
 
+    /// `-1,091` / `+1,234` — the damage delta the payload reports. Signed and
+    /// grouped, empty when absent. This is NOT a headshot rate: TRN's list has
+    /// no percentage, and headshots ÷ kills is a different metric that would
+    /// contradict the profile's HS% (30.9% is share of hits).
+    pub fn damage_delta_label(&self) -> String {
+        match self.damage_delta {
+            Some(delta) => {
+                let sign = if delta < 0 { "-" } else { "+" };
+                let digits = delta.unsigned_abs().to_string();
+                let mut out = String::from(sign);
+                for (i, ch) in digits.chars().enumerate() {
+                    if i > 0 && (digits.len() - i) % 3 == 0 {
+                        out.push(',');
+                    }
+                    out.push(ch);
+                }
+                out
+            }
+            None => String::new(),
+        }
+    }
+
+    /// Combat score (`4,375`), grouped like every other count in the app.
+    pub fn score_label(&self) -> String {
+        match self.score {
+            Some(score) => {
+                let digits = score.to_string();
+                let mut out = String::new();
+                for (i, ch) in digits.chars().enumerate() {
+                    if i > 0 && (digits.len() - i) % 3 == 0 {
+                        out.push(',');
+                    }
+                    out.push(ch);
+                }
+                out
+            }
+            None => String::new(),
+        }
+    }
+
     /// `14–16` from the round totals.
     pub fn rounds(&self) -> String {
         match (self.rounds_won, self.rounds_lost) {
@@ -249,6 +289,30 @@ mod tests {
         assert_eq!(r[0].rounds_won, Some(14));
         assert_eq!(r[0].rounds_lost, Some(16));
         assert_eq!(r[0].damage_delta, Some(-1091));
+    }
+
+    #[test]
+    fn headshot_share_and_score_come_only_from_reported_numbers() {
+        let base = rows().remove(0);
+        let row = MatchRow {
+            score: Some(4375),
+            damage_delta: Some(1234),
+            ..base.clone()
+        };
+        assert_eq!(row.score_label(), "4,375");
+        assert_eq!(row.damage_delta_label(), "+1,234");
+        let negative = MatchRow {
+            damage_delta: Some(-1091),
+            ..base.clone()
+        };
+        assert_eq!(negative.damage_delta_label(), "-1,091");
+        let missing = MatchRow {
+            damage_delta: None,
+            score: None,
+            ..base
+        };
+        assert_eq!(missing.damage_delta_label(), "");
+        assert_eq!(missing.score_label(), "");
     }
 
     #[test]

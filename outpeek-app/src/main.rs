@@ -847,6 +847,8 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             result: r.result_label().into(),
             agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
             kda: r.kda().into(),
+            dd: r.damage_delta_label().into(),
+            score: r.score_label().into(),
             rounds: r.rounds().into(),
             date: r.date_label().into(),
             won: r.won(),

@@ -566,6 +566,7 @@ export component Tab inherits Rectangle {
     in property <bool> active: false;
     in property <bool> soon: false;
     in property <bool> dot: false;
+    out property <bool> has-focus: scope.has-focus;
     callback clicked();
 
     height: 44px;
@@ -573,11 +574,39 @@ export component Tab inherits Rectangle {
     accessible-role: button;
     accessible-enabled: !root.soon;
     accessible-label: root.label;
+    accessible-action-default => { touch.clicked(); }
 
     touch := TouchArea {
         enabled: !root.soon;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+
+    // A tab is a button: Space/Return must work from the keyboard, and focus
+    // has to be visible on a dark band.
+    scope := FocusScope {
+        x: 0;
+        width: 0;
+        enabled: !root.soon;
+
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if root.has-focus: Rectangle {
+        x: 0;
+        y: 4px;
+        width: parent.width;
+        height: parent.height - 8px;
+        border-radius: 6px;
+        border-width: 2px;
+        border-color: Theme.primary;
+        background: transparent;
     }
 
     HorizontalLayout {

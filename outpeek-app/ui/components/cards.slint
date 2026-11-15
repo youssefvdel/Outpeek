@@ -71,7 +71,7 @@ component FilterRow inherits Rectangle {
             // none. Never a second, invented filter state.
             Text {
                 text: Tracker.profile-message == ""
-                    ? "Filters open once match history is read."
+                    ? "Playlist and act filters are not ported yet."
                     : Tracker.profile-message;
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
@@ -489,6 +489,9 @@ component ActColumn inherits VerticalLayout {
     in property <string> when: "";
     // The rank that act's peak reached; empty prints an em dash.
     in property <string> value: "";
+    // The act's crest, when art for that tier is cached. Empty keeps the drawn
+    // ranks glyph: a missing emblem must not collapse the column.
+    in property <image> crest;
     spacing: 2px;
 
     PanelTitle {
@@ -504,7 +507,13 @@ component ActColumn inherits VerticalLayout {
             border-radius: 17px;
             background: Theme.container-high;
 
-            Glyph {
+            if root.crest.width > 0: Image {
+                source: root.crest;
+                width: 34px;
+                height: 34px;
+                image-fit: contain;
+            }
+            if root.crest.width == 0: Glyph {
                 kind: "ranks";
                 size: 16px;
                 x: (parent.width - self.width) / 2;
@@ -558,6 +567,9 @@ component PreviousActs inherits Card {
         ActColumn {
             when: Tracker.act1-label;
             value: Tracker.act1-value;
+            // The peak crest the profile read resolved; the other columns have
+            // no act to prove a tier for, so they keep the drawn glyph.
+            crest: Tracker.peak-crest;
             horizontal-stretch: 1;
         }
         Rectangle { width: 1px; background: Theme.line-soft; }

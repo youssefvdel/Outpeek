@@ -44,13 +44,23 @@ component MatchLine inherits Rectangle {
         padding-right: Space.md;
         spacing: Space.md;
 
-        Cell { col-width: 62px; value: root.item.date; ink: Theme.ink-faint; mono: true; }
-        Cell { col-width: 94px; value: root.item.mode; }
-        Cell { col-width: 116px; value: root.item.map; ink: Theme.ink; weight: 600; }
+        Cell { col-width: 66px; value: root.item.date; ink: Theme.ink-faint; mono: true; }
+        Cell { col-width: 108px; value: root.item.mode; }
+        Cell { col-width: 150px; value: root.item.map; ink: Theme.ink; weight: 600; }
         VCenter { ResultChip { label: root.item.result; won: root.item.won; } }
-        Cell { col-width: 92px; value: root.item.agent; }
-        Cell { col-width: 92px; value: root.item.kda; mono: true; }
-        Cell { col-width: 58px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
+        Cell { col-width: 110px; value: root.item.agent; }
+        Cell { col-width: 104px; value: root.item.kda; mono: true; }
+        Cell {
+            col-width: 72px;
+            value: root.item.dd;
+            mono: true;
+            // Signed by the number itself: a delta over zero is the good case.
+            ink: root.item.dd == ""
+                ? Theme.ink-dim
+                : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+        }
+        Cell { col-width: 76px; value: root.item.score; mono: true; }
+        Cell { col-width: 62px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
         Rectangle { horizontal-stretch: 1; }
     }
 
@@ -126,13 +136,15 @@ export component MatchesPage inherits VerticalLayout {
                 padding-right: Space.md;
                 spacing: Space.md;
 
-                ColumnLabel { col-width: 62px; text: "DATE"; }
-                ColumnLabel { col-width: 94px; text: "MODE"; }
-                ColumnLabel { col-width: 116px; text: "MAP"; }
+                ColumnLabel { col-width: 66px; text: "DATE"; }
+                ColumnLabel { col-width: 108px; text: "MODE"; }
+                ColumnLabel { col-width: 150px; text: "MAP"; }
                 ColumnLabel { col-width: 74px; text: "RESULT"; }
-                ColumnLabel { col-width: 92px; text: "AGENT"; }
-                ColumnLabel { col-width: 92px; text: "K / D / A"; }
-                ColumnLabel { col-width: 58px; text: "ROUNDS"; }
+                ColumnLabel { col-width: 110px; text: "AGENT"; }
+                ColumnLabel { col-width: 104px; text: "K / D / A"; }
+                ColumnLabel { col-width: 72px; text: "DDΔ"; }
+                ColumnLabel { col-width: 76px; text: "SCORE"; }
+                ColumnLabel { col-width: 62px; text: "ROUNDS"; }
             }
         }
 
