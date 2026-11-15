@@ -1,0 +1,110 @@
+# Outpeek native app (Slint) — architecture and verification
+
+The Slint app (`outpeek-app/`) is the replacement for the Tauri/React shell. It
+is one process with two windows and no webview. The Tauri app still exists in
+`src-tauri/` + `src/` until feature parity; nothing in the native app depends on
+it at runtime.
+
+## Shape
+
+```
+outpeek-app  (binary + lib)
+├─ main.rs          process start: args → fonts → windows → worker → loop
+├─ worker.rs        one tokio poller: lockfile → identity → rank → facts
+├─ identity.rs      lockfile creds, aliases, entitlements, presences (loopback)
+├─ rank.rs          /mmr parse, region from the access token, tier + RR
+├─ live_facts.rs    presence → phase/map/score (path-included from src-tauri)
+├─ model.rs         pure view model: labels, states, formatting
+├─ settings_model.rs, badges.rs, assets.rs, app_window.rs, hud.rs, fonts.rs
+└─ ui/              .slint views, components, assets (badges), icons (generated)
+
+outpeek-overlay (lib + binary)
+├─ ui/overlay.slint  the HUD
+├─ hud.rs            facts plumbing + sync_visibility
+├─ win_style.rs      Win32 recipe (overlay only)
+├─ roles.rs          which window may get click-through/topmost
+└─ main.rs           the standalone gate binary (probe/health/soak/mcp)
+```
+
+Window roles are a typed decision (`roles.rs`): the HUD gets
+transparent/topmost/click-through/toolwindow, the app window never does. A test
+enforces it — applying the overlay recipe to the app window looks like a frozen
+UI.
+
+## Data flow
+
+One poller in `worker.rs` (2.5 s, 30 s idle backoff, skipped when no Riot client)
+reads the loopback and pushes view-model state into Slint globals on the event
+loop. The HUD reads the same in-memory state — no IPC, no second process, no
+NDJSON in the app path. The standalone overlay binary keeps stdin NDJSON for
+headless gates.
+
+## Rendering and Windows integration
+
+- Slint 1.18, winit backend, `renderer-femtovg-wgpu` (DX12 on Windows). The
+  OpenGL path is dead on the target machine (NVIDIA ICD refuses
+  `wglMakeCurrent`), and the software renderer is not compiled in so a broken
+  GPU path fails closed instead of rendering opaque.
+- App window: frameless (`no-frame`), 6 px resize band, drawn titlebar with a
+  `WindowMoveArea` drag surface; DWM `ROUND` corners with a `SetWindowRgn`
+  fallback; `BORDER_COLOR=NONE`; no system caption (a caption surface was the
+  pale band we could not recolour).
+- HUD window: recipe applied while hidden (bounded retry until Slint creates the
+  HWND), `WS_EX_TRANSPARENT | LAYERED | NOACTIVATE | TOOLWINDOW`, `HTTRANSPARENT`
+  subclass, no `WS_EX_LAYERED` omission tricks — LAYERED is required, `TRANSPARENT`
+  alone does not pass clicks across processes (Tao/winit do the same).
+
+## Assets
+
+- Fonts: Outfit 400–700 and DM Sans 400/500/700 are OFL and **embedded**
+  (`include_bytes!`), registered before the first window. Without them Windows
+  falls back to Segoe UI and every metric changes.
+- Icons: generated from `lucide-react`'s `__iconNode` by
+  `scripts/gen-icons.ts` → `ui/components/icons.slint`; `icons-check.ts` fails
+  `verify` on drift. Slint `Path` accepts Lucide's arcs, so geometry is exact
+  (verified by rendering both and diffing ink pixels).
+- Badges: the app's own artwork (`src/assets/...`) copied byte-identical into
+  `ui/assets/badges/`, provenance in its README.
+- Riot art (rank crests, agent portraits) is **never bundled** — fetched at
+  runtime and cached under the app data dir, with drawn fallbacks.
+
+## Verification workflow
+
+The point of the native stack: UI work is verified on the Linux host, without
+the user's PC.
+
+```bash
+cargo test --manifest-path outpeek-app/Cargo.toml      # pure model + assets
+cargo xwin check --manifest-path outpeek-app/Cargo.toml \
+  --target x86_64-pc-windows-msvc                      # Win32 paths compile
+xvfb-run -a ./outpeek-app/target/debug/outpeek-app --mcp-port 8099
+```
+
+With `--features ui-debug` the app's embedded Slint MCP server exposes
+`list_windows`, `get_element_tree`, `click_element`, `take_screenshot`; that is
+how navigation, focus and renders are proven. Without the feature the tree
+reports `debugInfoMissing` and only window-level tools answer.
+
+Windows-only facts stay on the PC: DWM frame and rounding, transparency,
+click-through, the VALORANT foreground gate, live lockfile data, and the shared
+event-loop cost while both windows composite.
+
+## Build
+
+```bash
+cargo build --release --manifest-path outpeek-app/Cargo.toml                    # host
+cargo xwin build --release --manifest-path outpeek-app/Cargo.toml \
+  --target x86_64-pc-windows-msvc                                              # Windows exe
+```
+
+Measured 2026-11-15: Windows exe 21.2 MB; Linux release 37.9 MB → 28.1 MB
+stripped. Size is fonts + badges + MCP + renderer, not the toolkit.
+
+## Not ported yet
+
+Store, Crosshair, Resolution Switch, Riot Chat, Pre-Picker, Accounts, the
+config editor, GPU report, updates and installer. Match history is the next
+pipeline: `/match-history/v1/history` + `/match-details/v1/matches/{id}`, which
+fills WIN%/K/D/HS%/DMG, the eight-metric strip, Recent Matches, Previous Acts
+and the Tracker Score inputs. Until it lands those blocks render an em dash with
+what they need — never a fabricated number.
