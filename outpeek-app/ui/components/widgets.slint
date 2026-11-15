@@ -240,11 +240,15 @@ export component NavItem inherits Rectangle {
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.sm;
-        spacing: Space.sm;
+        // 10 px matches the shipping sidebar's `space-x-2.5`; the pair reads as
+        // one row, not an icon with a label bolted on.
+        spacing: 10px;
 
         Glyph {
             kind: root.glyph;
-            size: 15px;
+            // The React rail ships `w-4 h-4` = 16 px. 15 px shifted every glyph
+            // by half a pixel against the label baseline.
+            size: 16px;
             stroke: root.active
                 ? Theme.ink
                 : root.soon
@@ -254,9 +258,9 @@ export component NavItem inherits Rectangle {
         }
         Text {
             text: root.label;
-            font-family: Theme.font-body;
+            font-family: root.active ? Theme.font-display : Theme.font-body;
             font-size: TypeScale.caption;
-            font-weight: root.active ? 700 : 500;
+            font-weight: 600;
             color: root.active
                 ? Theme.ink
                 : root.soon
