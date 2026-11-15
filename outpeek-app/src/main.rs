@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use outpeek_app::app_window::{self, WindowCommand};
+use outpeek_app::assets::ArtView;
 use outpeek_app::hud::{self, PLATFORM_SUPPORTS_HUD};
 use outpeek_app::model::{self, ClientState, RankView, TrackerSnapshot};
 use outpeek_app::overlay_renderer::OverlayRendererSetting;
@@ -660,6 +661,36 @@ fn apply_rank(ui: &AppWindow, view: &RankView) {
     t.set_rank_label(view.label.clone().into());
     t.set_rank_rr(view.rr as i32);
     t.set_rank_message(view.message.clone().into());
+    t.set_peak_label(view.peak_label.clone().into());
+}
+
+/// Decode the cached art this event names into the window's image slots.
+///
+/// The worker cannot send `slint::Image` (it is not `Send`), so it publishes the
+/// URLs it has already written to the shared disk cache and this — the UI
+/// thread — builds the images. A URL that is empty, or whose file vanished
+/// between the download and this call, decodes to an empty image: the UI then
+/// draws its fallback, exactly as it did before any art existed.
+fn apply_art(ui: &AppWindow, art: &ArtView) {
+    let t = ui.global::<Tracker>();
+    let dir = if art.rank_crest.is_empty() && art.peak_crest.is_empty() && art.agent_icon.is_empty()
+    {
+        // Nothing to load: clearing the slots must not create directories.
+        None
+    } else {
+        outpeek_app::assets::art_dir()
+    };
+    let load = |url: &str| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) => outpeek_overlay::image_cache::load_from(dir, url),
+            None => slint::Image::default(),
+        }
+    };
+    t.set_rank_crest(load(&art.rank_crest));
+    t.set_peak_crest(load(&art.peak_crest));
+    t.set_agent_icon(load(&art.agent_icon));
+    t.set_agent_name(art.agent_name.clone().into());
+    t.set_agent_role(art.agent_role.clone().into());
 }
 
 fn start_worker(
@@ -685,6 +716,7 @@ fn start_worker(
                         }
                     }
                     Event::Rank(view) => apply_rank(&app, &view),
+                    Event::Art(art) => apply_art(&app, &art),
                 }
             });
         },

@@ -12,13 +12,34 @@ use slint::fontique_011::fontique;
 /// Every bundled face. Adding a weight means adding it here AND in
 /// `tokens.slint`'s font-family list if the family changes.
 const FACES: &[(&str, &[u8])] = &[
-    ("Outfit-400", include_bytes!("../assets/fonts/Outfit-400.ttf")),
-    ("Outfit-500", include_bytes!("../assets/fonts/Outfit-500.ttf")),
-    ("Outfit-600", include_bytes!("../assets/fonts/Outfit-600.ttf")),
-    ("Outfit-700", include_bytes!("../assets/fonts/Outfit-700.ttf")),
-    ("DMSans-400", include_bytes!("../assets/fonts/DMSans-400.ttf")),
-    ("DMSans-500", include_bytes!("../assets/fonts/DMSans-500.ttf")),
-    ("DMSans-700", include_bytes!("../assets/fonts/DMSans-700.ttf")),
+    (
+        "Outfit-400",
+        include_bytes!("../assets/fonts/Outfit-400.ttf"),
+    ),
+    (
+        "Outfit-500",
+        include_bytes!("../assets/fonts/Outfit-500.ttf"),
+    ),
+    (
+        "Outfit-600",
+        include_bytes!("../assets/fonts/Outfit-600.ttf"),
+    ),
+    (
+        "Outfit-700",
+        include_bytes!("../assets/fonts/Outfit-700.ttf"),
+    ),
+    (
+        "DMSans-400",
+        include_bytes!("../assets/fonts/DMSans-400.ttf"),
+    ),
+    (
+        "DMSans-500",
+        include_bytes!("../assets/fonts/DMSans-500.ttf"),
+    ),
+    (
+        "DMSans-700",
+        include_bytes!("../assets/fonts/DMSans-700.ttf"),
+    ),
 ];
 
 /// Register every embedded face in Slint's shared font collection.

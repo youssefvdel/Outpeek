@@ -31,6 +31,11 @@ pub struct TrackerSnapshot {
     pub blue: i32,
     pub red: i32,
     pub updated_ms: u64,
+    /// Agent the Top Agent card should show. **No read fills this yet**: the
+    /// agent a player used lives in match details (`/match-details/v1/...`),
+    /// which this build does not fetch (ROADMAP). `None` is the honest "no
+    /// agent read" — the card keeps its empty state and no portrait is guessed.
+    pub top_agent_uuid: Option<String>,
 }
 
 impl Default for TrackerSnapshot {
@@ -53,6 +58,7 @@ impl TrackerSnapshot {
             blue: 0,
             red: 0,
             updated_ms: 0,
+            top_agent_uuid: None,
         }
     }
 
@@ -274,6 +280,11 @@ pub struct RankView {
     pub state: RankState,
     pub label: String,
     pub rr: i64,
+    /// Best rank across the acts Riot reports, as display text. Empty when no
+    /// act reported one — the peak cell then keeps its em dash.
+    pub peak_label: String,
+    /// The peak tier id itself, so the crest can be resolved from the same read.
+    pub peak_tier: i64,
     pub message: String,
 }
 
@@ -284,6 +295,8 @@ impl RankView {
             state: RankState::Waiting,
             label: String::new(),
             rr: 0,
+            peak_label: String::new(),
+            peak_tier: 0,
             message: "Waiting for the Riot Client.".to_string(),
         }
     }
@@ -293,17 +306,21 @@ impl RankView {
             state: RankState::Loading,
             label: String::new(),
             rr: 0,
+            peak_label: String::new(),
+            peak_tier: 0,
             message: "Reading your rank…".to_string(),
         }
     }
 
     /// A valid `/mmr` answer. Tier 0 is a real "Unrated", so it is safe here.
-    pub fn from_rank(tier: i64, rr: i64) -> Self {
+    pub fn from_rank(tier: i64, rr: i64, peak_tier: i64) -> Self {
         if tier < 3 {
             return Self {
                 state: RankState::Unranked,
                 label: "Unrated".to_string(),
                 rr: 0,
+                peak_label: peak_label(peak_tier),
+                peak_tier: peak_tier.max(0),
                 message: "No competitive rank this act.".to_string(),
             };
         }
@@ -311,6 +328,8 @@ impl RankView {
             state: RankState::Ok,
             label: tier_label(tier),
             rr,
+            peak_label: peak_label(peak_tier),
+            peak_tier: peak_tier.max(0),
             message: String::new(),
         }
     }
@@ -320,8 +339,20 @@ impl RankView {
             state: RankState::Error,
             label: String::new(),
             rr: 0,
+            peak_label: String::new(),
+            peak_tier: 0,
             message: message.into(),
         }
+    }
+}
+
+/// Peak display text: a real tier label, or empty. A sub-Iron id is not a rank
+/// Riot ever awarded, so it reads as "no peak read", never as "Unrated".
+pub fn peak_label(peak_tier: i64) -> String {
+    if (3..=1000).contains(&peak_tier) {
+        tier_label(peak_tier)
+    } else {
+        String::new()
     }
 }
 
@@ -467,10 +498,31 @@ mod tests {
         let error = RankView::error("Riot refused the rank read (403).");
         assert_eq!(error.state, RankState::Error);
         assert_eq!(error.label, "");
+        // An error carries no peak either: the cell stays on its em dash.
+        assert_eq!(error.peak_label, "");
         // The only path that may say "Unrated" is a successful read.
-        let unranked = RankView::from_rank(0, 0);
+        let unranked = RankView::from_rank(0, 0, 0);
         assert_eq!(unranked.state, RankState::Unranked);
         assert_eq!(unranked.label, "Unrated");
+    }
+
+    #[test]
+    fn the_peak_cell_only_names_a_rank_riot_actually_reported() {
+        let view = RankView::from_rank(21, 40, 24);
+        assert_eq!(view.label, "Ascendant 1");
+        assert_eq!(view.peak_label, "Immortal 1");
+        assert_eq!(view.peak_tier, 24);
+        // No act history: empty peak, not "Unrated".
+        assert_eq!(RankView::from_rank(21, 40, 0).peak_label, "");
+        // Sub-Iron ids are not ranks Riot awards.
+        assert_eq!(peak_label(1), "");
+        assert_eq!(peak_label(2), "");
+        assert_eq!(peak_label(3), "Iron 1");
+        assert_eq!(peak_label(27), "Radiant");
+        // Unranked now, but a real peak: the peak cell still reports it.
+        let unranked = RankView::from_rank(0, 0, 18);
+        assert_eq!(unranked.state, RankState::Unranked);
+        assert_eq!(unranked.peak_label, "Diamond 1");
     }
 
     #[test]
@@ -495,6 +547,7 @@ mod tests {
             blue: 7,
             red: 5,
             updated_ms: 1,
+            top_agent_uuid: None,
         };
         let facts = snap.facts();
         assert_eq!(facts.phase.as_deref(), Some("coregame"));

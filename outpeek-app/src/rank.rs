@@ -24,11 +24,16 @@ const CLIENT_PLATFORM: &str = "ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9yb
 /// falls back to. Riot tolerates a slightly stale version on `/mmr`.
 const FALLBACK_CLIENT_VERSION: &str = "release-13.05-shipping-11-5350494";
 
-/// Public rank for one account: tier id and ranked rating.
+/// Public rank for one account: current tier + ranked rating, plus the best
+/// tier Riot's per-act rows report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RankRow {
     pub tier: i64,
     pub rr: i64,
+    /// Highest tier across the acts in `SeasonalInfoBySeasonID`. 0 when Riot
+    /// reported no act. Mirrors `parseLocalRank`'s `peakTier` in
+    /// `src/sources/riot.ts` — a read of Riot's own act history, not a guess.
+    pub peak_tier: i64,
 }
 
 /// Decode the region claim out of the entitlements access token (JWT). Claim
@@ -105,10 +110,14 @@ pub fn parse_rank(payload: &Value) -> Result<RankRow, String> {
         .and_then(Value::as_i64)
         .unwrap_or(0);
 
+    let mut peak_tier = 0;
     if let Some(seasons) = payload
         .pointer("/QueueSkills/competitive/SeasonalInfoBySeasonID")
         .and_then(Value::as_object)
     {
+        for row in seasons.values() {
+            peak_tier = peak_tier.max(season_peak_tier(row));
+        }
         if let Some(row) = seasons
             .iter()
             .find(|(id, _)| id.to_lowercase() == season_id)
@@ -119,7 +128,37 @@ pub fn parse_rank(payload: &Value) -> Result<RankRow, String> {
             }
         }
     }
-    Ok(RankRow { tier, rr })
+    // The current tier is itself part of the peak: an act Riot has not written
+    // into the season rows yet must not hide a new career best.
+    Ok(RankRow {
+        tier,
+        rr,
+        peak_tier: peak_tier.max(tier),
+    })
+}
+
+/// Best tier one act row proves: the end-of-act tier, the act badge rank, or the
+/// highest tier that act recorded a win in. Same three-way max as
+/// `seasonPeakTier` in `src/sources/riot.ts`; any of them can be the high-water
+/// mark for that act.
+fn season_peak_tier(row: &Value) -> i64 {
+    let end_tier = row
+        .get("CompetitiveTier")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let act_rank = row.get("Rank").and_then(Value::as_i64).unwrap_or(0);
+    let win_tier = row
+        .get("WinsByTier")
+        .and_then(Value::as_object)
+        .map(|wins| {
+            wins.iter()
+                .filter(|(_, count)| count.as_i64().unwrap_or(0) > 0)
+                .filter_map(|(tier, _)| tier.parse::<i64>().ok())
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    end_tier.max(act_rank).max(win_tier)
 }
 
 /// Client version for `X-Riot-ClientVersion`, read from the newest game log.
@@ -244,6 +283,41 @@ mod tests {
         assert_eq!(row.tier, 21);
         // The current act's live RR wins over the last-game snapshot.
         assert_eq!(row.rr, 64);
+        // The current act's row (21) is the best one Riot reported here.
+        assert_eq!(row.peak_tier, 21);
+    }
+
+    #[test]
+    fn the_peak_is_the_best_act_riot_reports() {
+        // An older act at Immortal 2 (24) outranks the current Diamond 1 (18);
+        // a third act only shows its high-water mark through WinsByTier.
+        let payload = json!({
+            "LatestCompetitiveUpdate": {
+                "TierAfterUpdate": 18,
+                "RankedRatingAfterUpdate": 40,
+                "SeasonID": "act-now"
+            },
+            "QueueSkills": {
+                "competitive": {
+                    "SeasonalInfoBySeasonID": {
+                        "act-old": { "CompetitiveTier": 24, "RankedRating": 12 },
+                        "act-mid": { "CompetitiveTier": 15, "WinsByTier": { "21": 3, "26": 0 } },
+                        "act-now": { "CompetitiveTier": 18, "RankedRating": 40 }
+                    }
+                }
+            }
+        });
+        let row = parse_rank(&payload).unwrap();
+        assert_eq!(row.tier, 18);
+        // 24 from the old act beats 18 now, and 21 from a won game beats that
+        // act's end tier — the max of every evidence Riot reports.
+        assert_eq!(row.peak_tier, 24);
+        // A tier with zero wins in WinsByTier proves nothing.
+        assert_eq!(season_peak_tier(&json!({ "WinsByTier": { "26": 0 } })), 0);
+        // No act rows at all: the current tier is still the peak.
+        let bare =
+            parse_rank(&json!({ "LatestCompetitiveUpdate": { "TierAfterUpdate": 9 } })).unwrap();
+        assert_eq!(bare.peak_tier, 9);
     }
 
     #[test]
@@ -269,6 +343,7 @@ mod tests {
         .unwrap();
         assert_eq!(row.tier, 0);
         assert_eq!(row.rr, 0);
+        assert_eq!(row.peak_tier, 0);
     }
 
     /// Minimal URL-safe base64 encoder for fixture tokens (test-only).

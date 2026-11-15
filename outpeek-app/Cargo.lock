@@ -3246,6 +3246,7 @@ dependencies = [
 name = "outpeek-app"
 version = "0.4.4"
 dependencies = [
+ "image",
  "log",
  "native-tls",
  "outpeek-overlay",

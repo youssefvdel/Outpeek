@@ -50,6 +50,9 @@ log = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
+# Test-only: builds the tiny PNG fixtures the cache tests store and decode.
+# Same version/features the overlay crate compiles, so this adds no build unit.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # The app window's native HWND, for the DWM corner/frame pass only. Same 0.6
 # version Slint's `raw-window-handle-06` feature and the overlay crate use.

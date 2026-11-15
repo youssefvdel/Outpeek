@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::assets::{Art, ArtRequest, ArtView, Fetcher, HttpFetcher};
 use crate::identity::{self, Identity};
 use crate::live_facts::{derive_facts, find_local_presence};
 use crate::model::{RankState, RankView, TrackerSnapshot};
@@ -39,6 +40,9 @@ const SLEEP_STEP: Duration = Duration::from_millis(200);
 pub enum Event {
     Snapshot(TrackerSnapshot),
     Rank(RankView),
+    /// Game art resolved for the current rank. URLs, not images: `slint::Image`
+    /// is not `Send`, so the UI thread builds it from the cached files.
+    Art(ArtView),
 }
 
 /// Cross-thread switches owned by the app (UI) and read by the poller.
@@ -85,9 +89,51 @@ where
     let mut rank_pending = true;
     let mut idle_since: Option<Instant> = Some(Instant::now());
     let mut fail_streak: u32 = 0;
+    // Game art: one catalogue in memory, one cache directory. A host without an
+    // app-data directory gets `None`, and every art slot then stays empty —
+    // a supported state, not an error.
+    let mut art = Art::new(crate::assets::art_dir());
+    let fetcher: Arc<dyn Fetcher> = Arc::new(HttpFetcher);
+    if art.enabled() {
+        let freed = art.cap();
+        let (files, bytes) = art.usage();
+        eprintln!(
+            "[art] cache: {files} file(s), {} KiB{}",
+            bytes / 1024,
+            if freed > 0 {
+                format!(" — evicted {} KiB to fit the cap", freed / 1024)
+            } else {
+                String::new()
+            }
+        );
+    }
 
     publish(Event::Snapshot(snap.clone()));
     publish(Event::Rank(rank_view.clone()));
+
+    // The catalogues are what every art slot is resolved against, so they are
+    // read once here rather than inside the rank path: a slow or dead mirror
+    // must never delay the rank label. One request per family, then 24 h of
+    // memory TTL — a poll never re-downloads them.
+    if art.enabled() {
+        let report = art.ensure_catalogue(fetcher.clone(), now_ms()).await;
+        if report.error.is_empty() {
+            eprintln!(
+                "[art] catalogue: {} tiers, {} agents ({} fetch(es), dir {})",
+                report.tiers,
+                report.agents,
+                report.fetched,
+                art.dir()
+                    .map(|d| d.display().to_string())
+                    .unwrap_or_default()
+            );
+        } else {
+            eprintln!(
+                "[art] catalogue: {} tiers, {} agents — {}",
+                report.tiers, report.agents, report.error
+            );
+        }
+    }
 
     loop {
         if flags.stop.load(Ordering::Relaxed) {
@@ -108,6 +154,8 @@ where
             if rank_view.state != RankState::Waiting {
                 rank_view = RankView::waiting();
                 publish(Event::Rank(rank_view.clone()));
+                // No rank on screen means no crest: art follows the label.
+                publish(Event::Art(ArtView::default()));
             }
             idle_since.get_or_insert_with(Instant::now);
             sleep_or_stop(&flags, IDLE_POLL).await;
@@ -197,11 +245,33 @@ where
                     .unwrap_or_else(|| "eu".to_string());
                 rank::fetch_rank(&me.puuid, &ent, &region)
             });
-            rank_view = match resolved {
-                Ok(row) => RankView::from_rank(row.tier, row.rr),
-                Err(e) => RankView::error(e),
-            };
-            publish(Event::Rank(rank_view.clone()));
+            match resolved {
+                Ok(row) => {
+                    rank_view = RankView::from_rank(row.tier, row.rr, row.peak_tier);
+                    // The label goes first: a slow crest download must never
+                    // delay the rank the user is waiting for.
+                    publish(Event::Rank(rank_view.clone()));
+                    if art.enabled() {
+                        let view = art
+                            .view(
+                                fetcher.clone(),
+                                &ArtRequest {
+                                    tier: row.tier,
+                                    peak_tier: row.peak_tier,
+                                    agent_uuid: snap.top_agent_uuid.clone(),
+                                },
+                                SystemTime::now(),
+                            )
+                            .await;
+                        publish(Event::Art(view));
+                    }
+                }
+                Err(e) => {
+                    rank_view = RankView::error(e);
+                    publish(Event::Rank(rank_view.clone()));
+                    publish(Event::Art(ArtView::default()));
+                }
+            }
         }
 
         let cadence = if idle_since.map_or(false, |t| t.elapsed() >= IDLE_AFTER) {

@@ -49,7 +49,13 @@ component VersionPill inherits Rectangle {
 
 /// One rank cell of the player card. `sub` is RR for the current rank and a
 /// literal PEAK for the peak cell; an empty rank prints an em dash.
+///
+/// The crest slot is a fixed 48x48 square with `image-fit: contain`: Riot's
+/// tier art is a 256x256 PNG and must never be stretched. With no cached art
+/// the drawn chevron fills the same slot, so a missing crest cannot move the
+/// label or collapse the cell.
 component RankCell inherits VerticalLayout {
+    in property <image> crest;
     in property <string> label: "";
     in property <string> sub: "";
     in property <bool> known: false;
@@ -57,14 +63,25 @@ component RankCell inherits VerticalLayout {
     spacing: 1px;
 
     HCenter {
-        // Rank crests are competitive-tier art from media.valorant-api.com; they
-        // arrive with the valorant-api asset pipeline. The chevron stays until
-        // then — never a fake crest.
-        Glyph {
-            kind: "ranks";
-            size: 14px;
-            stroke: root.known ? Theme.primary : Theme.ink-faint;
-            opacity: root.known ? 1 : 0.5;
+        Rectangle {
+            width: 48px;
+            height: 48px;
+            background: transparent;
+
+            if root.crest.width > 0: Image {
+                source: root.crest;
+                width: 48px;
+                height: 48px;
+                image-fit: contain;
+            }
+            if root.crest.width == 0: Glyph {
+                kind: "ranks";
+                size: 20px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                stroke: root.known ? Theme.primary : Theme.ink-faint;
+                opacity: root.known ? 1 : 0.5;
+            }
         }
     }
     Text {
@@ -89,7 +106,7 @@ component RankCell inherits VerticalLayout {
 /// background art there — this shell has no image pipeline, so the banner is
 /// paint), avatar, name, and two rank cells split by a hairline.
 component PlayerCard inherits Rectangle {
-    height: 164px;
+    height: 210px;
     border-radius: Shape.md;
     background: Theme.container;
     clip: true;
@@ -166,9 +183,10 @@ component PlayerCard inherits Rectangle {
 
     RankCell {
         x: 0;
-        y: 115px;
+        y: 116px;
         width: (root.width - 1px) / 2;
-        height: 49px;
+        height: 88px;
+        crest: Tracker.rank-crest;
         label: Tracker.rank-label;
         sub: Tracker.rank-state == "ok"
             ? Tracker.rank-rr + " RR"
@@ -180,20 +198,21 @@ component PlayerCard inherits Rectangle {
 
     Rectangle {
         x: (root.width - 1px) / 2;
-        y: 123px;
+        y: 132px;
         width: 1px;
-        height: 33px;
+        height: 56px;
         background: Theme.line-soft;
     }
 
     RankCell {
         x: (root.width + 1px) / 2;
-        y: 115px;
+        y: 116px;
         width: (root.width - 1px) / 2;
-        height: 49px;
-        label: "";
+        height: 88px;
+        crest: Tracker.peak-crest;
+        label: Tracker.peak-label;
         sub: "PEAK";
-        known: false;
+        known: Tracker.peak-label != "";
     }
 }
 

@@ -32,6 +32,21 @@ export global Tracker {
     in-out property <string> rank-label: "";
     in-out property <int> rank-rr: 0;
     in-out property <string> rank-message: "Waiting for the Riot Client.";
+    // Peak rank from Riot's own act history (the best tier across the acts the
+    // `/mmr` payload reports). Empty = no act reported one: the cell keeps its
+    // em dash rather than printing "Unrated".
+    in-out property <string> peak-label: "";
+
+    // Game art, fetched and cached at runtime (never bundled: see assets.rs).
+    // An empty image means "no art cached", and the UI draws its own fallback
+    // glyph — a missing crest must not collapse the cell.
+    in-out property <image> rank-crest;
+    in-out property <image> peak-crest;
+    in-out property <image> agent-icon;
+    // Top Agent fact. Empty until a read reports one (match details own it), and
+    // the card then shows its honest empty state.
+    in-out property <string> agent-name: "";
+    in-out property <string> agent-role: "";
 
     // Tracker Score medallion key, from `badges::score_badge`: "1K" | "S" | "A"
     // | "B" | "C" | "D", or empty for unrated. Rust owns the grade rule; the

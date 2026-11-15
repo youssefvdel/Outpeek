@@ -62,10 +62,28 @@ pub struct Response {
     pub body: String,
 }
 
+/// The same frame with the body left as bytes, for callers that read binary
+/// payloads (game art PNGs). A `String` body would lose every non-UTF-8 byte,
+/// which is every byte of a PNG.
+pub struct ResponseBytes {
+    pub status: u16,
+    pub body: Vec<u8>,
+}
+
 /// Send one request. `Err` means no HTTP response was read at all — the same
 /// condition that made curl exit non-zero, which is how callers tell a
 /// transport failure apart from a 4xx/5xx body.
 pub fn send(req: &Request<'_>) -> Result<Response, String> {
+    let raw = send_bytes(req)?;
+    Ok(Response {
+        status: raw.status,
+        body: String::from_utf8_lossy(&raw.body).to_string(),
+    })
+}
+
+/// Send one request and keep the body as bytes. Used by the art downloader:
+/// lossy-decoding a PNG corrupts it irreversibly.
+pub fn send_bytes(req: &Request<'_>) -> Result<ResponseBytes, String> {
     let stream = connect(req.host, req.port, req.connect_timeout)?;
     stream
         .set_read_timeout(Some(req.max_time))
@@ -83,7 +101,7 @@ pub fn send(req: &Request<'_>) -> Result<Response, String> {
     // complete frame. A read timeout surfaces here as an error.
     let mut raw = Vec::new();
     tls.read_to_end(&mut raw).map_err(|e| e.to_string())?;
-    parse(&raw)
+    parse_bytes(&raw)
 }
 
 fn connect(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
@@ -145,7 +163,7 @@ fn encode(req: &Request<'_>) -> String {
     s
 }
 
-fn parse(raw: &[u8]) -> Result<Response, String> {
+fn parse_bytes(raw: &[u8]) -> Result<ResponseBytes, String> {
     let split = find(raw, b"\r\n\r\n").ok_or("malformed response: no header terminator")?;
     let head = String::from_utf8_lossy(&raw[..split]).to_string();
     let body = &raw[split + 4..];
@@ -177,10 +195,9 @@ fn parse(raw: &[u8]) -> Result<Response, String> {
     } else {
         body.to_vec()
     };
-    // Matches the old `String::from_utf8_lossy(&output.stdout)`.
-    Ok(Response {
+    Ok(ResponseBytes {
         status,
-        body: String::from_utf8_lossy(&bytes).to_string(),
+        body: bytes,
     })
 }
 
@@ -273,18 +290,18 @@ mod tests {
     #[test]
     fn parses_content_length_framed_response() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 9\r\n\r\n{\"ok\":1}\n";
-        let r = parse(raw).unwrap();
+        let r = parse_bytes(raw).unwrap();
         assert_eq!(r.status, 200);
-        assert_eq!(r.body, "{\"ok\":1}\n");
+        assert_eq!(r.body, b"{\"ok\":1}\n");
     }
 
     #[test]
     fn parses_chunked_response_with_extension() {
         let raw = b"HTTP/1.1 404 Not Found\r\nTransfer-Encoding: chunked\r\n\r\n\
                     5;ext=1\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
-        let r = parse(raw).unwrap();
+        let r = parse_bytes(raw).unwrap();
         assert_eq!(r.status, 404);
-        assert_eq!(r.body, "hello world");
+        assert_eq!(r.body, b"hello world");
     }
 
     #[test]
@@ -292,9 +309,20 @@ mod tests {
         // The split must key on the FIRST \r\n\r\n, not the last — the old
         // curl path appended `\n%{http_code}` and split on the last newline.
         let raw = b"HTTP/1.1 200 OK\r\n\r\nline1\n\nline2";
-        let r = parse(raw).unwrap();
+        let r = parse_bytes(raw).unwrap();
         assert_eq!(r.status, 200);
-        assert_eq!(r.body, "line1\n\nline2");
+        assert_eq!(r.body, b"line1\n\nline2");
+    }
+
+    #[test]
+    fn a_binary_body_survives_the_frame_byte_for_byte() {
+        // A PNG header plus bytes that are invalid UTF-8: `send` lossy-decodes
+        // its body, so the art downloader reads through `send_bytes` instead.
+        let mut raw = b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n".to_vec();
+        raw.extend_from_slice(b"\x89PNG\r\n\x1a\n\x00\xff\xfe");
+        let r = parse_bytes(&raw).unwrap();
+        assert_eq!(r.status, 200);
+        assert_eq!(r.body, b"\x89PNG\r\n\x1a\n\x00\xff\xfe");
     }
 
     #[test]

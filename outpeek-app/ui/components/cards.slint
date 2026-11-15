@@ -229,8 +229,6 @@ component CombatHighlights inherits Card {
 }
 
 component TopAgent inherits Card {
-    in property <string> role: "";
-
     pad: 14px;
     gap: 10px;
 
@@ -239,24 +237,38 @@ component TopAgent inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Top Agent"; horizontal-stretch: 1; }
         VCenter {
-            Chip { text: root.role == "" ? "NOT READ" : root.role; tone: "off"; pad-y: 1px; }
+            // The role chip is a fact from the agent catalogue; with no agent
+            // read it says so rather than naming a role nothing proved.
+            Chip {
+                text: Tracker.agent-role == "" ? "NOT READ" : Tracker.agent-role;
+                tone: Tracker.agent-role == "" ? "off" : "neutral";
+                pad-y: 1px;
+            }
         }
     }
 
     HorizontalLayout {
-        height: 44px;
+        height: 56px;
         spacing: Space.md;
 
         VCenter {
             Rectangle {
-                width: 44px;
-                height: 44px;
-                border-radius: 22px;
+                width: 56px;
+                height: 56px;
+                border-radius: 14px;
                 background: Theme.primary-deep;
 
-                Glyph {
+                // 56x56 portrait slot, `contain`: Riot's displayIcon is a
+                // 1024x1024 cut-out and must keep its aspect inside the square.
+                if Tracker.agent-icon.width > 0: Image {
+                    source: Tracker.agent-icon;
+                    width: 56px;
+                    height: 56px;
+                    image-fit: contain;
+                }
+                if Tracker.agent-icon.width == 0: Glyph {
                     kind: "user";
-                    size: 20px;
+                    size: 22px;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                     stroke: Theme.primary;
@@ -270,14 +282,15 @@ component TopAgent inherits Card {
             horizontal-stretch: 1;
 
             Text {
-                text: "No agent read";
+                text: Tracker.agent-name == "" ? "No agent read" : Tracker.agent-name;
                 font-family: Theme.font-display;
                 font-size: TypeScale.title;
                 font-weight: 700;
-                color: Theme.ink-dim;
+                color: Tracker.agent-name == "" ? Theme.ink-dim : Theme.ink;
+                overflow: elide;
             }
             Text {
-                text: "Needs this act's match details.";
+                text: Tracker.agent-name == "" ? "Needs this act's match details." : "";
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
