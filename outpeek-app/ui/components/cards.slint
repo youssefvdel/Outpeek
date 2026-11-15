@@ -424,7 +424,9 @@ component AccuracyRow inherits HorizontalLayout {
         font-size: TypeScale.micro;
         color: Theme.ink-faint;
         horizontal-alignment: right;
-        width: 54px;
+        // Wide enough for "1,962 hits" — the old 54px clipped the count at the
+        // card edge, which read as a broken number.
+        width: 76px;
         vertical-alignment: center;
     }
 }
