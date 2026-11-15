@@ -301,3 +301,135 @@ fn phase_state(phase: &str) -> &'static str {
         _ => "idle",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rank(tier: i64, rr: i64) -> RankRow {
+        RankRow {
+            tier,
+            rr,
+            peak_tier: tier,
+            hidden: false,
+        }
+    }
+
+    #[test]
+    fn a_rank_cell_is_a_fact_or_one_of_three_honest_states() {
+        // A read tier plus RR.
+        assert_eq!(rank_cells(Some(rank(21, 64))), ("Ascendant 1".to_string(), "64 RR".to_string()));
+        // Riot's own hidden flag wins over the tier it also reported.
+        let mut hidden = rank(21, 64);
+        hidden.hidden = true;
+        assert_eq!(rank_cells(Some(hidden)), ("RANK HIDDEN".to_string(), String::new()));
+        // A successful read with tier 0 is Unrated — never "not read".
+        assert_eq!(rank_cells(Some(rank(0, 0))), ("UNRATED".to_string(), String::new()));
+        // No read at all is its own state.
+        assert_eq!(rank_cells(None), ("NOT READ".to_string(), String::new()));
+        // RR of zero is not printed as "0 RR" — there is nothing to show.
+        assert_eq!(rank_cells(Some(rank(21, 0))), ("Ascendant 1".to_string(), String::new()));
+    }
+
+    #[test]
+    fn an_unresolved_puuid_gets_the_short_placeholder_never_a_hex_string() {
+        assert_eq!(
+            name_placeholder("6f0a1d2e-1111-2222-3333-444444444444"),
+            "Player 4444"
+        );
+        assert_eq!(name_placeholder("abc"), "Player abc");
+        assert_eq!(name_placeholder(""), "Player");
+    }
+
+    #[test]
+    fn party_sizes_count_the_players_the_payload_grouped() {
+        let matched = LiveMatch {
+            players: vec![
+                crate::live_match::LivePlayer {
+                    puuid: "a".into(),
+                    party_id: "p1".into(),
+                    ..Default::default()
+                },
+                crate::live_match::LivePlayer {
+                    puuid: "b".into(),
+                    party_id: "p1".into(),
+                    ..Default::default()
+                },
+                crate::live_match::LivePlayer {
+                    puuid: "c".into(),
+                    party_id: "p2".into(),
+                    ..Default::default()
+                },
+                crate::live_match::LivePlayer {
+                    puuid: "d".into(),
+                    party_id: String::new(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let sizes = party_sizes(&matched);
+        assert_eq!(sizes.get("p1"), Some(&2));
+        assert_eq!(sizes.get("p2"), Some(&1), "a solo party is counted but not shown");
+        assert!(!sizes.contains_key(""));
+    }
+
+    #[test]
+    fn a_rank_read_is_cached_and_a_failure_is_retried_sooner() {
+        let mut cache = LiveCache::default();
+        let mut reads = 0;
+        let now = Instant::now();
+        let mut read = |_: &str| {
+            reads += 1;
+            Some(rank(21, 64))
+        };
+        let first = cache.rank("PUUID-A", now, || read("PUUID-A"));
+        assert_eq!(first.map(|r| r.tier), Some(21));
+        // Inside the TTL: no second read, and the key is case-insensitive.
+        let second = cache.rank("puuid-a", now + Duration::from_secs(60), || read("x"));
+        assert_eq!(second.map(|r| r.tier), Some(21));
+        assert_eq!(reads, 1, "a cached rank is not re-read");
+
+        // A failed read is negative-cached briefly, then retried.
+        let mut failing = LiveCache::default();
+        let mut attempts = 0;
+        let miss = failing.rank("p", now, || {
+            attempts += 1;
+            None
+        });
+        assert!(miss.is_none());
+        let _ = failing.rank("p", now + Duration::from_secs(30), || {
+            attempts += 1;
+            None
+        });
+        assert_eq!(attempts, 1, "a fresh failure is not retried on the next poll");
+        let _ = failing.rank("p", now + RANK_RETRY + Duration::from_secs(1), || {
+            attempts += 1;
+            None
+        });
+        assert_eq!(attempts, 2, "past the retry window it asks again");
+    }
+
+    #[test]
+    fn names_outlive_a_lobby_but_the_cache_forgets_departed_players() {
+        let mut cache = LiveCache::default();
+        cache.set_name("ABC", "Shadow", "EUW");
+        assert_eq!(
+            cache.name("abc"),
+            Some(&("Shadow".to_string(), "EUW".to_string())),
+            "names are case-insensitive and survive a lobby change"
+        );
+        // An empty name is not a name: the placeholder must keep its slot.
+        cache.set_name("DEF", "   ", "");
+        assert!(cache.name("DEF").is_none());
+
+        cache.set_name("abc", "Shadow", "EUW");
+        cache.retain(&["abc".to_string()]);
+        assert!(cache.name("abc").is_some());
+        // Rank rows for players who left the lobby are dropped.
+        let now = Instant::now();
+        cache.rank("gone", now, || Some(rank(21, 10)));
+        cache.retain(&["abc".to_string()]);
+        assert!(cache.ranks.is_empty() || !cache.ranks.contains_key("gone"));
+    }
+}
