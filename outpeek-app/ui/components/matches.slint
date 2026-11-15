@@ -113,7 +113,11 @@ export component MatchesPage inherits VerticalLayout {
             }
             Text {
                 text: Tracker.matches-state == "ready"
-                    ? "Last 20 matches · Tracker Network, read-only"
+                    // The real count, not the endpoint's cap: a short history
+                    // must not claim twenty.
+                    ? "Last " + Tracker.matches.length
+                        + (Tracker.matches.length == 1 ? " match" : " matches")
+                        + " · Tracker Network, read-only"
                     : Tracker.matches-note;
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;

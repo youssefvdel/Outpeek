@@ -103,13 +103,22 @@ export component AppWindow inherits Window {
             // One scroll surface for both views: the tracker grid and the
             // settings bands both exceed a short window, and neither view
             // should clip its last row instead of scrolling to it.
-            flick := Flickable {
-                // `width: 100%` is load-bearing: a Flickable's preferred width
-                // is its content's, so without it the column shrank to the
-                // widest row (Matches/Agents/Maps stopped ~156 px short of the
-                // window edge). The page below is then the viewport's width.
-                width: 100%;
+            // The wrapper exists for the scroll affordance: Slint draws no
+            // scrollbar, and at the 680 px minimum the page is taller than the
+            // viewport. The bar is a fact about the content, so it appears only
+            // when there is more to scroll to.
+            Rectangle {
                 vertical-stretch: 1;
+                background: transparent;
+
+            flick := Flickable {
+                // Both percentages are load-bearing: a Flickable's preferred
+                // size is its content's, so without them the column shrank to
+                // the widest row (Matches/Agents/Maps stopped ~156 px short of
+                // the window edge) and the viewport grew to the page's height
+                // instead of scrolling it.
+                width: 100%;
+                height: 100%;
                 content-width: self.width;
                 content-height: page.preferred-height;
 
@@ -125,6 +134,20 @@ export component AppWindow inherits Window {
                         toggle-hud => { root.toggle-hud(); }
                     }
                 }
+            }
+
+            if flick.content-height > flick.height: Rectangle {
+                width: 3px;
+                height: Math.max(
+                    (flick.height * flick.height) / Math.max(flick.content-height, 1px),
+                    24px
+                );
+                x: parent.width - 5px;
+                y: (flick.height - self.height)
+                    * (flick.content-y / Math.max(flick.content-height - flick.height, 1px));
+                border-radius: 1.5px;
+                background: Theme.line;
+            }
             }
         }
     }
