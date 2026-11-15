@@ -10,6 +10,22 @@ import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
 import { Tracker, MatchRowUi } from "../state.slint";
 import { Card, Cell, Chip, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
+// The one flexible column: it absorbs the card's slack at a wide window and
+// shrinks to a floor at the 1120 px minimum instead of pushing the last column
+// (ROUNDS) past the card edge.
+component AgentCell inherits Text {
+    in property <string> value: "";
+    min-width: 84px;
+    horizontal-stretch: 1;
+    text: root.value == "" ? "—" : root.value;
+    font-family: Theme.font-body;
+    font-size: TypeScale.caption;
+    font-weight: 500;
+    color: Theme.ink-dim;
+    vertical-alignment: center;
+    overflow: elide;
+}
+
 component ResultChip inherits Rectangle {
     in property <string> label: "";
     in property <bool> won: false;
@@ -42,16 +58,16 @@ component MatchLine inherits Rectangle {
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.md;
-        spacing: Space.md;
+        spacing: Space.sm;
 
-        Cell { col-width: 66px; value: root.item.date; ink: Theme.ink-faint; mono: true; }
-        Cell { col-width: 108px; value: root.item.mode; }
-        Cell { col-width: 150px; value: root.item.map; ink: Theme.ink; weight: 600; }
+        Cell { col-width: 56px; value: root.item.date; ink: Theme.ink-faint; mono: true; }
+        Cell { col-width: 92px; value: root.item.mode; }
+        Cell { col-width: 120px; value: root.item.map; ink: Theme.ink; weight: 600; }
         VCenter { ResultChip { label: root.item.result; won: root.item.won; } }
-        Cell { col-width: 110px; value: root.item.agent; }
-        Cell { col-width: 104px; value: root.item.kda; mono: true; }
+        AgentCell { value: root.item.agent; }
+        Cell { col-width: 86px; value: root.item.kda; mono: true; }
         Cell {
-            col-width: 72px;
+            col-width: 64px;
             value: root.item.dd;
             mono: true;
             // Signed by the number itself: a delta over zero is the good case.
@@ -59,9 +75,8 @@ component MatchLine inherits Rectangle {
                 ? Theme.ink-dim
                 : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
         }
-        Cell { col-width: 76px; value: root.item.score; mono: true; }
-        Cell { col-width: 62px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
-        Rectangle { horizontal-stretch: 1; }
+        Cell { col-width: 64px; value: root.item.score; mono: true; }
+        Cell { col-width: 56px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
     }
 
     Rectangle {
@@ -134,17 +149,18 @@ export component MatchesPage inherits VerticalLayout {
             HorizontalLayout {
                 padding-left: Space.md;
                 padding-right: Space.md;
-                spacing: Space.md;
+                spacing: Space.sm;
 
-                ColumnLabel { col-width: 66px; text: "DATE"; }
-                ColumnLabel { col-width: 108px; text: "MODE"; }
-                ColumnLabel { col-width: 150px; text: "MAP"; }
+                ColumnLabel { col-width: 56px; text: "DATE"; }
+                ColumnLabel { col-width: 92px; text: "MODE"; }
+                ColumnLabel { col-width: 120px; text: "MAP"; }
                 ColumnLabel { col-width: 74px; text: "RESULT"; }
-                ColumnLabel { col-width: 110px; text: "AGENT"; }
-                ColumnLabel { col-width: 104px; text: "K / D / A"; }
-                ColumnLabel { col-width: 72px; text: "DDΔ"; }
-                ColumnLabel { col-width: 76px; text: "SCORE"; }
-                ColumnLabel { col-width: 62px; text: "ROUNDS"; }
+                // Same flexible floor as the row's agent cell.
+                ColumnLabel { col-width: 84px; text: "AGENT"; horizontal-stretch: 1; }
+                ColumnLabel { col-width: 86px; text: "K / D / A"; }
+                ColumnLabel { col-width: 64px; text: "DDΔ"; }
+                ColumnLabel { col-width: 64px; text: "SCORE"; }
+                ColumnLabel { col-width: 56px; text: "ROUNDS"; }
             }
         }
 

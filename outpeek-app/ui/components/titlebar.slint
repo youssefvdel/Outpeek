@@ -134,7 +134,7 @@ export component TitleBar inherits Rectangle {
 
             VCenter { StateDot { tone: Tracker.client-tone == "ok" ? "ok" : "warn"; } }
             Text {
-                text: Tracker.client-tone == "ok" ? "Stats on" : "Offline";
+                text: Tracker.client-tone == "ok" ? "Connected" : "Offline";
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 font-weight: 500;
