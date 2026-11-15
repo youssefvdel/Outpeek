@@ -96,6 +96,25 @@ header tabs at runtime), so the underline and the page are one state.
   subclass, no `WS_EX_LAYERED` omission tricks — LAYERED is required, `TRANSPARENT`
   alone does not pass clicks across processes (Tao/winit do the same).
 
+## Offline behaviour
+
+The tracker is useful with the Riot Client closed and with the network gone.
+What is cached, and for how long:
+
+| Thing | Where | Served without network | Bound |
+|---|---|---|---|
+| TRN profile (parsed) | `trn-cache.json` | yes, as the first frame | 24 h |
+| TRN matches | `trn-matches.json` | yes | 24 h |
+| Art bytes (PNGs) | `cache/art/` | yes | 30 days, 64 MB cap |
+| Art catalogue (URL map) | `cache/art/catalogue.json` | yes | stale on purpose; refreshed when the network answers |
+| Rank + RR | nothing | no — Riot is the only source | — |
+
+A failed read never wipes what is on screen: the cached rows stay and the line
+above them says why ("Tracker Network unreachable — showing the profile saved 5
+min ago"). Past the 24 h bound the profile is not shown at all, and every cell
+renders its em dash with the reason — an empty state that explains itself rather
+than day-old numbers that look current.
+
 ## Assets
 
 - Fonts: Outfit 400–700 and DM Sans 400/500/700 are OFL and **embedded**
