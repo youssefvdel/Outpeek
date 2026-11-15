@@ -183,14 +183,19 @@ async fn fetch_json(path: &str) -> Result<Value, String> {
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))?;
+        .map_err(|e| {
+            // reqwest's Display carries the URL and the transport detail. The
+            // UI says one sentence; the log keeps the rest for a bug report.
+            eprintln!("[trn] transport: {e}");
+            "Tracker Network unreachable".to_string()
+        })?;
     if let Some(code) = status_error(response.status().as_u16()) {
         return Err(code);
     }
-    let body = response
-        .bytes()
-        .await
-        .map_err(|e| format!("TRN_HTTP_ERROR: {e}"))?;
+    let body = response.bytes().await.map_err(|e| {
+        eprintln!("[trn] body: {e}");
+        "Tracker Network cut the response short".to_string()
+    })?;
     if body.len() > MAX_BODY {
         return Err(format!(
             "TRN_HTTP_BODY_TOO_LARGE: {} bytes > {MAX_BODY}",

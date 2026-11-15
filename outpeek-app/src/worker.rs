@@ -714,6 +714,13 @@ where
                     )
                     .await,
                 );
+                // Crests and the top-agent portrait resolve against the same
+                // catalogue: the first frame ran before it was loaded, so
+                // without this a cold offline start keeps its drawn fallbacks
+                // even though every URL is now known.
+                publish(Event::Art(
+                    art_frame(&art, fetcher.clone(), profile.as_ref(), local_rank.as_ref()).await,
+                ));
             }
         } else {
             eprintln!(
@@ -809,6 +816,7 @@ where
                         ));
                     }
                     Err(e) => {
+                        eprintln!("[trn] profile read failed: {e}");
                         // A failed read never wipes a shown profile: the cached
                         // copy stays, with the reason on the line beside it. The
                         // agent/map rows come from that same copy, so they stay

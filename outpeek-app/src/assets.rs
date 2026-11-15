@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::riot_http::{self, Request};
@@ -58,6 +59,10 @@ pub const ART_TTL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 pub const META_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 /// Total on-disk budget for crests + portraits.
 pub const CACHE_MAX_BYTES: u64 = 64 * 1024 * 1024;
+/// The URL map, beside the art bytes. The PNGs live thirty days, but a cold
+/// start with no network cannot resolve a single crest without this file: the
+/// bytes are on disk and nothing points at them.
+pub const CATALOGUE_FILE: &str = "catalogue.json";
 /// A crest or portrait is tens of KB; anything this large is not art.
 pub const MAX_ART_BYTES: usize = 4 * 1024 * 1024;
 /// Connect/read budget for one art request. The catalogue JSON is ~190 KB in
@@ -73,7 +78,7 @@ const USER_AGENT: &str = concat!("Outpeek/", env!("CARGO_PKG_VERSION"));
 // ---------------------------------------------------------------------------
 
 /// One competitive tier from the newest tier set.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Tier {
     pub tier: i64,
     /// `divisionName` as the API spells it (`IRON`, `RADIANT`, `UNRANKED`).
@@ -84,7 +89,7 @@ pub struct Tier {
 }
 
 /// One playable agent.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AgentArt {
     /// Lowercased: Riot sends mixed case across endpoints and match payloads.
     pub uuid: String,
@@ -145,8 +150,20 @@ pub fn parse_tiers(json: &str) -> Result<Vec<Tier>, String> {
         .collect())
 }
 
+/// The three catalogues as one serialisable value — what `catalogue.json`
+/// holds. Every field is `default` so an older file still loads.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Catalogue {
+    #[serde(default)]
+    pub tiers: Vec<Tier>,
+    #[serde(default)]
+    pub agents: Vec<AgentArt>,
+    #[serde(default)]
+    pub maps: Vec<MapArt>,
+}
+
 /// One map from `/v1/maps`, reduced to what row art needs.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct MapArt {
     /// Normalised display name (`lotus`, `split`, `summit`): the TRN segment key
     /// is the same codename, so a match needs no act-specific table.
@@ -428,6 +445,43 @@ impl Index {
         Self {
             ttl_ms,
             ..Self::default()
+        }
+    }
+
+    /// True once any family is loaded (memory or disk). A cold process that
+    /// loaded `catalogue.json` still refreshes when the network answers.
+    pub fn has_any(&self) -> bool {
+        self.tiers.is_some() || self.agents.is_some() || self.maps.is_some()
+    }
+
+    /// Fill from a saved catalogue. Every family is marked stale (`at_ms: 0`),
+    /// so the next online read replaces it instead of being skipped by the TTL.
+    pub fn apply(&mut self, catalogue: Catalogue) {
+        if !catalogue.tiers.is_empty() {
+            self.tiers = Some(Timed {
+                at_ms: 0,
+                value: catalogue.tiers,
+            });
+        }
+        if !catalogue.agents.is_empty() {
+            self.agents = Some(Timed {
+                at_ms: 0,
+                value: catalogue.agents,
+            });
+        }
+        if !catalogue.maps.is_empty() {
+            self.maps = Some(Timed {
+                at_ms: 0,
+                value: catalogue.maps,
+            });
+        }
+    }
+
+    pub fn snapshot(&self) -> Catalogue {
+        Catalogue {
+            tiers: self.tiers().to_vec(),
+            agents: self.agents().to_vec(),
+            maps: self.maps().to_vec(),
         }
     }
 
@@ -739,8 +793,65 @@ impl Art {
     }
 
     /// The catalogue, refreshed when stale. Reported for one log line.
+    ///
+    /// The disk copy is read first (a cold start with no network still knows
+    /// every URL), then the network refreshes it; a successful fetch is written
+    /// back for the next start.
     pub async fn ensure_catalogue(&mut self, fetcher: Arc<dyn Fetcher>, now_ms: u64) -> MetaReport {
-        self.index.ensure(fetcher, now_ms).await
+        self.load_catalogue();
+        let report = self.index.ensure(fetcher, now_ms).await;
+        if report.fetched > 0 {
+            self.save_catalogue();
+        }
+        report
+    }
+
+    /// Fill the catalogue from `catalogue.json` when memory has nothing. A
+    /// missing or unreadable file is a soft miss: the app then resolves every
+    /// art slot from the network as before.
+    fn load_catalogue(&mut self) {
+        if self.index.has_any() {
+            return;
+        }
+        let Some(dir) = &self.dir else {
+            return;
+        };
+        let path = dir.join(CATALOGUE_FILE);
+        let Ok(bytes) = std::fs::read(&path) else {
+            return;
+        };
+        let Ok(catalogue) = serde_json::from_slice::<Catalogue>(&bytes) else {
+            eprintln!("[art] catalogue file unreadable: {}", path.display());
+            return;
+        };
+        let (tiers, agents, maps) = (
+            catalogue.tiers.len(),
+            catalogue.agents.len(),
+            catalogue.maps.len(),
+        );
+        self.index.apply(catalogue);
+        if tiers + agents + maps > 0 {
+            eprintln!("[art] catalogue from disk: {tiers} tiers, {agents} agents, {maps} maps");
+        }
+    }
+
+    /// Write the catalogue atomically (temp + rename), so a crash mid-write
+    /// cannot leave a half file that parses as "no art".
+    fn save_catalogue(&self) {
+        let Some(dir) = &self.dir else {
+            return;
+        };
+        let Ok(json) = serde_json::to_vec(&self.index.snapshot()) else {
+            return;
+        };
+        let path = dir.join(CATALOGUE_FILE);
+        let tmp = dir.join("catalogue.json.tmp");
+        if std::fs::write(&tmp, &json)
+            .and_then(|_| std::fs::rename(&tmp, &path))
+            .is_err()
+        {
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 
     /// Cache one row-art URL and return it when the bytes are on disk. The URL
@@ -1414,6 +1525,61 @@ mod tests {
         assert_eq!(fetcher.calls(), calls_before);
         // A map the catalogue does not know is empty, not a guessed URL.
         assert_eq!(art.map_icon(fetcher, "Haven", now).await, None);
+    }
+
+    #[tokio::test]
+    async fn the_catalogue_survives_a_restart_without_network() {
+        let tmp = TmpDir::new("catalogue-disk");
+        let dir = tmp.path().to_path_buf();
+        let online = FakeFetcher::ok(&[
+            (TIERS_URL, TIERS_JSON.into()),
+            (AGENTS_URL, AGENTS_JSON.into()),
+            (MAPS_URL, MAPS_JSON.into()),
+            ("https://media/n/3/l.png", png()),
+        ]);
+        // First run: fetch the catalogues and one crest.
+        let mut first = Art::new(Some(dir.clone()));
+        let report = first.ensure_catalogue(online.clone(), 1_000).await;
+        assert_eq!(report.fetched, 3);
+        let request = ArtRequest {
+            tier: 3,
+            peak_tier: 0,
+            agent_uuid: None,
+        };
+        let view = first
+            .view(online.clone(), &request, SystemTime::now())
+            .await;
+        assert_eq!(view.rank_crest, "https://media/n/3/l.png");
+        assert!(dir.join(CATALOGUE_FILE).exists(), "the URL map was written");
+
+        // Second run, same directory, no network at all. The URL map comes from
+        // disk and the crest bytes from the art cache: a cold offline start
+        // still draws art.
+        let offline = FakeFetcher::offline();
+        let mut second = Art::new(Some(dir));
+        let report = second.ensure_catalogue(offline.clone(), 2_000).await;
+        assert_eq!(report.fetched, 0, "offline fetches nothing");
+        assert_eq!(report.tiers, 4, "the tiers came from disk");
+        assert_eq!(report.agents, 2);
+        let calls_before = offline.calls();
+        let view = second.view(offline.clone(), &request, SystemTime::now()).await;
+        assert_eq!(
+            view.rank_crest, "https://media/n/3/l.png",
+            "a cached crest must resolve without the network"
+        );
+        assert_eq!(offline.calls(), calls_before, "no request was needed");
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_catalogue_file_is_a_soft_miss() {
+        let tmp = TmpDir::new("catalogue-corrupt");
+        std::fs::write(tmp.path().join(CATALOGUE_FILE), b"{not json").unwrap();
+        let mut art = Art::new(Some(tmp.path().to_path_buf()));
+        let report = art
+            .ensure_catalogue(FakeFetcher::offline(), 1_000)
+            .await;
+        assert_eq!((report.tiers, report.agents, report.maps), (0, 0, 0));
+        assert!(!report.error.is_empty(), "the failure is reported");
     }
 
     #[tokio::test]
