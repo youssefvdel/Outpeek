@@ -364,11 +364,14 @@ export component Cell inherits Text {
     in property <brush> ink: Theme.ink-dim;
     in property <int> weight: 500;
     in property <bool> mono: false;
+    // Dense data surfaces (match history) set their numbers a step above the
+    // caption default; every other table keeps the default.
+    in property <length> text-size: TypeScale.caption;
     width: root.col-width;
     text: root.value == "" ? "—" : root.value;
     horizontal-alignment: root.align-right ? right : left;
     font-family: root.mono ? Theme.font-mono : Theme.font-body;
-    font-size: TypeScale.caption;
+    font-size: root.text-size;
     font-weight: root.weight;
     color: root.ink;
     vertical-alignment: center;
