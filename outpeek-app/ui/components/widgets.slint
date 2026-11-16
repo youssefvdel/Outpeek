@@ -424,8 +424,8 @@ export component Caption inherits Text {
 }
 
 /// Note band above a Tracker Network page: the season (or the state) on the
-/// left, the state chip on the right. The band carries facts, not prose: when a
-/// read has a reason to explain, `note` holds it.
+/// left, a state chip on the right only while the data is not live.
+/// A fresh read needs no badge — the numbers are the proof.
 export component SourceBand inherits Rectangle {
     in property <string> live-text: "";
     in property <string> note: "";
@@ -459,18 +459,16 @@ export component SourceBand inherits Rectangle {
             overflow: elide;
             horizontal-stretch: 1;
         }
-        VCenter {
+        // No chip on a live read: the numbers are the proof. The chip only
+        // names a state that needs explaining (saved, reading, not read).
+        if root.state != "ready": VCenter {
             Chip {
-                text: root.state == "ready"
-                    ? "LIVE"
-                    : root.state == "cached"
-                        ? "SAVED"
-                        : root.state == "loading" ? "READING" : "NOT READ";
-                tone: root.state == "ready"
-                    ? "mint"
-                    : root.state == "cached"
-                        ? "neutral"
-                        : root.state == "loading" ? "armed" : "off";
+                text: root.state == "cached"
+                    ? "SAVED"
+                    : root.state == "loading" ? "READING" : "NOT READ";
+                tone: root.state == "cached"
+                    ? "neutral"
+                    : root.state == "loading" ? "armed" : "off";
                 pad-x: 7px;
                 pad-y: 1px;
             }
