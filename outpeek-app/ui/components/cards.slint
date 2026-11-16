@@ -491,7 +491,7 @@ component Accuracy inherits Card {
 // ---------------------------------------------------------------------------
 
 component ActColumn inherits VerticalLayout {
-    height: 105px;
+    height: 76px;
     // The act TRN named (e.g. "V26: ACT V"); empty prints an em dash.
     in property <string> when: "";
     // The rank that act's peak reached; empty prints an em dash.
@@ -547,45 +547,55 @@ component ActColumn inherits VerticalLayout {
 
 component PreviousActs inherits Card {
     pad: 14px;
-    gap: 10px;
+    gap: 8px;
 
     HorizontalLayout {
         height: 18px;
         spacing: Space.sm;
-        CardTitle { text: "Previous Acts"; horizontal-stretch: 1; }
+        CardTitle { text: "Peak Acts on Record"; horizontal-stretch: 1; }
     }
 
-    // Only the acts the read reported: Tracker Network currently sends one
-    // peak-rating segment, and two empty slots read as missing data. One column
-    // then takes the whole card.
+    // Three fixed slots, never invented: TRN sends one `peak-rating` segment
+    // (fixture: 1 row, Season 26 Act 6 only). The `metadata.seasons` list
+    // names Season 26 Acts 6/5/4 but carries IDs, not ranks, and all 20
+    // trn_matches rows are the current act — so there is nothing honest to
+    // wire into slots 2/3. Empty slots keep em dashes; no `if` branches, no
+    // guessed ranks. Only slot 1 gets the peak crest; the others keep the
+    // faint ranks glyph so no emblem is implied.
     HorizontalLayout {
-        height: 105px;
+        height: 78px;
         spacing: Space.md;
 
-        if Tracker.act1-label != "": ActColumn {
+        ActColumn {
             when: Tracker.act1-label;
             value: Tracker.act1-value;
             crest: Tracker.peak-crest;
             horizontal-stretch: 1;
         }
-        if Tracker.act1-label != "" && Tracker.act2-label != "": Rectangle {
+        Rectangle {
             width: 1px;
             background: Theme.line-soft;
         }
-        if Tracker.act2-label != "": ActColumn {
+        ActColumn {
             when: Tracker.act2-label;
             value: Tracker.act2-value;
             horizontal-stretch: 1;
         }
-        if Tracker.act2-label != "" && Tracker.act3-label != "": Rectangle {
+        Rectangle {
             width: 1px;
             background: Theme.line-soft;
         }
-        if Tracker.act3-label != "": ActColumn {
+        ActColumn {
             when: Tracker.act3-label;
             value: Tracker.act3-value;
             horizontal-stretch: 1;
         }
+    }
+
+    Need {
+        text: Tracker.act1-label == ""
+            ? "No peak acts reported yet."
+            : "Tracker Network reports one peak act.";
     }
 
     Rectangle { vertical-stretch: 1; }

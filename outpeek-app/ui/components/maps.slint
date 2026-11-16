@@ -102,7 +102,11 @@ component MapCard inherits Card {
         background: Theme.line;
 
         Rectangle {
-            width: parent.width * root.item.win-share;
+            // Left-anchored: without `x: 0` the fill centres and reads as
+            // offset from its own number. Share clamped so a bad value
+            // cannot overdraw the track.
+            x: 0;
+            width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
             height: parent.height;
             border-radius: 1.5px;
             background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;

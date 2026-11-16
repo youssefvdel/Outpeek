@@ -21,8 +21,8 @@ writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
 const cargoPaths = [
   join(root, 'src-tauri', 'Cargo.toml'),
-  join(root, 'outpeek-overlay', 'Cargo.toml'),
-  join(root, 'outpeek-app', 'Cargo.toml'),
+  join(root, '..', 'outpeek-overlay', 'Cargo.toml'),
+  join(root, '..', 'outpeek-app', 'Cargo.toml'),
 ];
 for (const cargoPath of cargoPaths) {
   const cargoOrig = readFileSync(cargoPath, 'utf8');

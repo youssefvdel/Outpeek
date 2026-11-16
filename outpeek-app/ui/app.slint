@@ -140,12 +140,23 @@ export component AppWindow inherits Window {
                     (flick.height * flick.height) / Math.max(flick.content-height, 1px),
                     24px
                 );
-                x: parent.width - 5px;
+                // Inside the flick viewport: the outer Rectangle spans the full
+                // content column, so `parent.width` only matches by accident.
+                x: flick.width - 5px;
                 // `content-y` is zero at the top and negative when scrolled, so
                 // the thumb needs the negated offset: 0 at the top, full travel
-                // at the bottom. The old sign parked the thumb mid-track.
-                y: (flick.height - self.height)
-                    * (-flick.content-y / Math.max(flick.content-height - flick.height, 1px));
+                // at the bottom. Clamped to the track: when the page barely
+                // overflows, the guarded ratio can otherwise park the thumb
+                // above the top or below the bottom. Display-only: the
+                // Flickable owns the drag, this rect never takes input.
+                y: Math.min(
+                    Math.max(
+                        (flick.height - self.height)
+                            * (-flick.content-y / Math.max(flick.content-height - flick.height, 1px)),
+                        0px
+                    ),
+                    flick.height - self.height
+                );
                 border-radius: 1.5px;
                 background: Theme.line;
             }

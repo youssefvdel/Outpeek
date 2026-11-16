@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const LUCIDE = join(ROOT, "node_modules/lucide-react/dist/esm/icons");
-export const ICON_FILE = join(ROOT, "outpeek-app/ui/components/icons.slint");
+export const ICON_FILE = join(ROOT, "..", "outpeek-app/ui/components/icons.slint");
 
 /** The icon set the shipping React app imports (`src/components/**`). */
 const ICONS: ReadonlyArray<{ component: string; lucide: string }> = [
