@@ -34,6 +34,12 @@ use outpeek_app::{paths, PRODUCT_NAME, VERSION};
 use outpeek_overlay::ui::OverlayWindow;
 use slint::{ComponentHandle as _, ModelRc, VecModel};
 
+/// The narrowest window the widest screen still fits, in logical pixels. Kept
+/// beside the Slint `min-width`/`min-height` so a restored size can never
+/// undercut the layout.
+const MIN_WINDOW_WIDTH: u32 = 1280;
+const MIN_WINDOW_HEIGHT: u32 = 720;
+
 /// Persisted HUD toggle. Missing file = on: this app's own HUD is the point.
 /// Build profile the Settings page reports. Compile-time fact, not runtime env.
 const BUILD_PROFILE: &str = if cfg!(debug_assertions) {
@@ -85,6 +91,10 @@ fn main() {
     // this build does not understand falls back instead of opening a dead page.
     let stored = outpeek_app::settings::load_default();
     if let Some((width, height)) = stored.window_size() {
+        // A remembered size below the shell's own minimum would clip the
+        // Matches table, so the restore honours the floor, not the file.
+        let width = width.max(MIN_WINDOW_WIDTH);
+        let height = height.max(MIN_WINDOW_HEIGHT);
         app.global::<Tracker>().set_window_width(width as f32);
         app.global::<Tracker>().set_window_height(height as f32);
         // The layout sizes the window when it is created, so the resize has to

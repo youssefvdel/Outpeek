@@ -41,10 +41,12 @@ export component AppWindow inherits Window {
     // The shipping app opens at 1216x804; the shell's grid is tuned to that.
     preferred-width: Tracker.window-width;
     preferred-height: Tracker.window-height;
-    // 1120 keeps the three-card row (title + state chip) on one line; below it
-    // the dashboard would start eliding its own labels.
-    min-width: 1120px;
-    min-height: 680px;
+    // 1280 is the narrowest width the widest content still fits: the Matches
+    // table needs ~940 px of column arithmetic beside the 272 px rail and the
+    // page gutters. Below this the numeric cells collide, so the window stops
+    // here instead of eliding values.
+    min-width: 1280px;
+    min-height: 720px;
     // The resize ceiling, declared because Slint derives the window's min AND
     // max from this layout: a finite maximum computed from the content (~984 px
     // on Windows) wins over `preferred-width`, so the shell opened at min width

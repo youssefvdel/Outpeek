@@ -64,8 +64,8 @@ component MatchLine inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 14px;
-        padding-right: Space.md;
-        spacing: Space.sm;
+        padding-right: Space.sm;
+        spacing: 4px;
 
         // Agent portrait: the row's own face, like the desktop client. The
         // tinted plate is the fallback floor when the catalogue missed.
@@ -123,7 +123,7 @@ component MatchLine inherits Rectangle {
         // at a glance, no chip needed.
         VCenter {
             Text {
-                width: 70px;
+                width: 66px;
                 text: root.item.score == "" ? "—" : root.item.score;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.value;
@@ -140,7 +140,7 @@ component MatchLine inherits Rectangle {
         VCenter {
             StatChip {
                 text: root.item.trs == "" ? "—" : root.item.trs;
-                chip-width: 76px;
+                chip-width: 68px;
                 chip-ink: Theme.ink;
             }
         }
@@ -149,29 +149,34 @@ component MatchLine inherits Rectangle {
         VCenter {
             if root.item.clutch != "": StatChip {
                 text: root.item.clutch;
-                chip-width: 96px;
+                chip-width: 86px;
                 // Signed by the tone itself: a lost clutch is the bad case.
                 chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
             }
         }
         // TRN's own column order: K/D, then the K/D/A triple, then DDΔ, HS %
-        // and ACS. The order is the reference's, not a preference.
-        Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
-        Cell { col-width: 108px; value: root.item.kda; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
-        Cell {
-            col-width: 64px;
-            value: root.item.dd;
-            mono: true;
-            align-right: true;
-            text-size: TypeScale.title;
-            weight: 600;
-            // Signed by the number itself: a delta over zero is the good case.
-            ink: root.item.dd == ""
-                ? Theme.ink-dim
-                : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+        // and ACS. The tail gets its own wider gutter so the ratio and the
+        // triple never read as one number.
+        HorizontalLayout {
+            spacing: 10px;
+
+            Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
+            Cell { col-width: 104px; value: root.item.kda; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
+            Cell {
+                col-width: 58px;
+                value: root.item.dd;
+                mono: true;
+                align-right: true;
+                text-size: TypeScale.title;
+                weight: 600;
+                // Signed by the number itself: a delta over zero is the good case.
+                ink: root.item.dd == ""
+                    ? Theme.ink-dim
+                    : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+            }
+            Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
+            Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
         }
-        Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
-        Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; text-size: TypeScale.title; ink: Theme.ink; weight: 600; }
         Rectangle { horizontal-stretch: 1; }
     }
 
@@ -189,7 +194,8 @@ component MatchLine inherits Rectangle {
 /// The number is Rust's string; the bar only reads the share.
 component AgentCell inherits Rectangle {
     in property <MatchAgentUi> item;
-    width: 210px;
+    horizontal-stretch: 1;
+    min-width: 150px;
     height: 60px;
 
     HorizontalLayout {
@@ -223,6 +229,7 @@ component AgentCell inherits Rectangle {
         }
 
         VerticalLayout {
+            horizontal-stretch: 1;
             spacing: 1px;
             alignment: center;
 
@@ -272,7 +279,7 @@ component AgentCell inherits Rectangle {
 /// record on the first line, `K/D | ADR` under it, then the same bar.
 component SeasonCell inherits Rectangle {
     in property <MatchSummaryUi> item;
-    width: 230px;
+    width: 200px;
     height: 62px;
     border-radius: Shape.sm;
     background: Theme.container-high;
@@ -371,8 +378,8 @@ component DayHeader inherits Rectangle {
     background: Theme.container-low;
     HorizontalLayout {
         padding-left: 14px;
-        padding-right: Space.md;
-        spacing: Space.sm;
+        padding-right: Space.sm;
+        spacing: 4px;
 
         VCenter {
             Text {
@@ -403,23 +410,27 @@ component DayHeader inherits Rectangle {
         Rectangle { horizontal-stretch: 1; }
 
         // Two chip-width spacers keep the totals under the rows' own numbers.
-        Rectangle { width: 76px; }
-        Rectangle { width: 96px; }
-        Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
-        Cell { col-width: 150px; value: root.item.kda; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
-        Cell {
-            col-width: 64px;
-            value: root.item.dda;
-            mono: true;
-            align-right: true;
-            weight: 600;
-            // Signed by the number itself, like the rows below.
-            ink: root.item.dda == ""
-                ? Theme.ink-dim
-                : root.item.dda.starts-with("-") ? Theme.coral : Theme.mint;
+        Rectangle { width: 68px; }
+        Rectangle { width: 86px; }
+        HorizontalLayout {
+            spacing: 10px;
+
+            Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
+            Cell { col-width: 150px; value: root.item.kda; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
+            Cell {
+                col-width: 58px;
+                value: root.item.dda;
+                mono: true;
+                align-right: true;
+                weight: 600;
+                // Signed by the number itself, like the rows below.
+                ink: root.item.dda == ""
+                    ? Theme.ink-dim
+                    : root.item.dda.starts-with("-") ? Theme.coral : Theme.mint;
+            }
+            Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
+            Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
         }
-        Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
-        Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; ink: Theme.ink; weight: 600; }
     }
 
     Rectangle {
@@ -497,7 +508,7 @@ component DetailPlayerLine inherits Rectangle {
         Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; }
         Cell { col-width: 56px; value: root.item.kast; mono: true; align-right: true; }
         Cell {
-            col-width: 64px;
+            col-width: 58px;
             value: root.item.dd;
             mono: true;
             align-right: true;
@@ -602,9 +613,7 @@ export component MatchesPage inherits VerticalLayout {
                 spacing: Space.md;
 
                 SeasonCell { item: Tracker.match-summary; }
-                Rectangle { horizontal-stretch: 1; }
                 for agent in Tracker.match-agents: AgentCell { item: agent; }
-                Rectangle { horizontal-stretch: 1; }
             }
         }
 
@@ -636,21 +645,25 @@ export component MatchesPage inherits VerticalLayout {
 
                 HorizontalLayout {
                     padding-left: 14px;
-                    padding-right: Space.md;
-                    spacing: Space.sm;
+                    padding-right: Space.sm;
+                    spacing: 4px;
 
                     // Portrait gutter, then the row's own column order:
                     // match, score, the two chip slots, then the numbers.
                     Rectangle { width: 44px; }
-                    ColumnLabel { col-width: 146px; text: "MATCH"; }
-                    ColumnLabel { col-width: 70px; text: "SCORE"; }
-                    Rectangle { width: 76px; }
-                    Rectangle { width: 96px; }
-                    ColumnLabel { col-width: 52px; text: "K/D"; align-right: true; }
-                    ColumnLabel { col-width: 108px; text: "K/D/A"; align-right: true; }
-                    ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
-                    ColumnLabel { col-width: 52px; text: "HS %"; align-right: true; }
-                    ColumnLabel { col-width: 52px; text: "ACS"; align-right: true; }
+                    ColumnLabel { col-width: 130px; text: "MATCH"; }
+                    ColumnLabel { col-width: 66px; text: "SCORE"; }
+                    Rectangle { width: 68px; }
+                    Rectangle { width: 86px; }
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        ColumnLabel { col-width: 52px; text: "K/D"; align-right: true; }
+                        ColumnLabel { col-width: 104px; text: "K/D/A"; align-right: true; }
+                        ColumnLabel { col-width: 58px; text: "DDΔ"; align-right: true; }
+                        ColumnLabel { col-width: 52px; text: "HS %"; align-right: true; }
+                        ColumnLabel { col-width: 52px; text: "ACS"; align-right: true; }
+                    }
                 }
             }
 
