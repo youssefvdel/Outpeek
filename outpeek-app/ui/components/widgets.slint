@@ -154,28 +154,6 @@ export component Glyph inherits Rectangle {
     }
 }
 
-/// Round index badge on a nav row. `active` deepens the fill so the number
-/// stays readable on the selected row's violet.
-export component CountChip inherits Rectangle {
-    in property <int> value: 0;
-    in property <bool> active: false;
-
-    width: 22px;
-    height: 20px;
-    border-radius: 10px;
-    background: root.active ? Theme.primary-deep : Theme.container;
-
-    Text {
-        text: root.value;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        font-family: Theme.font-mono;
-        font-size: TypeScale.micro;
-        font-weight: 700;
-        color: root.active ? Theme.ink : Theme.ink-faint;
-    }
-}
-
 /// Sidebar navigation row: a real button, flat at rest like the shipping app.
 /// Selected = full violet fill + 700 label; hover lifts one container step.
 /// `soon` keeps the same footprint, stays hollow, shows a SOON chip and takes
@@ -183,7 +161,6 @@ export component CountChip inherits Rectangle {
 export component NavItem inherits Rectangle {
     in property <string> label: "";
     in property <string> glyph: "tracker";
-    in property <int> index: 0;
     in property <bool> active: false;
     in property <bool> soon: false;
     out property <bool> has-focus: scope.has-focus;
@@ -280,12 +257,6 @@ export component NavItem inherits Rectangle {
                 color: Theme.ink-faint;
                 opacity: 0.75;
                 vertical-alignment: center;
-            }
-        }
-        if !root.soon: VCenter {
-            CountChip {
-                value: root.index;
-                active: root.active;
             }
         }
     }

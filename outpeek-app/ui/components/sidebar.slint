@@ -407,27 +407,25 @@ export component Sidebar inherits Rectangle {
             NavItem {
                 label: "Tracker";
                 glyph: "tracker";
-                index: 1;
                 active: Tracker.view == "tracker";
                 clicked => { root.navigate("tracker"); }
             }
             Rectangle { height: 2px; }
-            NavItem { label: "Store"; glyph: "store"; index: 2; soon: true; }
+            NavItem { label: "Store"; glyph: "store"; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Crosshair"; glyph: "crosshair"; index: 3; soon: true; }
+            NavItem { label: "Crosshair"; glyph: "crosshair"; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Resolution Switch"; glyph: "monitor"; index: 4; soon: true; }
+            NavItem { label: "Resolution Switch"; glyph: "monitor"; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Riot Chat"; glyph: "chat"; index: 5; soon: true; }
+            NavItem { label: "Riot Chat"; glyph: "chat"; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Pre-Picker"; glyph: "people"; index: 6; soon: true; }
+            NavItem { label: "Pre-Picker"; glyph: "people"; soon: true; }
             Rectangle { height: 2px; }
-            NavItem { label: "Accounts"; glyph: "users"; index: 7; soon: true; }
+            NavItem { label: "Accounts"; glyph: "users"; soon: true; }
             Rectangle { height: 2px; }
             NavItem {
                 label: "Settings";
                 glyph: "settings";
-                index: 8;
                 active: Tracker.view == "settings";
                 clicked => { root.navigate("settings"); }
             }
