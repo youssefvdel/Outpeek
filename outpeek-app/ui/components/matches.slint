@@ -1,7 +1,9 @@
-// Matches tab: the last games, TRN-desktop shaped — portrait, date + map, the
-// rounds score in the result colour, then the per-match numbers (K/D/A, K/D,
-// HS %, DDΔ, ACS). Every cell is pre-formatted by Rust (`MatchRowUi`), so this
-// view cannot round, re-derive or invent a value.
+// Matches tab: the TRN-website history — a top-3 agent strip, a recent-form
+// strip, then one group per day (header aggregates plus that day's rows).
+// Every cell is pre-formatted by Rust (`MatchAgentUi` / `MatchFormUi` /
+// `MatchDayUi` / `MatchRowUi`), so this view cannot round, re-derive or invent
+// a value. TRS, clutch and placement chips render only what the payload
+// reported; weapon stats have no source, so no panel shows them here either.
 //
 // A row click opens the scoreboard in place (`Tracker.select-match(id)`): the
 // detail view replaces the table, Back clears the selection and the table
@@ -9,8 +11,29 @@
 // failure is an inline error card with a retry, never a blank view.
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
-import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi } from "../state.slint";
+import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchFormUi, MatchDayUi } from "../state.slint";
 import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
+
+component StatChip inherits Rectangle {
+    in property <string> text;
+    in property <brush> chip-ink: Theme.ink;
+    in property <length> chip-width: 76px;
+    width: root.chip-width;
+    height: 24px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.line-soft;
+    Text {
+        text: root.text;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        font-weight: 600;
+        color: root.chip-ink;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
 
 component MatchLine inherits Rectangle {
     in property <MatchRowUi> item;
@@ -18,7 +41,7 @@ component MatchLine inherits Rectangle {
     background: line-touch.has-hover ? Theme.container-low : transparent;
     animate background { duration: Motion.fast; easing: ease-out; }
     accessible-role: button;
-    accessible-label: root.item.date + " " + root.item.map + " " + root.item.score;
+    accessible-label: root.item.age + " " + root.item.map + " " + root.item.score + " " + root.item.trs + " " + root.item.clutch;
     accessible-action-default => { line-touch.clicked(); }
 
     line-touch := TouchArea {
@@ -58,14 +81,14 @@ component MatchLine inherits Rectangle {
             }
         }
 
-        // Date over map: one moment, two lines, the way the desktop client
-        // stacks them.
+        // Age + mode over map: one moment, two lines, the website's own
+        // stacking. Wide enough that "2d ago // Competitive" never elides.
         VerticalLayout {
-            width: 118px;
+            width: 150px;
             spacing: 1px;
 
             Text {
-                text: root.item.date;
+                text: root.item.age == "" ? "—" : root.item.age;
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 color: Theme.ink-faint;
@@ -100,6 +123,21 @@ component MatchLine inherits Rectangle {
         }
 
         Cell { col-width: 76px; value: root.item.agent; }
+        if root.item.trs != "": VCenter {
+            StatChip {
+                text: root.item.trs;
+                chip-width: 76px;
+                chip-ink: Theme.ink;
+            }
+        }
+        if root.item.clutch != "": VCenter {
+            StatChip {
+                text: root.item.clutch;
+                chip-width: 96px;
+                // Signed by the tone itself: a lost clutch is the bad case.
+                chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
+            }
+        }
         Cell { col-width: 92px; value: root.item.kda; mono: true; align-right: true; }
         Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; }
         Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; }
@@ -115,6 +153,172 @@ component MatchLine inherits Rectangle {
         }
         Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; }
         Rectangle { horizontal-stretch: 1; }
+    }
+
+    Rectangle {
+        x: Space.md;
+        y: parent.height - 1px;
+        width: parent.width - Space.md * 2;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+}
+
+component AgentCard inherits Rectangle {
+    in property <MatchAgentUi> item;
+    horizontal-stretch: 1;
+    HorizontalLayout {
+        spacing: Space.sm;
+
+        // Portrait: the agent's own face, like the Agents tab. The tinted
+        // plate is the fallback floor when the catalogue missed.
+        VCenter {
+            Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: 10px;
+                background: Theme.primary-deep;
+                clip: true;
+
+                if root.item.art.width > 0: Image {
+                    source: root.item.art;
+                    width: 40px;
+                    height: 40px;
+                    image-fit: contain;
+                }
+                if root.item.art.width == 0: Glyph {
+                    kind: "user";
+                    size: 18px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        // Name over record over K/D.
+        VCenter {
+            VerticalLayout {
+                spacing: 1px;
+
+                Text {
+                    text: root.item.name == "" ? "—" : root.item.name;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    font-weight: 600;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.item.record == "" ? "—" : root.item.record;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.item.kd == "" ? "—" : root.item.kd;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.micro;
+                    color: Theme.ink-dim;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
+
+component FormCell inherits Rectangle {
+    in property <MatchFormUi> item;
+    horizontal-stretch: 1;
+    VerticalLayout {
+        spacing: 1px;
+
+        Text {
+            text: root.item.age == "" ? "—" : root.item.age;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: root.item.score == "" ? "—" : root.item.score;
+            font-family: Theme.font-mono;
+            font-size: TypeScale.caption;
+            font-weight: 700;
+            color: root.item.score == ""
+                ? Theme.ink-faint
+                : root.item.won ? Theme.mint : Theme.coral;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: root.item.kd == "" ? "—" : root.item.kd;
+            font-family: Theme.font-mono;
+            font-size: TypeScale.micro;
+            color: Theme.ink-dim;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+component DayHeader inherits Rectangle {
+    in property <MatchDayUi> item;
+    height: 34px;
+    background: Theme.container-low;
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            Text {
+                text: root.item.title == "" ? "—" : root.item.title;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 700;
+                color: Theme.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        VCenter {
+            Text {
+                text: root.item.wl == "" ? "—" : root.item.wl;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        // Tail order and widths mirror the table below (K/D/A, K/D, HS %,
+        // DDΔ, ACS) so the day sums sit over the columns they total. The K/D/A
+        // triple needs its own width — it never fits the table's 92 px. The
+        // chip-width spacers stand in for the rows' TRS/CLUTCH chips.
+        Rectangle { width: 76px; }
+        Rectangle { width: 96px; }
+        Cell { col-width: 150px; value: root.item.kda; mono: true; align-right: true; }
+        Cell { col-width: 52px; value: root.item.kd; mono: true; align-right: true; }
+        Cell { col-width: 52px; value: root.item.hs; mono: true; align-right: true; }
+        Cell {
+            col-width: 64px;
+            value: root.item.dda;
+            mono: true;
+            align-right: true;
+            // Signed by the number itself, like the rows below.
+            ink: root.item.dda == ""
+                ? Theme.ink-dim
+                : root.item.dda.starts-with("-") ? Theme.coral : Theme.mint;
+        }
+        Cell { col-width: 52px; value: root.item.acs; mono: true; align-right: true; }
     }
 
     Rectangle {
@@ -283,49 +487,90 @@ export component MatchesPage inherits VerticalLayout {
     // The tapped round's result line: the colour is never the only signal.
     property <string> round-tip: "";
 
-    if Tracker.match-id == "": Card {
-        pad: 0px;
-        gap: 0px;
+    if Tracker.match-id == "": VerticalLayout {
+        spacing: Space.md;
 
-        // Header row. Column widths are the row's identical numbers.
-        Rectangle {
-            height: 34px;
-            background: transparent;
-
-            HorizontalLayout {
+        // Top-3 agents this season: portrait, name, W-L record, K/D.
+        if Tracker.match-agents.length > 0: Card {
+            VerticalLayout {
                 padding-left: Space.md;
                 padding-right: Space.md;
+                padding-top: Space.sm;
+                padding-bottom: Space.sm;
                 spacing: Space.sm;
-
-                ColumnLabel { col-width: 32px; text: ""; }
-                ColumnLabel { col-width: 118px; text: "MATCH"; }
-                ColumnLabel { col-width: 64px; text: "SCORE"; }
-                ColumnLabel { col-width: 76px; text: "AGENT"; }
-                ColumnLabel { col-width: 92px; text: "K / D / A"; align-right: true; }
-                ColumnLabel { col-width: 52px; text: "K/D"; align-right: true; }
-                ColumnLabel { col-width: 52px; text: "HS %"; align-right: true; }
-                ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
-                ColumnLabel { col-width: 52px; text: "ACS"; align-right: true; }
+                ColumnLabel { text: "TOP AGENTS"; }
+                HorizontalLayout {
+                    spacing: Space.md;
+                    for agent in Tracker.match-agents: AgentCard { item: agent; }
+                }
             }
         }
 
-        if Tracker.matches.length == 0: Rectangle {
-            height: 120px;
-            background: transparent;
-
-            // The band is gone by design: the reason lives here, in the empty
-            // card, instead of a strip above the table.
-            Text {
-                text: Tracker.matches-note == "" ? "No matches yet." : Tracker.matches-note;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                color: Theme.ink-faint;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+        // Recent form: the last 8 matches, newest first.
+        if Tracker.match-form.length > 0: Card {
+            VerticalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                padding-top: Space.sm;
+                padding-bottom: Space.sm;
+                spacing: Space.sm;
+                ColumnLabel { text: "RECENT FORM"; }
+                HorizontalLayout {
+                    spacing: Space.md;
+                    for cell in Tracker.match-form: FormCell { item: cell; }
+                }
             }
         }
 
-        for entry in Tracker.matches: MatchLine { item: entry; }
+        Card {
+            pad: 0px;
+            gap: 0px;
+
+            // Header row. Column widths are the row's identical numbers.
+            Rectangle {
+                height: 34px;
+                background: transparent;
+
+                HorizontalLayout {
+                    padding-left: Space.md;
+                    padding-right: Space.md;
+                    spacing: Space.sm;
+
+                    ColumnLabel { col-width: 32px; text: ""; }
+                    ColumnLabel { col-width: 150px; text: "MATCH"; }
+                    ColumnLabel { col-width: 64px; text: "SCORE"; }
+                    ColumnLabel { col-width: 76px; text: "AGENT"; }
+                    ColumnLabel { col-width: 76px; text: "TRS"; }
+                    ColumnLabel { col-width: 96px; text: "CLUTCH"; }
+                    ColumnLabel { col-width: 92px; text: "K / D / A"; align-right: true; }
+                    ColumnLabel { col-width: 52px; text: "K/D"; align-right: true; }
+                    ColumnLabel { col-width: 52px; text: "HS %"; align-right: true; }
+                    ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
+                    ColumnLabel { col-width: 52px; text: "ACS"; align-right: true; }
+                }
+            }
+
+            if Tracker.match-days.length == 0: Rectangle {
+                height: 120px;
+                background: transparent;
+
+                // The band is gone by design: the reason lives here, in the empty
+                // card, instead of a strip above the table.
+                Text {
+                    text: Tracker.matches-note == "" ? "No matches yet." : Tracker.matches-note;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    color: Theme.ink-faint;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            for day[i] in Tracker.match-days: VerticalLayout {
+                DayHeader { item: day; }
+                for entry in Tracker.match-day-rows[i]: MatchLine { item: entry; }
+            }
+        }
     }
 
     if Tracker.match-id != "": VerticalLayout {

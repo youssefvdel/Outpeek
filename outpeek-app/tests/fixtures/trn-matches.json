@@ -19,7 +19,18 @@
       "metadata": {
        "result": "defeat",
        "agent": "569fdd95-4d10-43ab-ca70-79becc718b46",
-       "agentName": "Sage"
+       "agentName": "Sage",
+       "agentImageUrl": "https://titles.trackercdn.com/valorant-api/agents/569fdd95-4d10-43ab-ca70-79becc718b46/displayicon.png",
+       "tags": [
+        {
+         "key": "clutchLost1v1",
+         "name": "1v1 Lost",
+         "description": "Lost a 1v1 clutch",
+         "tone": "Negative",
+         "priority": 900,
+         "count": 1
+        }
+       ]
       },
       "stats": {
        "roundsWon": {
@@ -91,6 +102,22 @@
         "value": -1091,
         "displayValue": "-1,091",
         "displayType": "Number"
+       },
+       "trnPerformanceScore": {
+        "displayName": "Performance Score",
+        "metadata": {},
+        "value": 279,
+        "displayValue": "279",
+        "displayType": "Number"
+       },
+       "placement": {
+        "displayName": "placement",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 9,
+        "displayValue": "9",
+        "displayType": "Number"
        }
       }
      }
@@ -114,7 +141,18 @@
       "metadata": {
        "result": "defeat",
        "agent": "569fdd95-4d10-43ab-ca70-79becc718b46",
-       "agentName": "Sage"
+       "agentName": "Sage",
+       "agentImageUrl": "https://titles.trackercdn.com/valorant-api/agents/569fdd95-4d10-43ab-ca70-79becc718b46/displayicon.png",
+       "tags": [
+        {
+         "key": "clutch1v1",
+         "name": "1v1 Clutch",
+         "description": "Won a 1v1 clutch",
+         "tone": "Positive",
+         "priority": 920,
+         "count": 2
+        }
+       ]
       },
       "stats": {
        "roundsWon": {
@@ -185,6 +223,22 @@
         "metadata": {},
         "value": 270,
         "displayValue": "270",
+        "displayType": "Number"
+       },
+       "trnPerformanceScore": {
+        "displayName": "Performance Score",
+        "metadata": {},
+        "value": 543,
+        "displayValue": "543",
+        "displayType": "Number"
+       },
+       "placement": {
+        "displayName": "placement",
+        "displayCategory": "Combat",
+        "category": "combat",
+        "metadata": {},
+        "value": 6,
+        "displayValue": "6",
         "displayType": "Number"
        }
       }

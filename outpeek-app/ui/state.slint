@@ -16,21 +16,61 @@ export global Shell {
 
 /// One played match, pre-formatted by Rust. Every field is a string so the
 /// view cannot re-derive or invent a number; `won` only picks the colour.
-/// One match row, TRN-desktop shaped: portrait, date+map, the rounds score in
-/// the result colour, then the per-match numbers. Every field is pre-formatted;
-/// `won` only picks the score colour.
+/// One match row, TRN-website shaped: portrait, age + mode over map (+ ordinal
+/// placement when reported), the rounds score in the result colour, the TRS
+/// and clutch badge chips, then the per-match numbers. Every field is
+/// pre-formatted; `won` only picks the score colour and `clutch-bad` the chip
+/// ink. Weapon stats have no payload source, so none appear here either.
 export struct MatchRowUi {
     id: string,
+    // "Bind 9th" when a placement was reported, else the bare map.
     map: string,
-    date: string,
+    // "2d ago // Competitive" — the row's first line, owned by Rust.
+    age: string,
     score: string,
     won: bool,
     agent: string,
+    // "TRS 279" — hidden when empty.
+    trs: string,
+    // First tags[] name ("1v1 Lost") — hidden when empty.
+    clutch: string,
+    // The clutch tone was Negative: coral ink, else mint.
+    clutch-bad: bool,
     art: image,
     kda: string,
     kd: string,
     hs: string,
     dd: string,
+    acs: string,
+}
+
+/// One card of the top-3 agent strip: portrait, name, `7W - 9L (44%)`, K/D.
+/// All pre-formatted; an empty `art` draws the fallback glyph.
+export struct MatchAgentUi {
+    name: string,
+    record: string,
+    kd: string,
+    art: image,
+}
+
+/// One cell of the recent-form strip: age, rounds score, K/D. `won` picks the
+/// score colour with the row's existing result rule.
+export struct MatchFormUi {
+    age: string,
+    score: string,
+    won: bool,
+    kd: string,
+}
+
+/// One day-group header: `Nov 14 [1]` plus the day's W/L, K/D, summed K/D/A,
+/// signed damage, mean HS% and ACS. All pre-formatted by Rust.
+export struct MatchDayUi {
+    title: string,
+    wl: string,
+    kd: string,
+    kda: string,
+    dda: string,
+    hs: string,
     acs: string,
 }
 
@@ -117,6 +157,13 @@ export global Tracker {
     // Recent matches (Tracker Network). `matches-state` is ready|cached|
     // loading|empty|error and `matches-note` carries the reason/age line.
     in-out property <[MatchRowUi]> matches: [];
+    // TRN-website strips, derived from the same rows/payload as `matches`.
+    in-out property <[MatchAgentUi]> match-agents: [];
+    in-out property <[MatchFormUi]> match-form: [];
+    // Day groups: `match-days[i]` heads `match-day-rows[i]`. The two models
+    // are built together, so the indices always agree.
+    in-out property <[MatchDayUi]> match-days: [];
+    in-out property <[[MatchRowUi]]> match-day-rows: [];
     in-out property <string> matches-state: "empty";
     in-out property <string> matches-note: "No matches read yet.";
 

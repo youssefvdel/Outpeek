@@ -1167,12 +1167,16 @@ fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailVie
     t.set_match_rounds(ModelRc::new(VecModel::from(rounds)));
 }
 
-/// Push the recent-match rows into the Matches tab. The rows arrive already
-/// formatted; an absent stat is an em dash from `trn_matches`, never a zero.
+/// Push the recent-match rows plus the website strips into the Matches tab.
+/// The rows arrive already formatted; an absent stat is an em dash from
+/// `trn_matches`, never a zero. Day headers, form cells and agent cards are
+/// pre-formatted the same way — this pass only decodes art and binds models.
 fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     use outpeek_app::trn_matches::MatchRow;
     let t = ui.global::<Tracker>();
-    let any_art = view.rows.iter().any(|r| !r.art_url.is_empty());
+    let now = outpeek_app::worker::now_ms();
+    let any_art = view.rows.iter().any(|r| !r.art_url.is_empty())
+        || view.agents.iter().any(|a| !a.art_url.is_empty());
     let dir = if any_art {
         outpeek_app::assets::art_dir()
     } else {
@@ -1184,25 +1188,69 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             None => slint::Image::default(),
         }
     };
-    let rows: Vec<MatchRowUi> = view
-        .rows
+    let row = |r: &MatchRow| MatchRowUi {
+        id: r.id.clone().into(),
+        map: r.map_label().into(),
+        age: r.age_line(now).into(),
+        score: r.rounds().into(),
+        won: r.won(),
+        agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
+        trs: r.trs_chip().into(),
+        clutch: r.clutch.clone().unwrap_or_default().into(),
+        clutch_bad: r.clutch_bad,
+        art: load(&r.art_url, 96),
+        kda: r.kda().into(),
+        kd: r.kd_ratio().into(),
+        hs: r.hs_pct().into(),
+        dd: r.damage_delta_label().into(),
+        acs: r.acs().into(),
+    };
+    let rows: Vec<MatchRowUi> = view.rows.iter().map(&row).collect();
+    t.set_matches(ModelRc::new(VecModel::from(rows)));
+    let agents: Vec<MatchAgentUi> = view
+        .agents
         .iter()
-        .map(|r: &MatchRow| MatchRowUi {
-            id: r.id.clone().into(),
-            map: r.map.clone().into(),
-            date: r.date_label().into(),
-            score: r.rounds().into(),
-            won: r.won(),
-            agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
-            art: load(&r.art_url, 96),
-            kda: r.kda().into(),
-            kd: r.kd_ratio().into(),
-            hs: r.hs_pct().into(),
-            dd: r.damage_delta_label().into(),
-            acs: r.acs().into(),
+        .map(|a| MatchAgentUi {
+            name: a.name.clone().into(),
+            record: a.record.clone().into(),
+            kd: a.kd.clone().into(),
+            art: load(&a.art_url, 96),
         })
         .collect();
-    t.set_matches(ModelRc::new(VecModel::from(rows)));
+    t.set_match_agents(ModelRc::new(VecModel::from(agents)));
+    let form: Vec<MatchFormUi> = view
+        .form
+        .iter()
+        .map(|f| MatchFormUi {
+            age: f.age.clone().into(),
+            score: f.score.clone().into(),
+            won: f.won,
+            kd: f.kd.clone().into(),
+        })
+        .collect();
+    t.set_match_form(ModelRc::new(VecModel::from(form)));
+    let days: Vec<MatchDayUi> = view
+        .days
+        .iter()
+        .map(|d| MatchDayUi {
+            title: d.title.clone().into(),
+            wl: d.wl.clone().into(),
+            kd: d.kd.clone().into(),
+            kda: d.kda.clone().into(),
+            dda: d.dda.clone().into(),
+            hs: d.hs.clone().into(),
+            acs: d.acs.clone().into(),
+        })
+        .collect();
+    // One row model per day, index-aligned with `match-days`: the view loops
+    // `match-day-rows[i]` under `match-days[i]`.
+    let day_rows: Vec<ModelRc<MatchRowUi>> = view
+        .days
+        .iter()
+        .map(|d| ModelRc::new(VecModel::from(d.rows.iter().map(&row).collect::<Vec<_>>())))
+        .collect();
+    t.set_match_days(ModelRc::new(VecModel::from(days)));
+    t.set_match_day_rows(ModelRc::new(VecModel::from(day_rows)));
     t.set_matches_state(view.state.into());
     t.set_matches_note(view.message.clone().into());
 }

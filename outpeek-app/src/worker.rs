@@ -37,7 +37,7 @@ use crate::rank;
 use crate::trn;
 use crate::trn_breakdown::{self, AgentRow, MapRow};
 use crate::trn_match_detail::{self, MatchDetail};
-use crate::trn_matches::{self, MatchRow};
+use crate::trn_matches::{self, AgentStripRow, DayGroup, FormCell, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
 /// Agent select is short and round transitions are quick.
@@ -79,10 +79,18 @@ pub enum Event {
     Live(LiveView),
 }
 
-/// Rows plus the honesty label that belongs beside them.
+/// Rows plus the website strips, with the honesty label that belongs beside
+/// them. The strips derive from the same rows/payload — never a second
+/// request — so the tab can never disagree with itself.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchesView {
     pub rows: Vec<MatchRow>,
+    /// Top-3 agents by matches from the profile payload's own breakdown.
+    pub agents: Vec<AgentStripRow>,
+    /// Last 8 matches, newest first, for the recent-form strip.
+    pub form: Vec<FormCell>,
+    /// Day groups, newest day first, for the grouped history.
+    pub days: Vec<DayGroup>,
     pub state: &'static str,
     pub message: String,
 }
@@ -91,6 +99,9 @@ impl MatchesView {
     fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
         Self {
             rows: Vec::new(),
+            agents: Vec::new(),
+            form: Vec::new(),
+            days: Vec::new(),
             state,
             message: message.into(),
         }
@@ -227,12 +238,24 @@ fn trn_agent(profile: Option<&Profile>) -> Option<String> {
         .filter(|u| !u.is_empty())
 }
 
-/// Fill empty per-match portrait URLs from the agent catalogue. Returns true
-/// when at least one row gained art, so the caller republishes only then.
+/// Fill per-match portrait URLs. A payload portrait (`agentImageUrl`, seeded
+/// at parse) is downloaded through the allowlisted pipeline when its bytes are
+/// not on disk yet — the view only reads disk, so a URL never downloaded would
+/// stay a glyph. Otherwise the agent catalogue resolves the uuid. Returns true
+/// when at least one row resolved art, so the caller republishes only then. A
+/// miss keeps its URL (or emptiness) for the next frame; nothing is invented.
 async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchRow]) -> bool {
     let mut changed = false;
     for row in rows.iter_mut() {
         if !row.art_url.is_empty() {
+            let url = row.art_url.clone();
+            if art
+                .ensure_url(fetcher.clone(), &url, SystemTime::now())
+                .await
+                .is_some()
+            {
+                changed = true;
+            }
             continue;
         }
         let Some(id) = row.agent_id.as_deref().filter(|id| !id.is_empty()) else {
@@ -240,6 +263,71 @@ async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchR
         };
         if let Some(url) = art.agent_icon(fetcher.clone(), id, SystemTime::now()).await {
             row.art_url = url;
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// One Matches frame: the rows plus the website strips derived from the same
+/// rows (form = last 8, day groups) and the top-3 agent strip from the
+/// profile payload's own breakdown — never a second request.
+fn matches_frame(
+    profile: Option<&Profile>,
+    rows: Vec<MatchRow>,
+    state: &'static str,
+    message: String,
+) -> MatchesView {
+    let now = now_ms();
+    MatchesView {
+        form: trn_matches::form_strip(&rows, now),
+        days: trn_matches::group_days(&rows),
+        agents: profile
+            .map(|p| trn_matches::top_agents(&p.agents))
+            .unwrap_or_default(),
+        rows,
+        state,
+        message,
+    }
+}
+
+/// Fill portrait URLs for the rows and the agent strip through the existing
+/// catalogues. Returns true when at least one slot gained art, so the caller
+/// republishes only then. A miss stays empty; the views draw their glyphs.
+async fn fill_strip_art(
+    art: &Art,
+    fetcher: Arc<dyn Fetcher>,
+    view: &mut MatchesView,
+    profile: Option<&Profile>,
+) -> bool {
+    let mut changed = fill_match_art(art, fetcher.clone(), &mut view.rows).await;
+    let Some(profile) = profile else {
+        return changed;
+    };
+    for slot in view.agents.iter_mut() {
+        if !slot.art_url.is_empty() {
+            continue;
+        }
+        let Some(known) = profile.agents.iter().find(|b| b.key == slot.key) else {
+            continue;
+        };
+        // TRN's portrait wins, like the Agents tab; the catalogue covers the
+        // uuid rows whose payload art is absent.
+        let url = if !known.image_url.is_empty() {
+            art.ensure_url(fetcher.clone(), &known.image_url, SystemTime::now())
+                .await
+        } else {
+            None
+        };
+        let url = match url {
+            Some(url) => Some(url),
+            None => {
+                art.agent_icon(fetcher.clone(), &known.key, SystemTime::now())
+                    .await
+            }
+        };
+        if let Some(url) = url {
+            slot.art_url = url;
             changed = true;
         }
     }
@@ -777,13 +865,11 @@ where
             // already holds the last frame's own values.
             if matches.is_some() {
                 if let Some(rows) = matches.as_mut() {
-                    if fill_match_art(&art, fetcher.clone(), rows).await {
-                        let (state, message) = ("cached", String::new());
-                        publish(Event::Matches(MatchesView {
-                            rows: rows.clone(),
-                            state,
-                            message,
-                        }));
+                    let mut view =
+                        matches_frame(profile.as_ref(), rows.clone(), "cached", String::new());
+                    if fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await {
+                        *rows = view.rows.clone();
+                        publish(Event::Matches(view));
                     }
                 }
             }
@@ -992,14 +1078,11 @@ where
                         }
                         crate::boot::mark("worker:matches-net");
                         eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
-                        let mut rows = rows;
-                        fill_match_art(&art, fetcher.clone(), &mut rows).await;
-                        publish(Event::Matches(MatchesView {
-                            rows: rows.clone(),
-                            state: "ready",
-                            message: String::new(),
-                        }));
-                        matches = Some(rows);
+                        let mut view =
+                            matches_frame(profile.as_ref(), rows, "ready", String::new());
+                        fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await;
+                        matches = Some(view.rows.clone());
+                        publish(Event::Matches(view));
                     }
                     Err(e) => {
                         let (rows, state, message) = match &matches {
@@ -1019,11 +1102,12 @@ where
                                 format!("Tracker Network did not answer ({e})."),
                             ),
                         };
-                        publish(Event::Matches(MatchesView {
+                        publish(Event::Matches(matches_frame(
+                            profile.as_ref(),
                             rows,
                             state,
                             message,
-                        }));
+                        )));
                     }
                 }
             }
@@ -1097,17 +1181,19 @@ where
                 trn_matches::load_cache(&path, now_ms(), trn_matches::CACHE_TTL_MS)
             }) {
                 matches_saved_at = cache.saved_at;
-                let mut rows = cache.matches;
-                fill_match_art(&art, fetcher.clone(), &mut rows).await;
-                matches = Some(rows.clone());
-                publish(Event::Matches(MatchesView {
+                let rows = cache.matches;
+                let mut view = matches_frame(
+                    profile.as_ref(),
                     rows,
-                    state: "cached",
-                    message: format!(
+                    "cached",
+                    format!(
                         "Showing the saved list from {}.",
                         trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
                     ),
-                }));
+                );
+                fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await;
+                matches = Some(view.rows.clone());
+                publish(Event::Matches(view));
             }
         }
 
@@ -1391,6 +1477,44 @@ mod tests {
         assert_eq!(view.agents[0].name, "KAY/O");
         assert_eq!(view.agents[0].matches, "48 matches");
         assert_eq!(view.message, note, "the reason travels with the rows");
+    }
+
+    /// No cache directory on this host: `ensure_url` has nowhere to put bytes,
+    /// so a preset payload portrait resolves nothing — yet the URL is kept for
+    /// the next frame, and the catalogue is never consulted for a row that
+    /// already names its portrait.
+    #[test]
+    fn a_payload_portrait_is_kept_without_network() {
+        use crate::trn_matches::MatchRow;
+        let (art, fetcher) = art_off();
+        let url = "https://titles.trackercdn.com/valorant-api/agents/\
+                   569fdd95-4d10-43ab-ca70-79becc718b46/displayicon.png";
+        let mut rows = vec![MatchRow {
+            id: "cadcc206-9d07-4695-b792-4215ec6ef341".to_string(),
+            timestamp: "2026-11-14T09:58:26.274+00:00".to_string(),
+            mode: "Competitive".to_string(),
+            map: "Bind".to_string(),
+            season: "V26: A6".to_string(),
+            result: "defeat".to_string(),
+            agent: Some("Sage".to_string()),
+            agent_id: Some("569fdd95-4d10-43ab-ca70-79becc718b46".to_string()),
+            kills: Some(14),
+            deaths: Some(23),
+            assists: Some(7),
+            score: Some(4375),
+            rounds_won: Some(14),
+            rounds_lost: Some(16),
+            headshots: Some(12),
+            damage_delta: Some(-1091),
+            art_url: url.to_string(),
+            trs: Some(279),
+            clutch: Some("1v1 Lost".to_string()),
+            clutch_bad: true,
+            placement: Some(9),
+        }];
+        let changed = block_on(fill_match_art(&art, fetcher, &mut rows));
+        assert!(!changed, "no cache, no network: nothing resolved");
+        assert_eq!(rows[0].art_url, url, "the payload portrait wins and stays");
     }
 
     #[test]
