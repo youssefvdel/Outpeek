@@ -59,7 +59,7 @@ pub fn force_femtovg() {
 /// Nothing is committed to the repo: without files this is a no-op and the
 /// UI falls back to system fonts (see `fonts/README.md`).
 pub fn register_fonts() -> usize {
-    use slint::fontique_011::fontique;
+    use slint::fontique_012::fontique;
     let mut registered = 0usize;
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent().map(|p| p.join("fonts")) {
@@ -77,7 +77,7 @@ pub fn register_fonts() -> usize {
                     match std::fs::read(&p) {
                         Ok(bytes) => {
                             let blob = fontique::Blob::new(std::sync::Arc::new(bytes));
-                            let mut collection = slint::fontique_011::shared_collection();
+                            let mut collection = slint::fontique_012::shared_collection();
                             registered += collection.register_fonts(blob, None).len();
                         }
                         Err(e) => eprintln!("[outpeek-overlay] font {}: {e}", p.display()),

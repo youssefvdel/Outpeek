@@ -7,7 +7,7 @@
 //! ship inside the binary — no installer step, no `<exe>/fonts` directory to
 //! lose. Licences live next to the files they cover.
 
-use slint::fontique_011::fontique;
+use slint::fontique_012::fontique;
 
 /// Every bundled face. Adding a weight means adding it here AND in
 /// `tokens.slint`'s font-family list if the family changes.
@@ -51,7 +51,7 @@ pub fn register() -> usize {
     let mut registered = 0usize;
     for (name, bytes) in FACES {
         let blob = fontique::Blob::new(std::sync::Arc::new(bytes.to_vec()));
-        let mut collection = slint::fontique_011::shared_collection();
+        let mut collection = slint::fontique_012::shared_collection();
         let added = collection.register_fonts(blob, None).len();
         if added == 0 {
             eprintln!("[Outpeek] font {name}: not accepted by the collection");

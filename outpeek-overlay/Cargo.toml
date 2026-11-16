@@ -16,7 +16,7 @@ name = "outpeek-overlay"
 path = "src/main.rs"
 
 [build-dependencies]
-slint-build = "1.18"
+slint-build = "1.19"
 
 [dependencies]
 # Pinned backend: winit + FemtoVG-over-wgpu (DX12 on Windows). The OpenGL
@@ -24,12 +24,12 @@ slint-build = "1.18"
 # wglMakeCurrent, 0xC0070006), so GL is out entirely. The software renderer
 # is deliberately not compiled in (no default features) so a broken GPU path
 # fails closed instead of silently going opaque (Slint #9507/#4120).
-slint = { version = "1.18", default-features = false, features = [
+slint = { version = "1.19", default-features = false, features = [
     "backend-winit",
     "renderer-femtovg-wgpu",
     "compat-1-2",
     "raw-window-handle-06",
-    "unstable-fontique-011",
+    "unstable-fontique-012",
     # Embedded MCP server (Streamable HTTP) for UI introspection/driving.
     # Inert unless SLINT_MCP_PORT / --mcp-port is set at runtime.
     "mcp",

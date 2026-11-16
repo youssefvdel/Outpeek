@@ -17,7 +17,7 @@ name = "outpeek-app"
 path = "src/main.rs"
 
 [build-dependencies]
-slint-build = "1.18"
+slint-build = "1.19"
 
 [features]
 # Build Slint with element debug info so the embedded MCP server can address
@@ -30,7 +30,7 @@ ui-debug = []
 # One compiled UI, no copies: this crate imports the overlay's tokens through
 # build.rs include paths.
 outpeek-overlay = { path = "../outpeek-overlay" }
-slint = { version = "1.18", default-features = false, features = [
+slint = { version = "1.19", default-features = false, features = [
     "backend-winit",
     "renderer-femtovg-wgpu",
     "compat-1-2",

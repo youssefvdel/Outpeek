@@ -17,7 +17,7 @@ agents.
 
 ## Tech stack
 
-- UI: Slint 1.18 (`winit` + `femtoVG-wgpu`, DX12 on Windows), two crates.
+- UI: Slint 1.19 (`winit` + `femtoVG-wgpu`, DX12 on Windows), two crates.
 - Backend: Rust (edition 2021), Win32 via `windows-rs`, tokio runtime.
 - Data: Riot Client loopback (lockfile creds) + Tracker Network (keyless,
   rustls + HTTP/2).
