@@ -141,8 +141,11 @@ export component AppWindow inherits Window {
                     24px
                 );
                 x: parent.width - 5px;
+                // `content-y` is zero at the top and negative when scrolled, so
+                // the thumb needs the negated offset: 0 at the top, full travel
+                // at the bottom. The old sign parked the thumb mid-track.
                 y: (flick.height - self.height)
-                    * (flick.content-y / Math.max(flick.content-height - flick.height, 1px));
+                    * (-flick.content-y / Math.max(flick.content-height - flick.height, 1px));
                 border-radius: 1.5px;
                 background: Theme.line;
             }

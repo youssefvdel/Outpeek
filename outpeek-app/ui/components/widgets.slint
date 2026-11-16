@@ -391,15 +391,21 @@ export component WinCell inherits VerticalLayout {
         font-size: TypeScale.caption;
         font-weight: 600;
         color: Theme.ink;
+        horizontal-alignment: right;
         vertical-alignment: center;
     }
     Rectangle {
-        width: root.col-width - 14px;
+        // Full cell width, pinned left: the old `col-width - 14px` track was
+        // centered by the layout while the number above stayed left, so every
+        // bar read as offset from its own value. The fill starts at the same
+        // left edge the number hangs from.
+        width: root.col-width;
         height: 3px;
         border-radius: 1.5px;
         background: Theme.line;
 
         Rectangle {
+            x: 0;
             width: parent.width * root.share;
             height: parent.height;
             border-radius: 1.5px;
