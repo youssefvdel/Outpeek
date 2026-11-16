@@ -189,6 +189,28 @@ fn trn_agent(profile: Option<&Profile>) -> Option<String> {
         .filter(|u| !u.is_empty())
 }
 
+/// Fill empty per-match portrait URLs from the agent catalogue. Returns true
+/// when at least one row gained art, so the caller republishes only then.
+async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchRow]) -> bool {
+    let mut changed = false;
+    for row in rows.iter_mut() {
+        if !row.art_url.is_empty() {
+            continue;
+        }
+        let Some(id) = row.agent_id.as_deref().filter(|id| !id.is_empty()) else {
+            continue;
+        };
+        if let Some(url) = art
+            .agent_icon(fetcher.clone(), id, SystemTime::now())
+            .await
+        {
+            row.art_url = url;
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Resolve one frame of breakdown art: agent portraits come straight from the
 /// TRN row URLs (allowlist-gated inside `ensure_url`), map art comes from the
 /// valorant-api catalogue. Every miss is an empty URL; the views draw their
@@ -551,6 +573,9 @@ async fn art_frame(
             tier,
             peak_tier,
             agent_uuid: trn_agent(profile),
+            banner_url: profile
+                .map(|p| p.avatar_url.clone())
+                .filter(|url| !url.is_empty()),
         },
         SystemTime::now(),
     )
@@ -580,6 +605,8 @@ where
     let mut matches_pending = true;
     let mut matches: Option<Vec<MatchRow>> = None;
     let mut matches_saved_at: u64 = 0;
+    let mut matches_state: &'static str = "empty";
+    let mut matches_note = String::new();
     // The cache read is a first-frame read, not a per-tick one: repeating it
     // would overwrite a fresh `ready` frame with `cached` on every poll.
     let mut matches_cache_loaded = false;
@@ -623,6 +650,7 @@ where
         );
     }
 
+    crate::boot::mark("worker:start");
     publish(Event::Snapshot(snap.clone()));
     publish(Event::Rank(rank_view.clone()));
 
@@ -659,6 +687,7 @@ where
         view.state = ProfileState::Cached;
         view.message = message.clone();
         publish(Event::Profile(view));
+        crate::boot::mark("worker:cached-profile");
         cached_note = message.clone();
         publish(
             breakdown_event(
@@ -703,6 +732,17 @@ where
             // The first breakdown frame resolved art before the catalogues
             // landed; re-resolve so map cards fill in without waiting for a
             // profile refresh.
+            if !matches_note.is_empty() || matches.is_some() {
+                if let Some(rows) = matches.as_mut() {
+                    if fill_match_art(&art, fetcher.clone(), rows).await {
+                        publish(Event::Matches(MatchesView {
+                            rows: rows.clone(),
+                            state: matches_state,
+                            message: matches_note.clone(),
+                        }));
+                    }
+                }
+            }
             if profile.is_some() {
                 publish(
                     breakdown_event(
@@ -799,6 +839,7 @@ where
                             .map(Profile::to_view)
                             .unwrap_or_else(|| ProfileView::default());
                         publish(Event::Profile(view));
+                        crate::boot::mark("worker:profile-net");
                         publish(
                             breakdown_event(&art, fetcher.clone(), profile.as_ref(), "ready", "")
                                 .await,
@@ -845,6 +886,7 @@ where
                             }
                         };
                         publish(Event::Profile(view));
+                        crate::boot::mark("worker:profile-net");
                         publish(
                             breakdown_event(&art, fetcher.clone(), profile.as_ref(), state, note)
                                 .await,
@@ -880,7 +922,12 @@ where
                                 eprintln!("[trn] matches cache write failed: {e}");
                             }
                         }
+                        crate::boot::mark("worker:matches-net");
                         eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
+                        let mut rows = rows;
+                        fill_match_art(&art, fetcher.clone(), &mut rows).await;
+                        matches_state = "ready";
+                        matches_note = String::new();
                         matches = Some(rows.clone());
                         publish(Event::Matches(MatchesView {
                             rows,
@@ -906,6 +953,8 @@ where
                                 format!("Tracker Network did not answer ({e})."),
                             ),
                         };
+                        matches_state = state;
+                        matches_note = message.clone();
                         publish(Event::Matches(MatchesView {
                             rows,
                             state,
@@ -924,14 +973,18 @@ where
                 trn_matches::load_cache(&path, now_ms(), trn_matches::CACHE_TTL_MS)
             }) {
                 matches_saved_at = cache.saved_at;
-                matches = Some(cache.matches.clone());
+                let mut rows = cache.matches;
+                fill_match_art(&art, fetcher.clone(), &mut rows).await;
+                matches_state = "cached";
+                matches_note = format!(
+                    "Showing the saved list from {}.",
+                    trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
+                );
+                matches = Some(rows.clone());
                 publish(Event::Matches(MatchesView {
-                    rows: cache.matches,
-                    state: "cached",
-                    message: format!(
-                        "Showing the saved list from {}.",
-                        trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
-                    ),
+                    rows,
+                    state: matches_state,
+                    message: matches_note.clone(),
                 }));
             }
         }

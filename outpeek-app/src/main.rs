@@ -62,19 +62,24 @@ fn main() {
     // touches Slint's font collection, which creates that platform — so a flag
     // parsed after it never starts the MCP server.
     let initial_tab = parse_args();
+    outpeek_app::boot::mark("args");
     // Pin the one proven renderer before any window exists.
     outpeek_overlay::force_femtovg();
     // Embedded OFL fonts: without them Windows falls back to Segoe UI and the
     // whole design's metrics change. Must run before the first window.
     let faces = outpeek_app::fonts::register();
+    outpeek_app::boot::mark(&format!("fonts ({faces} faces)"));
     eprintln!("[Outpeek] fonts registered: {faces} face(s)");
     // Copy-only migrations, exactly once per launch (same rules as the Tauri app).
     paths::migrate_previous_app_data();
     paths::migrate_legacy_data();
+    outpeek_app::boot::mark("migrations");
     // Plain-text flags are retired: fold overlay_renderer.txt into settings.json once.
     let _ = outpeek_app::settings::migrate_legacy_default();
+    outpeek_app::boot::mark("settings");
 
     let app = AppWindow::new().expect("outpeek-app: app window");
+    outpeek_app::boot::mark("app-window");
     // Open where the last session was left: window size, shell view and tab.
     // `--tab` (debug/CI) still wins over the remembered tab, and a stored value
     // this build does not understand falls back instead of opening a dead page.
@@ -87,11 +92,10 @@ fn main() {
         // replaced by the layout's preferred size.
         let weak = app.as_weak();
         let _ = slint::invoke_from_event_loop(move || {
+            outpeek_app::boot::mark("first-event");
             if let Some(app) = weak.upgrade() {
-                app.window().set_size(slint::LogicalSize::new(
-                    width as f32,
-                    height as f32,
-                ));
+                app.window()
+                    .set_size(slint::LogicalSize::new(width as f32, height as f32));
             }
         });
     }
@@ -107,6 +111,7 @@ fn main() {
     // loop starts, so the first tick retries once.
     // The HUD window is created hidden here; a failure is a notice in the
     // tracker, never a startup failure (the tracker must still work).
+    outpeek_app::boot::mark("overlay-window:start");
     let (overlay, overlay_error) = match OverlayWindow::new() {
         Ok(overlay) => {
             let _ = overlay.hide();
@@ -121,6 +126,7 @@ fn main() {
     if let Some(overlay) = &overlay {
         outpeek_overlay::hud::style_hidden(overlay, outpeek_overlay::roles::WindowRole::Overlay);
     }
+    outpeek_app::boot::mark("overlay-window:done");
     // PRESENT defaults to 1 for the standalone binary's first-frame contract;
     // the app owns the gate, and it starts closed. Without this the first
     // facts frame would show the HUD before the foreground check ran.
@@ -172,6 +178,7 @@ fn main() {
     let chrome = Rc::new(ChromeState::default());
 
     wire_callbacks(&app, &overlay, &enabled, &foreground, &flags, &chrome);
+    outpeek_app::boot::mark("callbacks");
 
     // Both background threads start on the first loop iteration:
     // `invoke_from_event_loop` is only accepted once the loop is running.
@@ -231,6 +238,7 @@ fn main() {
         });
     }
 
+    outpeek_app::boot::mark("run");
     let run = app.run();
     // Shutdown: the HUD is the first thing that must go.
     stop.store(true, Ordering::Relaxed);
@@ -899,11 +907,17 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     t.set_score_kast(view.kast.clone().into());
     t.set_score_acs(view.acs.clone().into());
     t.set_score_dda(view.dda_round.clone().into());
+    t.set_win_pctile(view.win_pctile.clone().into());
+    t.set_kd_pctile(view.kd_pctile.clone().into());
+    t.set_hs_pctile(view.hs_pctile.clone().into());
+    t.set_dpr_pctile(view.dpr_pctile.clone().into());
+    t.set_round_win_pctile(view.round_win_pctile.clone().into());
+    t.set_kast_pctile(view.kast_pctile.clone().into());
+    t.set_acs_pctile(view.acs_pctile.clone().into());
+    t.set_dda_pctile(view.dda_pctile.clone().into());
     // The header says where the numbers came from while a profile is loaded.
     let subtitle = match view.state {
-        ProfileState::Ready | ProfileState::Cached if !view.handle.is_empty() => {
-            format!("Tracker Network · {} · read-only", view.handle)
-        }
+        ProfileState::Ready | ProfileState::Cached if !view.handle.is_empty() => view.handle.clone(),
         _ => String::new(),
     };
     t.set_profile_subtitle(subtitle.into());
@@ -914,21 +928,34 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
 fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     use outpeek_app::trn_matches::MatchRow;
     let t = ui.global::<Tracker>();
+    let any_art = view.rows.iter().any(|r| !r.art_url.is_empty());
+    let dir = if any_art {
+        outpeek_app::assets::art_dir()
+    } else {
+        None
+    };
+    let load = |url: &str, edge: u32| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) => outpeek_overlay::image_cache::load_from_scaled(dir, url, edge),
+            None => slint::Image::default(),
+        }
+    };
     let rows: Vec<MatchRowUi> = view
         .rows
         .iter()
         .map(|r: &MatchRow| MatchRowUi {
             id: r.id.clone().into(),
             map: r.map.clone().into(),
-            mode: r.mode.clone().into(),
-            result: r.result_label().into(),
-            agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
-            kda: r.kda().into(),
-            dd: r.damage_delta_label().into(),
-            score: r.score_label().into(),
-            rounds: r.rounds().into(),
             date: r.date_label().into(),
+            score: r.rounds().into(),
             won: r.won(),
+            agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
+            art: load(&r.art_url, 96),
+            kda: r.kda().into(),
+            kd: r.kd_ratio().into(),
+            hs: r.hs_pct().into(),
+            dd: r.damage_delta_label().into(),
+            acs: r.acs().into(),
         })
         .collect();
     t.set_matches(ModelRc::new(VecModel::from(rows)));
@@ -1063,7 +1090,10 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
 /// draws its fallback, exactly as it did before any art existed.
 fn apply_art(ui: &AppWindow, art: &ArtView) {
     let t = ui.global::<Tracker>();
-    let dir = if art.rank_crest.is_empty() && art.peak_crest.is_empty() && art.agent_icon.is_empty()
+    let dir = if art.rank_crest.is_empty()
+        && art.peak_crest.is_empty()
+        && art.agent_icon.is_empty()
+        && art.banner.is_empty()
     {
         // Nothing to load: clearing the slots must not create directories.
         None
@@ -1079,6 +1109,7 @@ fn apply_art(ui: &AppWindow, art: &ArtView) {
     t.set_rank_crest(load(&art.rank_crest));
     t.set_peak_crest(load(&art.peak_crest));
     t.set_agent_icon(load(&art.agent_icon));
+    t.set_player_banner(load(&art.banner));
     // The catalogue's name/role beat the payload's hints, but an empty art
     // frame (no network, agent not in the catalogue) must not erase the names
     // the profile frame already set.

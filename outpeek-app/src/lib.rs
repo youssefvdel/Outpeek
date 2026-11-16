@@ -36,6 +36,7 @@ pub mod account;
 pub mod app_window;
 pub mod assets;
 pub mod badges;
+pub mod boot;
 pub mod fonts;
 pub mod hud;
 pub mod identity;
