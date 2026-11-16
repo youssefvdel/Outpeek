@@ -10,7 +10,7 @@
 
 import { Theme, TypeScale, Space } from "tokens.slint";
 import { Tracker } from "../state.slint";
-import { Card, Chip, Glyph, HCenter, PanelTitle, SelectBox, VCenter } from "widgets.slint";
+import { Card, Chip, Glyph, HCenter, PanelTitle, VCenter } from "widgets.slint";
 
 /// Honest "what this needs" note. One size below Caption so a missing value
 /// reads as a footnote instead of a second headline.
@@ -37,51 +37,6 @@ component CardTitle inherits Text {
 }
 
 // ---------------------------------------------------------------------------
-// Filter row
-// ---------------------------------------------------------------------------
-
-component FilterRow inherits Rectangle {
-    height: 49px;
-    background: transparent;
-
-    HorizontalLayout {
-        spacing: Space.lg;
-
-        VerticalLayout {
-            spacing: 4px;
-            PanelTitle { text: "PLAYLIST"; }
-            SelectBox { value: "Any"; label: "Playlist filter — not ported"; }
-        }
-
-        VerticalLayout {
-            spacing: 4px;
-            PanelTitle { text: "ACT"; }
-            SelectBox { value: "All acts"; box-width: 152px; label: "Act filter — not ported"; }
-        }
-
-        Rectangle { horizontal-stretch: 1; }
-
-        HorizontalLayout {
-            spacing: Space.sm;
-
-            // One honest line: where the numbers came from, or why there are
-            // none. Never a second, invented filter state.
-            Text {
-                text: Tracker.profile-message == ""
-                    ? "Playlist and act filters are not ported yet."
-                    : Tracker.profile-message;
-                font-family: Theme.font-body;
-                font-size: TypeScale.micro;
-                color: Theme.ink-faint;
-                vertical-alignment: center;
-                overflow: elide;
-                max-width: 520px;
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Four headline numerals
 // ---------------------------------------------------------------------------
 
@@ -90,6 +45,9 @@ component StatCard inherits Card {
     in property <string> value: "—";
     in property <bool> known: false;
     in property <string> need: "";
+    // Where this account sits among the players TRN tracks ("BOTTOM 10%").
+    // Empty when the read carried no percentile: no label is drawn at all.
+    in property <string> percentile: "";
 
     pad: 12px;
     gap: 2px;
@@ -105,6 +63,12 @@ component StatCard inherits Card {
         font-weight: 800;
         color: root.known ? Theme.ink : Theme.ink-faint;
         letter-spacing: -0.5px;
+    }
+    if root.percentile != "": Text {
+        text: root.percentile;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
     }
     Need { text: root.need; }
 }
@@ -553,26 +517,33 @@ component PreviousActs inherits Card {
         CardTitle { text: "Previous Acts"; horizontal-stretch: 1; }
     }
 
+    // Only the acts the read reported: Tracker Network currently sends one
+    // peak-rating segment, and two empty slots read as missing data. One column
+    // then takes the whole card.
     HorizontalLayout {
         height: 105px;
         spacing: Space.md;
 
-        ActColumn {
+        if Tracker.act1-label != "": ActColumn {
             when: Tracker.act1-label;
             value: Tracker.act1-value;
-            // The peak crest the profile read resolved; the other columns have
-            // no act to prove a tier for, so they keep the drawn glyph.
             crest: Tracker.peak-crest;
             horizontal-stretch: 1;
         }
-        Rectangle { width: 1px; background: Theme.line-soft; }
-        ActColumn {
+        if Tracker.act1-label != "" && Tracker.act2-label != "": Rectangle {
+            width: 1px;
+            background: Theme.line-soft;
+        }
+        if Tracker.act2-label != "": ActColumn {
             when: Tracker.act2-label;
             value: Tracker.act2-value;
             horizontal-stretch: 1;
         }
-        Rectangle { width: 1px; background: Theme.line-soft; }
-        ActColumn {
+        if Tracker.act2-label != "" && Tracker.act3-label != "": Rectangle {
+            width: 1px;
+            background: Theme.line-soft;
+        }
+        if Tracker.act3-label != "": ActColumn {
             when: Tracker.act3-label;
             value: Tracker.act3-value;
             horizontal-stretch: 1;
@@ -585,6 +556,7 @@ component PreviousActs inherits Card {
 component ScoreMetric inherits VerticalLayout {
     in property <string> label: "";
     in property <string> value: "";
+    in property <string> percentile: "";
     spacing: 1px;
 
     PanelTitle { text: root.label; letter-spacing: 0.8px; }
@@ -594,6 +566,12 @@ component ScoreMetric inherits VerticalLayout {
         font-size: TypeScale.title;
         font-weight: 700;
         color: root.value == "" ? Theme.ink-faint : Theme.ink;
+    }
+    if root.percentile != "": Text {
+        text: root.percentile;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
     }
 }
 
@@ -690,10 +668,10 @@ component TrackerScore inherits Card {
     HorizontalLayout {
         height: 34px;
         spacing: Space.md;
-        ScoreMetric { label: "ROUND WIN %"; value: Tracker.score-round-win-pct; horizontal-stretch: 1; }
-        ScoreMetric { label: "KAST"; value: Tracker.score-kast; horizontal-stretch: 1; }
-        ScoreMetric { label: "ACS"; value: Tracker.score-acs; horizontal-stretch: 1; }
-        ScoreMetric { label: "DDA/ROUND"; value: Tracker.score-dda; horizontal-stretch: 1; }
+        ScoreMetric { label: "ROUND WIN %"; value: Tracker.score-round-win-pct; percentile: Tracker.round-win-pctile; horizontal-stretch: 1; }
+        ScoreMetric { label: "KAST"; value: Tracker.score-kast; percentile: Tracker.kast-pctile; horizontal-stretch: 1; }
+        ScoreMetric { label: "ACS"; value: Tracker.score-acs; percentile: Tracker.acs-pctile; horizontal-stretch: 1; }
+        ScoreMetric { label: "DDA/ROUND"; value: Tracker.score-dda; percentile: Tracker.dda-pctile; horizontal-stretch: 1; }
     }
 }
 
@@ -708,7 +686,38 @@ export component TrackerPage inherits VerticalLayout {
     padding-bottom: 20px;
     spacing: Space.md;
 
-    FilterRow {}
+    // A status line that only exists when something is not ready. The account
+    // read is normally invisible; when it is cached or failed, one chip and the
+    // reason say so without a permanent caption on the page.
+    if Tracker.profile-state != "ready": HorizontalLayout {
+        height: 22px;
+        spacing: Space.sm;
+
+        Rectangle { horizontal-stretch: 1; }
+        VCenter {
+            Chip {
+                text: Tracker.profile-state == "cached"
+                    ? "SAVED"
+                    : Tracker.profile-state == "error"
+                        ? "OFFLINE"
+                        : Tracker.profile-state == "loading" ? "READING" : "NOT READ";
+                tone: Tracker.profile-state == "cached"
+                    ? "neutral"
+                    : Tracker.profile-state == "error" ? "error" : "off";
+                pad-x: 7px;
+                pad-y: 1px;
+            }
+        }
+        Text {
+            text: Tracker.profile-message;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
+            overflow: elide;
+            max-width: 620px;
+        }
+    }
 
     HorizontalLayout {
         height: 96px;
@@ -717,6 +726,7 @@ export component TrackerPage inherits VerticalLayout {
             label: "WIN %";
             value: Tracker.win-pct == "" ? "—" : Tracker.win-pct;
             known: Tracker.win-pct != "";
+            percentile: Tracker.win-pctile;
             need: Tracker.win-pct == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
@@ -724,6 +734,7 @@ export component TrackerPage inherits VerticalLayout {
             label: "K/D";
             value: Tracker.kd == "" ? "—" : Tracker.kd;
             known: Tracker.kd != "";
+            percentile: Tracker.kd-pctile;
             need: Tracker.kd == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
@@ -731,6 +742,7 @@ export component TrackerPage inherits VerticalLayout {
             label: "HEADSHOT %";
             value: Tracker.hs-pct == "" ? "—" : Tracker.hs-pct;
             known: Tracker.hs-pct != "";
+            percentile: Tracker.hs-pctile;
             need: Tracker.hs-pct == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
@@ -738,6 +750,7 @@ export component TrackerPage inherits VerticalLayout {
             label: "DAMAGE/ROUND";
             value: Tracker.dmg-round == "" ? "—" : Tracker.dmg-round;
             known: Tracker.dmg-round != "";
+            percentile: Tracker.dpr-pctile;
             need: Tracker.dmg-round == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }

@@ -3,9 +3,9 @@
 // is height-locked to the window chrome beside it; below it sit the player
 // card, the eight nav rows and the active-display footer.
 //
-// Tracker and Settings are real views. The other six rows keep the same
-// geometry but stay hollow with a SOON chip: they are not ported, so they are
-// not clickable.
+// Only the views that exist are in the rail. A row for an unported surface is a
+// promise the UI cannot keep, so Store, Crosshair and the rest are added when
+// they land, not greyed out before.
 
 import { Theme, TypeScale, Space, Shape } from "tokens.slint";
 import { Shell, Tracker } from "../state.slint";
@@ -117,6 +117,17 @@ component PlayerCard inherits Rectangle {
         width: root.width;
         height: 62px;
         background: @linear-gradient(118deg, Theme.primary-dim 0%, Theme.primary-deep 58%, Theme.container 100%);
+        clip: true;
+
+        // The account's own playercard art, when the profile read carried one.
+        // The gradient stays underneath as the fallback: a missing banner is a
+        // colour, never a hole.
+        if Tracker.player-banner.width > 0: Image {
+            width: parent.width;
+            height: parent.height;
+            source: Tracker.player-banner;
+            image-fit: cover;
+        }
     }
 
     // Fade the banner into the card body; no hard seam, no extra colour.
@@ -410,18 +421,6 @@ export component Sidebar inherits Rectangle {
                 active: Tracker.view == "tracker";
                 clicked => { root.navigate("tracker"); }
             }
-            Rectangle { height: 2px; }
-            NavItem { label: "Store"; glyph: "store"; soon: true; }
-            Rectangle { height: 2px; }
-            NavItem { label: "Crosshair"; glyph: "crosshair"; soon: true; }
-            Rectangle { height: 2px; }
-            NavItem { label: "Resolution Switch"; glyph: "monitor"; soon: true; }
-            Rectangle { height: 2px; }
-            NavItem { label: "Riot Chat"; glyph: "chat"; soon: true; }
-            Rectangle { height: 2px; }
-            NavItem { label: "Pre-Picker"; glyph: "people"; soon: true; }
-            Rectangle { height: 2px; }
-            NavItem { label: "Accounts"; glyph: "users"; soon: true; }
             Rectangle { height: 2px; }
             NavItem {
                 label: "Settings";

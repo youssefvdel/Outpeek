@@ -209,11 +209,7 @@ export component LivePage inherits VerticalLayout {
                 Glyph { kind: "tracker"; size: 14px; stroke: Theme.ink-faint; }
             }
             Text {
-                text: Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame"
-                    ? (Tracker.live-note == ""
-                        ? "Live lobby · read-only · names, agents and public ranks"
-                        : Tracker.live-note)
-                    : Tracker.live-note;
+                text: Tracker.live-note;
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
                 color: Theme.ink-dim;

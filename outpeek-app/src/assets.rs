@@ -740,6 +740,9 @@ pub struct ArtView {
     pub agent_icon: String,
     pub agent_name: String,
     pub agent_role: String,
+    /// The account's playercard art for the rail banner. TRN ships it with the
+    /// profile; it is fetched and cached like every other piece of row art.
+    pub banner: String,
 }
 
 /// What the worker asks the cache for.
@@ -751,6 +754,8 @@ pub struct ArtRequest {
     pub peak_tier: i64,
     /// Agent uuid, when a read produced one.
     pub agent_uuid: Option<String>,
+    /// The profile's playercard art URL, when the read carried one.
+    pub banner_url: Option<String>,
 }
 
 /// The catalogue plus the bytes cache: everything the poller needs for art.
@@ -951,6 +956,11 @@ impl Art {
         if let Some(url) = peak_url {
             if cache.ensure(fetcher.clone(), &url, now).await.usable() {
                 view.peak_crest = url;
+            }
+        }
+        if let Some(url) = req.banner_url.as_deref().filter(|u| !u.is_empty()) {
+            if cache.ensure(fetcher.clone(), url, now).await.usable() {
+                view.banner = url.to_string();
             }
         }
         if let Some(uuid) = req.agent_uuid.as_deref() {
@@ -1417,6 +1427,7 @@ mod tests {
                     tier: 3,
                     peak_tier: 27,
                     agent_uuid: Some("E370FA57-4757-3604-3648-499E1F642D3F".into()),
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )
@@ -1434,6 +1445,7 @@ mod tests {
                     tier: 3,
                     peak_tier: 3,
                     agent_uuid: None,
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )
@@ -1448,6 +1460,7 @@ mod tests {
                     tier: 99,
                     peak_tier: 1,
                     agent_uuid: None,
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )
@@ -1462,6 +1475,7 @@ mod tests {
                     tier: 3,
                     peak_tier: 0,
                     agent_uuid: None,
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )
@@ -1545,6 +1559,7 @@ mod tests {
             tier: 3,
             peak_tier: 0,
             agent_uuid: None,
+            banner_url: None,
         };
         let view = first
             .view(online.clone(), &request, SystemTime::now())
@@ -1562,7 +1577,9 @@ mod tests {
         assert_eq!(report.tiers, 4, "the tiers came from disk");
         assert_eq!(report.agents, 2);
         let calls_before = offline.calls();
-        let view = second.view(offline.clone(), &request, SystemTime::now()).await;
+        let view = second
+            .view(offline.clone(), &request, SystemTime::now())
+            .await;
         assert_eq!(
             view.rank_crest, "https://media/n/3/l.png",
             "a cached crest must resolve without the network"
@@ -1575,9 +1592,7 @@ mod tests {
         let tmp = TmpDir::new("catalogue-corrupt");
         std::fs::write(tmp.path().join(CATALOGUE_FILE), b"{not json").unwrap();
         let mut art = Art::new(Some(tmp.path().to_path_buf()));
-        let report = art
-            .ensure_catalogue(FakeFetcher::offline(), 1_000)
-            .await;
+        let report = art.ensure_catalogue(FakeFetcher::offline(), 1_000).await;
         assert_eq!((report.tiers, report.agents, report.maps), (0, 0, 0));
         assert!(!report.error.is_empty(), "the failure is reported");
     }
@@ -1596,6 +1611,7 @@ mod tests {
                     tier: 21,
                     peak_tier: 24,
                     agent_uuid: Some("e370fa57-4757-3604-3648-499e1f642d3f".into()),
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )

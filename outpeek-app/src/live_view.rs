@@ -318,17 +318,29 @@ mod tests {
     #[test]
     fn a_rank_cell_is_a_fact_or_one_of_three_honest_states() {
         // A read tier plus RR.
-        assert_eq!(rank_cells(Some(rank(21, 64))), ("Ascendant 1".to_string(), "64 RR".to_string()));
+        assert_eq!(
+            rank_cells(Some(rank(21, 64))),
+            ("Ascendant 1".to_string(), "64 RR".to_string())
+        );
         // Riot's own hidden flag wins over the tier it also reported.
         let mut hidden = rank(21, 64);
         hidden.hidden = true;
-        assert_eq!(rank_cells(Some(hidden)), ("RANK HIDDEN".to_string(), String::new()));
+        assert_eq!(
+            rank_cells(Some(hidden)),
+            ("RANK HIDDEN".to_string(), String::new())
+        );
         // A successful read with tier 0 is Unrated — never "not read".
-        assert_eq!(rank_cells(Some(rank(0, 0))), ("UNRATED".to_string(), String::new()));
+        assert_eq!(
+            rank_cells(Some(rank(0, 0))),
+            ("UNRATED".to_string(), String::new())
+        );
         // No read at all is its own state.
         assert_eq!(rank_cells(None), ("NOT READ".to_string(), String::new()));
         // RR of zero is not printed as "0 RR" — there is nothing to show.
-        assert_eq!(rank_cells(Some(rank(21, 0))), ("Ascendant 1".to_string(), String::new()));
+        assert_eq!(
+            rank_cells(Some(rank(21, 0))),
+            ("Ascendant 1".to_string(), String::new())
+        );
     }
 
     #[test]
@@ -370,7 +382,11 @@ mod tests {
         };
         let sizes = party_sizes(&matched);
         assert_eq!(sizes.get("p1"), Some(&2));
-        assert_eq!(sizes.get("p2"), Some(&1), "a solo party is counted but not shown");
+        assert_eq!(
+            sizes.get("p2"),
+            Some(&1),
+            "a solo party is counted but not shown"
+        );
         assert!(!sizes.contains_key(""));
     }
 
@@ -402,7 +418,10 @@ mod tests {
             attempts += 1;
             None
         });
-        assert_eq!(attempts, 1, "a fresh failure is not retried on the next poll");
+        assert_eq!(
+            attempts, 1,
+            "a fresh failure is not retried on the next poll"
+        );
         let _ = failing.rank("p", now + RANK_RETRY + Duration::from_secs(1), || {
             attempts += 1;
             None

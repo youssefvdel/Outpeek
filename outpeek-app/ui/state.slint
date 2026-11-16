@@ -16,18 +16,22 @@ export global Shell {
 
 /// One played match, pre-formatted by Rust. Every field is a string so the
 /// view cannot re-derive or invent a number; `won` only picks the colour.
+/// One match row, TRN-desktop shaped: portrait, date+map, the rounds score in
+/// the result colour, then the per-match numbers. Every field is pre-formatted;
+/// `won` only picks the score colour.
 export struct MatchRowUi {
     id: string,
     map: string,
-    mode: string,
-    result: string,
-    agent: string,
-    kda: string,
-    dd: string,
-    score: string,
-    rounds: string,
     date: string,
+    score: string,
     won: bool,
+    agent: string,
+    art: image,
+    kda: string,
+    kd: string,
+    hs: string,
+    dd: string,
+    acs: string,
 }
 
 /// One agent row on the Agents tab, pre-formatted by Rust from the same
@@ -190,6 +194,14 @@ export global Tracker {
     in-out property <string> score-kast: "";
     in-out property <string> score-acs: "";
     in-out property <string> score-dda: "";
+    in-out property <string> win-pctile: "";
+    in-out property <string> kd-pctile: "";
+    in-out property <string> hs-pctile: "";
+    in-out property <string> dpr-pctile: "";
+    in-out property <string> round-win-pctile: "";
+    in-out property <string> kast-pctile: "";
+    in-out property <string> acs-pctile: "";
+    in-out property <string> dda-pctile: "";
 
     // Game art, fetched and cached at runtime (never bundled: see assets.rs).
     // An empty image means "no art cached", and the UI draws its own fallback
@@ -197,6 +209,9 @@ export global Tracker {
     in-out property <image> rank-crest;
     in-out property <image> peak-crest;
     in-out property <image> agent-icon;
+    // The account's playercard art for the rail banner (TRN `avatarUrl`),
+    // cached like every other piece of art. Empty = the painted gradient.
+    in-out property <image> player-banner;
     // Top Agent fact. Empty until a read reports one (match details own it), and
     // the card then shows its honest empty state.
     in-out property <string> agent-name: "";

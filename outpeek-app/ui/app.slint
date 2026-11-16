@@ -93,11 +93,9 @@ export component AppWindow inherits Window {
                 icon: Tracker.view == "settings" ? "settings" : "tracker";
                 show-tabs: Tracker.view == "tracker";
                 select-tab(tab) => { root.select-tab(tab); }
-                subtitle: Tracker.view == "settings"
-                    ? "What this build really does — and what it does not"
-                    : (Tracker.profile-subtitle != ""
-                        ? Tracker.profile-subtitle
-                        : "Live from the Riot Client loopback — read-only");
+                // The subtitle is the account, nothing else: the page names
+                // itself and the icons say what the rows are.
+                subtitle: Tracker.view == "settings" ? "" : Tracker.profile-subtitle;
             }
 
             // One scroll surface for both views: the tracker grid and the

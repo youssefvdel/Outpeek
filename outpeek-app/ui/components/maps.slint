@@ -127,8 +127,7 @@ export component MapsPage inherits VerticalLayout {
     spacing: Space.md;
 
     SourceBand {
-        live-text: (Tracker.profile-season == "" ? "Current act" : Tracker.profile-season)
-            + " — the rows Tracker Network returns, not a full map pool";
+        live-text: Tracker.profile-season;
         note: Tracker.breakdown-note;
         state: Tracker.breakdown-state;
     }

@@ -43,6 +43,11 @@ pub struct MatchRow {
     pub rounds_lost: Option<u64>,
     pub headshots: Option<u64>,
     pub damage_delta: Option<i64>,
+    /// Cached agent portrait URL, filled by the worker (catalogue lookup on
+    /// `agent_id`). Empty = catalogue missed; the row draws the glyph.
+    /// `default` so caches written before this field still load.
+    #[serde(default)]
+    pub art_url: String,
 }
 
 impl MatchRow {
@@ -57,6 +62,37 @@ impl MatchRow {
 
     pub fn won(&self) -> bool {
         self.result.eq_ignore_ascii_case("victory")
+    }
+
+    /// `0.61` — kills ÷ deaths for this match only. Either side missing, or no
+    /// deaths recorded, is an em dash: a ratio needs both numbers.
+    pub fn kd_ratio(&self) -> String {
+        match (self.kills, self.deaths) {
+            (Some(k), Some(d)) if d > 0 => format!("{:.2}", k as f64 / d as f64),
+            _ => String::new(),
+        }
+    }
+
+    /// `29%` — headshots ÷ kills for this match only (the desktop client's own
+    /// per-match column). Missing on either side is empty, never 0%.
+    pub fn hs_pct(&self) -> String {
+        match (self.headshots, self.kills) {
+            (Some(head), Some(kills)) if kills > 0 => {
+                format!("{:.0}%", head as f64 * 100.0 / kills as f64)
+            }
+            _ => String::new(),
+        }
+    }
+
+    /// Per-match combat score ÷ rounds played, rounded — the desktop client's
+    /// ACS column (a 4,375 total over 30 rounds reads 146). Either side missing
+    /// is empty.
+    pub fn acs(&self) -> String {
+        let rounds = self.rounds_won.unwrap_or(0) + self.rounds_lost.unwrap_or(0);
+        match (self.score, rounds) {
+            (Some(score), r) if r > 0 => (score as f64 / r as f64).round().to_string(),
+            _ => String::new(),
+        }
     }
 
     /// `14 / 23 / 7` when all three are present; partial data keeps its dashes.
@@ -201,6 +237,7 @@ pub fn parse(payload: &Value) -> Option<Vec<MatchRow>> {
                 rounds_lost: num(&stats, "roundsLost"),
                 headshots: num(&stats, "headshots"),
                 damage_delta: signed(&stats, "damageDelta"),
+                art_url: String::new(),
             })
         })
         .take(MAX_ROWS)
@@ -289,6 +326,34 @@ mod tests {
         assert_eq!(r[0].rounds_won, Some(14));
         assert_eq!(r[0].rounds_lost, Some(16));
         assert_eq!(r[0].damage_delta, Some(-1091));
+    }
+
+    #[test]
+    fn per_match_derived_columns_need_both_sides() {
+        let base = rows().remove(0);
+        // Bind: 14 / 23 / 7, 12 headshots, score 4,375 over 30 rounds.
+        assert_eq!(base.kd_ratio(), "0.61");
+        assert_eq!(base.hs_pct(), "86%");
+        assert_eq!(base.acs(), "146");
+        let missing = MatchRow {
+            kills: None,
+            deaths: Some(3),
+            headshots: Some(1),
+            score: None,
+            rounds_won: None,
+            rounds_lost: None,
+            ..base.clone()
+        };
+        assert_eq!(missing.kd_ratio(), "");
+        assert_eq!(missing.hs_pct(), "");
+        assert_eq!(missing.acs(), "");
+        // No deaths recorded is not a division by zero, it is no ratio.
+        let no_deaths = MatchRow {
+            kills: Some(5),
+            deaths: Some(0),
+            ..base
+        };
+        assert_eq!(no_deaths.kd_ratio(), "");
     }
 
     #[test]

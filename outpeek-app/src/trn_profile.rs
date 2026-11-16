@@ -71,6 +71,28 @@ pub struct SeasonStats {
     pub kast: Option<f64>,
     pub acs: Option<f64>,
     pub dda_round: Option<f64>,
+    /// Where this account sits among the players TRN tracks (0–100). The
+    /// desktop client prints it under the headline numbers ("Bottom 10%",
+    /// "Top 11%"); it is a rank among players, never a second value.
+    pub win_pctile: Option<f64>,
+    pub kd_pctile: Option<f64>,
+    pub hs_pctile: Option<f64>,
+    pub dpr_pctile: Option<f64>,
+    pub rounds_win_pctile: Option<f64>,
+    pub kast_pctile: Option<f64>,
+    pub acs_pctile: Option<f64>,
+    pub dda_pctile: Option<f64>,
+}
+
+/// "Top 10%" / "Bottom 15%" from a 0–100 percentile, the desktop client's own
+/// words. At or above the middle it is "Top"; below, "Bottom". Absent or
+/// non-finite stays empty: no percentile, no label.
+pub(crate) fn percentile_label(value: Option<f64>) -> String {
+    match value.filter(|v| v.is_finite()) {
+        Some(p) if p >= 50.0 => format!("TOP {:.0}%", 100.0 - p),
+        Some(p) => format!("BOTTOM {:.0}%", p),
+        None => String::new(),
+    }
 }
 
 /// One agent row. `uuid` is the segment key, which is what `assets` resolves a
@@ -94,6 +116,10 @@ pub struct AgentPick {
 pub struct Profile {
     pub handle: String,
     pub country: String,
+    /// The account's playercard art (`platformInfo.avatarUrl`), fetched through
+    /// the same allowlisted cache as crests and portraits. One URL, no data.
+    #[serde(default)]
+    pub avatar_url: String,
     pub season_id: String,
     /// Full season name from `metadata.seasons` ("Season 26 Act 6").
     pub season_name: String,
@@ -187,6 +213,14 @@ impl Profile {
             kast: percent(s.kast),
             acs: decimal(s.acs, 0),
             dda_round: decimal(s.dda_round, 0),
+            win_pctile: percentile_label(s.win_pctile),
+            kd_pctile: percentile_label(s.kd_pctile),
+            hs_pctile: percentile_label(s.hs_pctile),
+            dpr_pctile: percentile_label(s.dpr_pctile),
+            round_win_pctile: percentile_label(s.rounds_win_pctile),
+            kast_pctile: percentile_label(s.kast_pctile),
+            acs_pctile: percentile_label(s.acs_pctile),
+            dda_pctile: percentile_label(s.dda_pctile),
             rank_tier: self.rank.as_ref().and_then(|r| r.tier),
             peak_tier: self.peak.as_ref().and_then(|r| r.tier),
         }
@@ -289,6 +323,14 @@ pub struct ProfileView {
     pub kast: String,
     pub acs: String,
     pub dda_round: String,
+    pub win_pctile: String,
+    pub kd_pctile: String,
+    pub hs_pctile: String,
+    pub dpr_pctile: String,
+    pub round_win_pctile: String,
+    pub kast_pctile: String,
+    pub acs_pctile: String,
+    pub dda_pctile: String,
     /// Tier ids the art pipeline resolves crests from.
     pub rank_tier: Option<i64>,
     pub peak_tier: Option<i64>,
@@ -323,6 +365,12 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
 
     let handle = data
         .pointer("/platformInfo/platformUserHandle")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let avatar_url = data
+        .pointer("/platformInfo/avatarUrl")
         .and_then(Value::as_str)
         .unwrap_or("")
         .trim()
@@ -366,6 +414,7 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
 
     Ok(Profile {
         handle,
+        avatar_url,
         country,
         season_id,
         season_name,
@@ -447,7 +496,21 @@ fn season_stats(stats: &Value) -> SeasonStats {
         kast: stat_f64(stats, "kAST"),
         acs: stat_f64(stats, "scorePerRound"),
         dda_round: stat_f64(stats, "damageDeltaPerRound"),
+        win_pctile: stat_pctile(stats, "matchesWinPct"),
+        kd_pctile: stat_pctile(stats, "kDRatio"),
+        hs_pctile: stat_pctile(stats, "headshotsPercentage"),
+        dpr_pctile: stat_pctile(stats, "damagePerRound"),
+        rounds_win_pctile: stat_pctile(stats, "roundsWinPct"),
+        kast_pctile: stat_pctile(stats, "kAST"),
+        acs_pctile: stat_pctile(stats, "scorePerRound"),
+        dda_pctile: stat_pctile(stats, "damageDeltaPerRound"),
     }
+}
+
+/// The `percentile` sibling of a stat object. Missing or non-numeric is
+/// `None`: some stats never carry one, and that is a state, not a zero.
+fn stat_pctile(stats: &Value, key: &str) -> Option<f64> {
+    stats.get(key)?.get("percentile")?.as_f64()
 }
 
 /// A rank stat object: `metadata.tierName` is TRN's label, and the tier id is
@@ -745,10 +808,34 @@ mod tests {
     }
 
     #[test]
+    fn percentiles_read_as_the_desktop_clients_top_bottom_words() {
+        assert_eq!(percentile_label(Some(15.0)), "BOTTOM 15%");
+        assert_eq!(percentile_label(Some(90.0)), "TOP 10%");
+        assert_eq!(percentile_label(Some(50.0)), "TOP 50%");
+        assert_eq!(percentile_label(None), "");
+        assert_eq!(percentile_label(Some(f64::NAN)), "");
+        // The live fixture carries the same percentiles the desktop client
+        // prints under its headline numbers.
+        let view = profile().to_view();
+        assert_eq!(view.win_pctile, "BOTTOM 15%");
+        assert_eq!(view.kd_pctile, "BOTTOM 11%");
+        assert_eq!(view.hs_pctile, "TOP 10%");
+        assert_eq!(view.dpr_pctile, "BOTTOM 10%");
+        assert_eq!(view.round_win_pctile, "BOTTOM 27%");
+        assert_eq!(view.kast_pctile, "BOTTOM 15%");
+        assert_eq!(view.acs_pctile, "BOTTOM 9%");
+        assert_eq!(view.dda_pctile, "BOTTOM 11%");
+    }
+
+    #[test]
     fn the_view_renders_the_same_read_without_inventing_zeros() {
         let view = profile().to_view();
         assert_eq!(view.state, ProfileState::Ready);
         assert_eq!(view.handle, "lil ga7ed#zngr");
+        // The playercard art travels with the profile; the banner has one URL.
+        let avatar = profile().avatar_url;
+        assert!(avatar.ends_with("/displayicon.png"));
+        assert!(avatar.contains("/playercards/"));
         assert_eq!(view.season, "Season 26 Act 6");
         assert_eq!(view.matches, "85 matches");
         assert_eq!(view.win_pct, "41.2%");

@@ -266,7 +266,9 @@ mod tests {
         }
         // The empty state is one quiet word, not a badge on every card: a pill
         // per card was decoration. Nothing is drawn once the read succeeded.
-        assert!(card.contains(r#"text: Tracker.profile-state == "loading" ? "reading" : "not read""#));
+        assert!(
+            card.contains(r#"text: Tracker.profile-state == "loading" ? "reading" : "not read""#)
+        );
         assert!(!card.contains("Chip {"), "no badge in the combat card");
     }
 
