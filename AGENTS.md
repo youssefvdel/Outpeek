@@ -94,6 +94,57 @@ General:
 - `ROADMAP.md` records verified dead-ends. Read it before re-researching.
 - Keep changes minimal; do not reformat unrelated files.
 
+## UI fidelity — the highest-priority rule in this repo
+
+The tracker's UI is a **pixel match of the Tracker Network desktop client**,
+rendered in Outpeek's dark-violet theme. The reference is not a mood board: it
+is the spec. Every change to a data surface is judged against it, and "it
+compiles" or "it renders" is not evidence of anything.
+
+The reference screenshots are committed in `docs/ui-reference/` (read its
+README for which crop pins what), and the measured values are recorded inline in
+the `.slint` files (row heights, column widths, type steps). When a measurement
+is missing, measure the committed screenshot instead of guessing.
+
+### Measured baseline (Matches surface, from the 1475 px reference)
+
+| Element | Value |
+| --- | --- |
+| Match row | 66 px tall, 3 px result spine on the left, 44 px portrait |
+| Day band | 45 px, date at 14 px/700, day totals at caption size |
+| Round score | 18 px mono/700, result colour |
+| Numeric cells | 14 px mono/600, right-aligned, 10 px gutter in the tail |
+| Table gutters | 4 px; header labels micro/600 |
+| Form cell | 74 px, 3 px result bar at the bottom |
+| Strip | 62 px season cell + three agent cells, each with a win bar |
+
+### Non-negotiables before saying a UI change is done
+
+1. **Look at the built window.** `cargo build --features ui-debug`, run with
+   `--mcp-port`, `take_screenshot`, and read the image. A change nobody
+   screenshotted is unverified.
+2. **Check the minimum size, not just the comfortable one.** The shell's floor
+   is `min-width 1280` / `min-height 720` and `main.rs` clamps a restored size
+   to it. Screenshot at that floor: nothing may clip, collide, or elide.
+3. **No fixed widths that can overrun a row.** Cells share the row
+   (`horizontal-stretch` + `min-width`); a row of fixed-width cells is how the
+   last agent cell got clipped. If a `width` is unavoidable, the row must still
+   fit the floor arithmetic — write the sum in a comment.
+4. **Header, rows and day bands agree.** Column order and widths come from one
+   place: K/D, K/D/A, DDΔ, HS %, ACS. A label may never sit over a different
+   column's numbers.
+5. **Bars anchor left.** `x: 0` plus a clamped share; a centred fill reads as a
+   different value.
+6. **Numbers never touch.** A value and the value beside it need a visible
+   gutter; if two numbers read as one, the tail gets its own layout.
+7. **No invented data, no invented chrome.** Empty is an em dash. A chip that
+   names a state appears only when the state needs explaining.
+8. **Portraits and art never collapse a row.** A missing image draws the glyph
+   at the same size the image would occupy.
+
+Ship the screenshot with the change. If a detail is off by a pixel step
+(4 px vs 8 px), it is still off.
+
 ## Do NOT touch
 
 - Generated: `outpeek-app/target/`, `outpeek-overlay/target/`,
