@@ -64,9 +64,6 @@ component FilterRow inherits Rectangle {
         HorizontalLayout {
             spacing: Space.sm;
 
-            VCenter {
-                Chip { text: "SOON"; tone: "off"; pad-x: 7px; pad-y: 1px; }
-            }
             // One honest line: where the numbers came from, or why there are
             // none. Never a second, invented filter state.
             Text {
@@ -216,15 +213,6 @@ component CombatHighlights inherits Card {
         height: 18px;
         spacing: Space.sm;
         CardTitle { text: "Combat Highlights"; horizontal-stretch: 1; }
-        VCenter {
-            Chip {
-                text: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
-                    ? "THIS ACT" : "NOT READ";
-                tone: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
-                    ? "neutral" : "off";
-                pad-y: 1px;
-            }
-        }
     }
 
     HighlightRow {
@@ -439,15 +427,6 @@ component Accuracy inherits Card {
         height: 18px;
         spacing: Space.sm;
         CardTitle { text: "Accuracy"; horizontal-stretch: 1; }
-        VCenter {
-            Chip {
-                text: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
-                    ? "THIS ACT" : "NOT READ";
-                tone: Tracker.profile-state == "ready" || Tracker.profile-state == "cached"
-                    ? "neutral" : "off";
-                pad-y: 1px;
-            }
-        }
     }
 
     HorizontalLayout {
@@ -493,6 +472,9 @@ component ActColumn inherits VerticalLayout {
     // ranks glyph: a missing emblem must not collapse the column.
     in property <image> crest;
     spacing: 2px;
+    // The act's own label, crest and value are one group: centre them in the
+    // card instead of leaving the slack under the last line.
+    alignment: center;
 
     PanelTitle {
         text: root.when == "" ? "—" : root.when;
@@ -524,11 +506,6 @@ component ActColumn inherits VerticalLayout {
         }
     }
 
-    PanelTitle {
-        text: "PEAK RATING";
-        letter-spacing: 0.8px;
-        horizontal-alignment: center;
-    }
     Text {
         text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-display;
@@ -537,13 +514,6 @@ component ActColumn inherits VerticalLayout {
         color: root.value == "" ? Theme.ink-faint : Theme.ink;
         horizontal-alignment: center;
         overflow: elide;
-    }
-    Text {
-        text: root.value == "" ? "not read" : "";
-        font-family: Theme.font-body;
-        font-size: TypeScale.micro;
-        color: Theme.ink-faint;
-        horizontal-alignment: center;
     }
 }
 
@@ -555,9 +525,6 @@ component PreviousActs inherits Card {
         height: 18px;
         spacing: Space.sm;
         CardTitle { text: "Previous Acts"; horizontal-stretch: 1; }
-        VCenter {
-            Chip { text: "COMPETITIVE HISTORY"; tone: "off"; pad-y: 1px; }
-        }
     }
 
     HorizontalLayout {
@@ -724,28 +691,28 @@ export component TrackerPage inherits VerticalLayout {
             label: "WIN %";
             value: Tracker.win-pct == "" ? "—" : Tracker.win-pct;
             known: Tracker.win-pct != "";
-            need: Tracker.win-pct == "" ? "Not reported for this act." : "";
+            need: Tracker.win-pct == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
         StatCard {
             label: "K/D";
             value: Tracker.kd == "" ? "—" : Tracker.kd;
             known: Tracker.kd != "";
-            need: Tracker.kd == "" ? "Not reported for this act." : "";
+            need: Tracker.kd == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
         StatCard {
             label: "HEADSHOT %";
             value: Tracker.hs-pct == "" ? "—" : Tracker.hs-pct;
             known: Tracker.hs-pct != "";
-            need: Tracker.hs-pct == "" ? "Not reported for this act." : "";
+            need: Tracker.hs-pct == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
         StatCard {
             label: "DAMAGE/ROUND";
             value: Tracker.dmg-round == "" ? "—" : Tracker.dmg-round;
             known: Tracker.dmg-round != "";
-            need: Tracker.dmg-round == "" ? "Not reported for this act." : "";
+            need: Tracker.dmg-round == "" ? (Tracker.profile-state == "loading" ? "Reading Tracker Network…" : "Not reported for this act.") : "";
             horizontal-stretch: 1;
         }
     }

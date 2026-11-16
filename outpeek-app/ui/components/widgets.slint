@@ -271,11 +271,15 @@ export component NavItem inherits Rectangle {
             opacity: root.soon ? 0.7 : 1;
         }
         if root.soon: VCenter {
-            Chip {
-                text: "SOON";
-                tone: "off";
-                pad-x: 7px;
-                pad-y: 1px;
+            // Seven identical pills read as decoration. The row is already dim
+            // and unclickable; one quiet word says the rest.
+            Text {
+                text: "soon";
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                opacity: 0.75;
+                vertical-alignment: center;
             }
         }
         if !root.soon: VCenter {
@@ -394,7 +398,10 @@ export component PanelTitle inherits Text {
 /// uses, so a header can never drift away from its column.
 export component ColumnLabel inherits Text {
     in property <length> col-width: 80px;
+    // Numeric columns sit over right-aligned numbers, so their header does too.
+    in property <bool> align-right: false;
     width: root.col-width;
+    horizontal-alignment: root.align-right ? right : left;
     font-family: Theme.font-body;
     font-size: TypeScale.micro;
     font-weight: 600;
@@ -408,11 +415,13 @@ export component ColumnLabel inherits Text {
 export component Cell inherits Text {
     in property <length> col-width: 80px;
     in property <string> value: "";
+    in property <bool> align-right: false;
     in property <brush> ink: Theme.ink-dim;
     in property <int> weight: 500;
     in property <bool> mono: false;
     width: root.col-width;
     text: root.value == "" ? "—" : root.value;
+    horizontal-alignment: root.align-right ? right : left;
     font-family: root.mono ? Theme.font-mono : Theme.font-body;
     font-size: TypeScale.caption;
     font-weight: root.weight;

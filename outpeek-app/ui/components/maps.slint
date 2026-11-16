@@ -35,7 +35,9 @@ component MapCard inherits Card {
     // reads as an inset rather than a square pasted over the card corner.
     Rectangle {
         height: 64px;
-        border-radius: Shape.sm;
+        // Concentric with the card: outer radius minus the card's padding, so
+        // the art plate reads as inset rather than as a second, rounder box.
+        border-radius: Shape.md - Space.sm;
         background: Theme.container-low;
         clip: true;
 
@@ -125,9 +127,8 @@ export component MapsPage inherits VerticalLayout {
     spacing: Space.md;
 
     SourceBand {
-        live-text: "Maps reported by Tracker Network for "
-            + (Tracker.profile-season == "" ? "the current act" : Tracker.profile-season)
-            + " — the rows its endpoint returns, not a full map pool";
+        live-text: (Tracker.profile-season == "" ? "Current act" : Tracker.profile-season)
+            + " — the rows Tracker Network returns, not a full map pool";
         note: Tracker.breakdown-note;
         state: Tracker.breakdown-state;
     }

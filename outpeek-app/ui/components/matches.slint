@@ -65,18 +65,25 @@ component MatchLine inherits Rectangle {
         Cell { col-width: 120px; value: root.item.map; ink: Theme.ink; weight: 600; }
         VCenter { ResultChip { label: root.item.result; won: root.item.won; } }
         AgentCell { value: root.item.agent; }
-        Cell { col-width: 86px; value: root.item.kda; mono: true; }
+        Cell { col-width: 86px; value: root.item.kda; mono: true; align-right: true; }
         Cell {
             col-width: 64px;
             value: root.item.dd;
             mono: true;
+            align-right: true;
             // Signed by the number itself: a delta over zero is the good case.
             ink: root.item.dd == ""
                 ? Theme.ink-dim
                 : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
         }
-        Cell { col-width: 64px; value: root.item.score; mono: true; }
-        Cell { col-width: 56px; value: root.item.rounds; mono: true; ink: Theme.ink-faint; }
+        Cell { col-width: 64px; value: root.item.score; mono: true; align-right: true; }
+        Cell {
+            col-width: 56px;
+            value: root.item.rounds;
+            mono: true;
+            align-right: true;
+            ink: Theme.ink-faint;
+        }
     }
 
     Rectangle {
@@ -161,10 +168,10 @@ export component MatchesPage inherits VerticalLayout {
                 ColumnLabel { col-width: 74px; text: "RESULT"; }
                 // Same flexible floor as the row's agent cell.
                 ColumnLabel { col-width: 84px; text: "AGENT"; horizontal-stretch: 1; }
-                ColumnLabel { col-width: 86px; text: "K / D / A"; }
-                ColumnLabel { col-width: 64px; text: "DDΔ"; }
-                ColumnLabel { col-width: 64px; text: "SCORE"; }
-                ColumnLabel { col-width: 56px; text: "ROUNDS"; }
+                ColumnLabel { col-width: 86px; text: "K / D / A"; align-right: true; }
+                ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
+                ColumnLabel { col-width: 64px; text: "SCORE"; align-right: true; }
+                ColumnLabel { col-width: 56px; text: "ROUNDS"; align-right: true; }
             }
         }
 
