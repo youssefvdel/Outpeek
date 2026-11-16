@@ -16,7 +16,11 @@ fn main() {
     if let Ok(target) = std::env::var("TARGET") {
         println!("cargo::rustc-env=OUTPEEK_TARGET={target}");
     }
+    // Edition 1.19: `if`/`for` children are sized like plain children and a
+    // state-only property keeps its default. Opted in deliberately — it is the
+    // behaviour every new Slint release documents going forward.
     let config = slint_build::CompilerConfiguration::new()
+        .with_edition((1, 19))
         .with_include_paths(vec![std::path::PathBuf::from("../outpeek-overlay/ui")]);
     slint_build::compile_with_config("ui/app.slint", config)
         .expect("outpeek-app: ui/app.slint must compile");
