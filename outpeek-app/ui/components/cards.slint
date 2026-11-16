@@ -36,12 +36,11 @@ component CardTitle inherits Text {
     vertical-alignment: center;
 }
 
-/// Playlist / Act filter boxes: static display of the queue + season the
-/// numbers belong to (TRN desktop puts these above the headline numerals).
-/// Not buttons: there is one queue and one season per read, so there is
-/// nothing to pick. Playlist is always the competitive read Rust filters;
-/// Act binds to Tracker.profile-season and shows an em dash until a read
-/// reports one — never a guessed season.
+/// Act filter box: static display of the season the numbers belong to (TRN
+/// desktop puts these above the headline numerals). Not a button: one act per
+/// read, so there is nothing to pick. Binds to Tracker.profile-season and shows
+/// an em dash until a read reports one — never a guessed season. Playlist has
+/// its own dropdown component below: the payload carries four season queues.
 component FilterBox inherits Rectangle {
     in property <string> label: "";
     in property <string> value: "";
@@ -68,6 +67,143 @@ component FilterBox inherits Rectangle {
                 font-size: TypeScale.caption;
                 font-weight: 600;
                 color: root.known ? Theme.ink : Theme.ink-faint;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+/// PLAYLIST dropdown head: the same 38px box language as FilterBox, plus a
+/// chevron because it opens. Built from Card/Chip/Glyph primitives on purpose:
+/// no std-widgets ComboBox import, so the dark theme can never drift. Space /
+/// Return toggle it; picking an option calls Tracker.select-playlist (Rust
+/// owns the value, re-parses in memory, persists).
+component PlaylistBox inherits Rectangle {
+    in property <string> label: "";
+    in property <string> value: "";
+    in property <bool> known: false;
+    in property <bool> open: false;
+    out property <bool> has-focus: scope.has-focus;
+    callback toggled();
+
+    height: 38px;
+    border-radius: Shape.sm;
+    background: root.open ? Theme.container-high : Theme.container;
+    border-width: Shape.stroke;
+    border-color: root.open ? Theme.primary-dim : Theme.line-soft;
+
+    accessible-role: button;
+    accessible-label: root.label + ": " + (root.value == "" ? "not read" : root.value);
+    accessible-action-default => { touch.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+
+    scope := FocusScope {
+        x: 0;
+        width: 0; // Tab-focusable, but clicks must not land here.
+
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if root.has-focus: Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        border-radius: Shape.sm - 1px;
+        border-width: 2px;
+        border-color: Theme.primary;
+        background: transparent;
+    }
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            PanelTitle { text: root.label; letter-spacing: 1px; }
+        }
+        VCenter {
+            Text {
+                text: root.value == "" ? "—" : root.value;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 600;
+                color: root.known ? Theme.ink : Theme.ink-faint;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+        VCenter {
+            Glyph {
+                kind: "chevron-down";
+                size: 14px;
+                stroke: Theme.ink-dim;
+            }
+        }
+    }
+}
+
+/// One PLAYLIST option row: a real button, flat at rest, wash when selected.
+/// The caller binds `pid` to Tracker.playlists[idx] and the label to
+/// Tracker.playlist-labels[idx] — ids and labels stay in one order.
+component PlaylistOption inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> selected: false;
+    out property <bool> has-focus: scope.has-focus;
+    callback picked();
+
+    height: 30px;
+    border-radius: Shape.sm;
+    background: root.selected
+        ? Theme.primary-wash
+        : touch.has-hover ? Theme.container-high : transparent;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { touch.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(); }
+    }
+
+    scope := FocusScope {
+        x: 0;
+        width: 0;
+
+        key-pressed(event) => {
+            if (event.text == Key.Space || event.text == Key.Return) {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+
+        VCenter {
+            Text {
+                text: root.label;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: root.selected ? 700 : 500;
+                color: root.selected ? Theme.primary : Theme.ink-dim;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
                 overflow: elide;
             }
         }
@@ -734,6 +870,10 @@ export component TrackerPage inherits VerticalLayout {
     padding-bottom: 20px;
     spacing: Space.md;
 
+    // Transient UI state only: whether the PLAYLIST options list is open.
+    // The selected value itself is Rust-owned (Tracker.playlist, like `tab`).
+    property <bool> playlist-open: false;
+
     // A status line that only exists when something is not ready. The account
     // read is normally invisible; when it is cached or failed, one chip and the
     // reason say so without a permanent caption on the page.
@@ -768,19 +908,23 @@ export component TrackerPage inherits VerticalLayout {
     }
 
     // Playlist / Act selectors, TRN-desktop shaped: two boxes side by side
-    // above the headline numerals, left-aligned. Display only — one queue and
-    // one season per read, so there is nothing to pick. Act binds to
-    // Tracker.profile-season and shows an em dash until a read reports one.
+    // above the headline numerals, left-aligned. PLAYLIST is a real dropdown
+    // over exactly the four season playlists the payload carries; a pick
+    // re-parses the last body in memory (no refetch) and persists.
     HorizontalLayout {
         height: 38px;
         spacing: Space.md;
 
-        FilterBox {
+        PlaylistBox {
             label: "PLAYLIST";
-            value: "Competitive";
-            known: true;
+            value: Tracker.playlist-label;
+            known: Tracker.playlist-label != "";
+            open: playlist-open;
+            toggled => { playlist-open = !playlist-open; }
             width: 210px;
         }
+        // ACT stays a label: TRN sends a single act per profile read, so there
+        // is nothing to pick.
         FilterBox {
             label: "ACT";
             value: Tracker.profile-season;
@@ -789,6 +933,24 @@ export component TrackerPage inherits VerticalLayout {
         }
 
         Rectangle { horizontal-stretch: 1; }
+    }
+
+    // PLAYLIST options: the four payload playlists, theme-matched list from
+    // Card primitives (no std-widgets ComboBox). Pushes content down while open
+    // rather than floating over the headline cards — no guessed overlay math.
+    if playlist-open: Card {
+        pad: 6px;
+        gap: 2px;
+        width: 210px;
+
+        for pid[idx] in Tracker.playlists: PlaylistOption {
+            label: Tracker.playlist-labels[idx];
+            selected: Tracker.playlist == pid;
+            picked => {
+                Tracker.select-playlist(pid);
+                playlist-open = false;
+            }
+        }
     }
 
     HorizontalLayout {
@@ -833,15 +995,15 @@ export component TrackerPage inherits VerticalLayout {
     HorizontalLayout {
         height: 176px;
         spacing: Space.md;
-        CombatHighlights { horizontal-stretch: 4; }
-        TopAgent { horizontal-stretch: 5; }
-        Accuracy { horizontal-stretch: 5; }
+        CombatHighlights { horizontal-stretch: 1; }
+        TopAgent { horizontal-stretch: 1; }
+        Accuracy { horizontal-stretch: 1; }
     }
 
     HorizontalLayout {
         height: 165px;
         spacing: Space.md;
-        PreviousActs { horizontal-stretch: 2; }
-        TrackerScore { horizontal-stretch: 5; }
+        PreviousActs { horizontal-stretch: 1; }
+        TrackerScore { horizontal-stretch: 1; }
     }
 }

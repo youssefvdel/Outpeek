@@ -141,6 +141,21 @@ export global Tracker {
     in-out property <string> profile-matches: "";
     // Page-header subtitle while a profile is loaded (Rust owns the wording).
     in-out property <string> profile-subtitle: "";
+    // Playlist the Overview season frame shows ("competitive" | "deathmatch" |
+    // "swiftplay" | "skirmish2v2"). Rust owns it like `tab`: the dropdown
+    // offers exactly the four season playlists the payload carries, and the
+    // worker re-parses the last body in memory when it changes.
+    in-out property <string> playlist: "competitive";
+    // Display label for `playlist` ("Competitive" … "2v2"), resolved by Rust
+    // so the view never maps an id to the wrong words.
+    in-out property <string> playlist-label: "Competitive";
+    // The dropdown's options, ids and labels in the same order. Fixed at four:
+    // no unrated segment exists in the payload, so none is offered.
+    in-out property <[string]> playlists: ["competitive", "deathmatch", "swiftplay", "skirmish2v2"];
+    in-out property <[string]> playlist-labels: ["Competitive", "Deathmatch", "Swiftplay", "2v2"];
+    // Overview → Rust: the playlist picked in the PLAYLIST dropdown. Rust
+    // validates (unknown → competitive), re-parses in memory and persists.
+    callback select-playlist(string);
 
     // Four headline numerals.
     in-out property <string> win-pct: "";

@@ -106,6 +106,17 @@ fn main() {
     if initial_tab.is_none() {
         app.global::<Tracker>().set_view(stored.start_view().into());
     }
+    // Restore the playlist before the worker starts so the first network frame
+    // already shows it; the cached boot frame stays competitive until then.
+    let boot_playlist = load_last_playlist();
+    app.global::<Tracker>()
+        .set_playlist(boot_playlist.clone().into());
+    app.global::<Tracker>().set_playlist_label(
+        outpeek_app::trn_profile::playlist_label(&boot_playlist)
+            .unwrap_or("Competitive")
+            .into(),
+    );
+    apply_playlist_options(&app);
     // Frame styling is best-effort and logged: a refused DWM attribute costs a
     // cosmetic detail, never the app. The HWND can be absent before the event
     // loop starts, so the first tick retries once.
@@ -136,6 +147,9 @@ fn main() {
     let foreground = Arc::new(AtomicBool::new(false));
     let stop = Arc::new(AtomicBool::new(false));
     let flags = Arc::new(Flags::default());
+    if let Ok(mut slot) = flags.playlist.lock() {
+        *slot = boot_playlist;
+    }
 
     // Boot the chrome from the persisted toggle so the first frame is honest.
     let t = app.global::<Tracker>();
@@ -388,6 +402,7 @@ fn load_enabled() -> bool {
 /// Persist the shell view. Cheap (a few hundred bytes) and only on a real
 /// change: a click that lands on the same view must not rewrite the file.
 fn save_last_view(view: &str) {
+    let keep_playlist = load_last_playlist_raw();
     let mut settings = outpeek_app::settings::load_default();
     if settings.last_view == view {
         return;
@@ -396,10 +411,12 @@ fn save_last_view(view: &str) {
     if let Err(e) = outpeek_app::settings::save_default(&settings) {
         eprintln!("[{PRODUCT_NAME}] could not save the last view: {e}");
     }
+    restore_playlist_key(keep_playlist);
 }
 
 /// Persist the tracker tab, same rule.
 fn save_last_tab(tab: &str) {
+    let keep_playlist = load_last_playlist_raw();
     let mut settings = outpeek_app::settings::load_default();
     if settings.last_tab == tab {
         return;
@@ -407,6 +424,58 @@ fn save_last_tab(tab: &str) {
     settings.last_tab = tab.to_string();
     if let Err(e) = outpeek_app::settings::save_default(&settings) {
         eprintln!("[{PRODUCT_NAME}] could not save the last tab: {e}");
+    }
+    restore_playlist_key(keep_playlist);
+}
+
+/// Playlist persistence: one `last_playlist` key inside settings.json, the
+/// same store as `last_tab`/`last_view`. `settings.rs` is owned outside this
+/// pass, so this merges the key into the existing JSON instead of extending
+/// `AppSettings` — and the tab/view savers above restore it across their
+/// rewrites (they serialize the struct, which would otherwise drop it).
+fn load_last_playlist_raw() -> Option<String> {
+    let dir = outpeek_app::paths::app_data_dir()?;
+    let bytes = std::fs::read(dir.join("settings.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value
+        .get("last_playlist")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+/// The playlist to open: the remembered one when it is one of the four the
+/// payload carries, Competitive otherwise.
+fn load_last_playlist() -> String {
+    load_last_playlist_raw()
+        .filter(|p| outpeek_app::trn_profile::is_known_playlist(p))
+        .unwrap_or_else(|| outpeek_app::trn_profile::DEFAULT_PLAYLIST.to_string())
+}
+
+fn save_last_playlist(playlist: &str) {
+    let Some(dir) = outpeek_app::paths::app_data_dir() else {
+        return;
+    };
+    let path = dir.join("settings.json");
+    let mut value: serde_json::Value = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_else(|| serde_json::Value::Object(Default::default()));
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "last_playlist".to_string(),
+            serde_json::Value::from(playlist),
+        );
+    }
+    let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".to_string());
+    if let Err(e) = outpeek_app::account::write_atomic(&path, text.as_bytes()) {
+        eprintln!("[{PRODUCT_NAME}] could not save the last playlist: {e}");
+    }
+}
+
+/// Re-merge a playlist key a struct-serializing save just dropped.
+fn restore_playlist_key(keep: Option<String>) {
+    if let Some(playlist) = keep {
+        save_last_playlist(&playlist);
     }
 }
 
@@ -514,6 +583,37 @@ fn wire_callbacks(
         let flags = flags.clone();
         app.on_refresh_rank(move || {
             flags.refresh_rank.store(true, Ordering::Relaxed);
+        });
+    }
+
+    // PLAYLIST dropdown: Rust owns the value like select-tab. Unknown ids fall
+    // back to competitive; the worker re-parses the last body in memory (no
+    // refetch) and the choice persists beside last_tab/last_view.
+    {
+        let app_weak = app.as_weak();
+        let flags = flags.clone();
+        app.global::<Tracker>().on_select_playlist(move |choice| {
+            let id = choice.as_str();
+            let id = if outpeek_app::trn_profile::is_known_playlist(id) {
+                id.to_string()
+            } else {
+                outpeek_app::trn_profile::DEFAULT_PLAYLIST.to_string()
+            };
+            if let Ok(mut slot) = flags.playlist.lock() {
+                *slot = id.clone();
+            }
+            flags.playlist_pending.store(true, Ordering::Relaxed);
+            save_last_playlist(&id);
+            if let Some(app) = app_weak.upgrade() {
+                // Optimistic: the box label follows the click at once; the
+                // worker republish lands the numbers on its next tick.
+                app.global::<Tracker>().set_playlist(id.clone().into());
+                app.global::<Tracker>().set_playlist_label(
+                    outpeek_app::trn_profile::playlist_label(&id)
+                        .unwrap_or("Competitive")
+                        .into(),
+                );
+            }
         });
     }
 
@@ -856,6 +956,22 @@ fn apply_rank(ui: &AppWindow, view: &RankView) {
     t.set_peak_label(view.peak_label.clone().into());
 }
 
+/// The PLAYLIST dropdown's fixed options, from the parser's own table so Rust
+/// and the view can never disagree about what is offered.
+fn apply_playlist_options(ui: &AppWindow) {
+    let t = ui.global::<Tracker>();
+    let ids: Vec<slint::SharedString> = outpeek_app::trn_profile::PLAYLISTS
+        .iter()
+        .map(|(id, _)| slint::SharedString::from(*id))
+        .collect();
+    let labels: Vec<slint::SharedString> = outpeek_app::trn_profile::PLAYLISTS
+        .iter()
+        .map(|(_, label)| slint::SharedString::from(*label))
+        .collect();
+    t.set_playlists(ModelRc::new(VecModel::from(ids)));
+    t.set_playlist_labels(ModelRc::new(VecModel::from(labels)));
+}
+
 /// Push one Tracker Network profile frame into every Overview slot.
 ///
 /// The provider (worker) already formatted the strings and left `""` where a
@@ -866,6 +982,13 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     t.set_profile_message(view.message.clone().into());
     t.set_profile_handle(view.handle.clone().into());
     t.set_profile_season(view.season.clone().into());
+    t.set_playlist(view.playlist.clone().into());
+    t.set_playlist_label(
+        outpeek_app::trn_profile::playlist_label(&view.playlist)
+            .unwrap_or("Competitive")
+            .into(),
+    );
+    apply_playlist_options(ui);
     t.set_profile_matches(view.matches.clone().into());
     t.set_win_pct(view.win_pct.clone().into());
     t.set_kd(view.kd.clone().into());

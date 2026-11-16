@@ -1,7 +1,6 @@
-// Page header: the one heading for the current view, with the tracker's tab row
-// directly under it inside the same band (one rule closes the band, as in the
-// shipping app). Settings has no tabs, so the band ends after the title row.
-//
+// Page header: one compact band — icon + title, tabs inline beside it,
+// live chip or subtitle right-aligned. Tabs beside the title saves the 44 px
+// a second row cost. Settings has no tabs, so the band ends after the title.
 // Tabs are real buttons but only Overview has content in this build: the other
 // four take no click, and the band says so on the right instead of pretending.
 
@@ -19,92 +18,50 @@ export component Header inherits Rectangle {
     // state (one writer), so the underline can never disagree with the page.
     callback select-tab(string);
 
-    height: 54px + (root.show-tabs ? 44px : 0px);
+    // One compact band: icon + title, then the tabs inline, then the live
+    // chip or subtitle right-aligned. Tabs beside the title saves the 44 px
+    // a second row cost; the band reads as one header, not two.
+    height: 54px;
     background: Theme.surface;
 
-    VerticalLayout {
-        spacing: 0;
+    HorizontalLayout {
+        height: 54px;
+        padding-left: Space.xl;
+        padding-right: Space.xl;
+        spacing: Space.md;
 
-        // Title row.
-        HorizontalLayout {
-            height: 54px;
-            padding-left: Space.xl;
-            padding-right: Space.xl;
-            spacing: Space.md;
+        VCenter {
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: Shape.sm;
+                background: Theme.container;
+                border-width: Shape.stroke;
+                border-color: Theme.line-soft;
 
-            VCenter {
-                Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    border-radius: Shape.sm;
-                    background: Theme.container;
-                    border-width: Shape.stroke;
-                    border-color: Theme.line-soft;
-
-                    Glyph {
-                        kind: root.icon;
-                        size: 16px;
-                        x: (parent.width - self.width) / 2;
-                        y: (parent.height - self.height) / 2;
-                        stroke: Theme.primary;
-                    }
+                Glyph {
+                    kind: root.icon;
+                    size: 16px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
                 }
-            }
-
-            Text {
-                text: root.title;
-                font-family: Theme.font-display;
-                font-size: TypeScale.big;
-                font-weight: 700;
-                color: Theme.ink;
-                vertical-alignment: center;
-            }
-
-            Rectangle { horizontal-stretch: 1; }
-
-            // Right side is a fact when there is one: a live match beats the
-            // static subtitle, and both come from state Rust already owns.
-            if Tracker.live-state == "live": HorizontalLayout {
-                horizontal-stretch: 0;
-                spacing: 8px;
-
-                VCenter {
-                    Rectangle {
-                        width: 6px;
-                        height: 6px;
-                        border-radius: 3px;
-                        background: Theme.mint;
-                    }
-                }
-                Text {
-                    text: "LIVE · "
-                        + (Tracker.map-name == "" ? "MATCH" : Tracker.map-name)
-                        + " · " + Tracker.blue + "–" + Tracker.red;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.micro;
-                    font-weight: 700;
-                    letter-spacing: 0.8px;
-                    color: Theme.mint;
-                    vertical-alignment: center;
-                }
-            }
-            if Tracker.live-state != "live": Text {
-                text: root.subtitle;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                color: Theme.ink-faint;
-                vertical-alignment: center;
             }
         }
 
-        // Tab row: same left edge as the title, underline on the active tab.
-        if root.show-tabs: Rectangle {
-            height: 44px;
-            background: transparent;
+        Text {
+            text: root.title;
+            font-family: Theme.font-display;
+            font-size: TypeScale.big;
+            font-weight: 700;
+            color: Theme.ink;
+            vertical-alignment: center;
+        }
 
+        // Tabs live beside the title on tracker views. Settings has none,
+        // so the band ends after the title there.
+        if root.show-tabs: VCenter {
             HorizontalLayout {
-                padding-left: Space.xl;
-                padding-right: Space.xl;
                 spacing: 22px;
 
                 Tab {
@@ -133,9 +90,43 @@ export component Header inherits Rectangle {
                     dot: Tracker.live-state == "live";
                     clicked => { root.select-tab("live"); }
                 }
-
-                Rectangle { horizontal-stretch: 1; }
             }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        // Right side is a fact when there is one: a live match beats the
+        // static subtitle, and both come from state Rust already owns.
+        if Tracker.live-state == "live": HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 8px;
+
+            VCenter {
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.mint;
+                }
+            }
+            Text {
+                text: "LIVE · "
+                    + (Tracker.map-name == "" ? "MATCH" : Tracker.map-name)
+                    + " · " + Tracker.blue + "–" + Tracker.red;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                color: Theme.mint;
+                vertical-alignment: center;
+            }
+        }
+        if Tracker.live-state != "live": Text {
+            text: root.subtitle;
+            font-family: Theme.font-body;
+            font-size: TypeScale.caption;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
         }
     }
 

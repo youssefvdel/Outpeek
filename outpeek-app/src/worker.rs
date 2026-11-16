@@ -22,7 +22,7 @@
 //! repaint. The loop never blocks the UI thread.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::account::{self, Account};
@@ -120,6 +120,13 @@ pub struct Flags {
     /// Set by the "Refresh" button; consumed by the poller. Refreshes both
     /// sources: the TRN profile and the local `/mmr` read.
     pub refresh_rank: AtomicBool,
+    /// Playlist the Overview shows, owned by the UI thread (the
+    /// `select-playlist` callback) and read by the poller. Empty means the
+    /// default before the first selection is restored.
+    pub playlist: Mutex<String>,
+    /// Set by `select-playlist`; consumed by the poller, which re-parses the
+    /// last payload kept in memory — no refetch, no network.
+    pub playlist_pending: AtomicBool,
 }
 
 pub fn now_ms() -> u64 {
@@ -603,6 +610,15 @@ where
     let mut profile_saved_at: u64 = 0;
     let mut profile_pending = true;
     let mut matches_pending = true;
+    // Last profile body, kept in memory so a playlist switch re-parses
+    // without a refetch. The stored `profile` below stays the competitive
+    // read (rank merge, crests, breakdown rows); only the published Overview
+    // frame follows the selection.
+    let mut last_payload: Option<serde_json::Value> = None;
+    let mut selected_playlist = flags.playlist.lock().map(|p| p.clone()).unwrap_or_default();
+    if selected_playlist.trim().is_empty() || !trn_profile::is_known_playlist(&selected_playlist) {
+        selected_playlist = trn_profile::DEFAULT_PLAYLIST.to_string();
+    }
     let mut matches: Option<Vec<MatchRow>> = None;
     let mut matches_saved_at: u64 = 0;
     // The cache read is a first-frame read, not a per-tick one: repeating it
@@ -806,11 +822,20 @@ where
                         "Reading Tracker Network…",
                     )));
                 }
-                match trn::fetch_profile(&profile_handle)
-                    .await
-                    .and_then(|json| trn_profile::parse(&json))
-                {
-                    Ok(fresh) => {
+                match trn::fetch_profile(&profile_handle).await.and_then(|json| {
+                    last_payload = Some(json);
+                    let payload = last_payload.as_ref().expect("profile payload just stored");
+                    // One body, two frames: the stored profile stays competitive
+                    // (rank, crests, breakdowns); the Overview shows the selected
+                    // playlist's season numbers from the same bytes.
+                    let stored = trn_profile::parse(payload);
+                    let shown = trn_profile::parse_for_playlist(payload, &selected_playlist);
+                    match (stored, shown) {
+                        (Ok(stored), Ok(shown)) => Ok((stored, shown)),
+                        (Err(e), _) | (_, Err(e)) => Err(e),
+                    }
+                }) {
+                    Ok((fresh, display)) => {
                         profile_saved_at = now_ms();
                         if let Some(path) = trn_profile::cache_path() {
                             if let Err(e) = trn_profile::save_cache(&path, &fresh, profile_saved_at)
@@ -834,11 +859,7 @@ where
                             .as_ref()
                             .map(|p| p.handle.clone())
                             .unwrap_or_default();
-                        let view = profile
-                            .as_ref()
-                            .map(Profile::to_view)
-                            .unwrap_or_else(|| ProfileView::default());
-                        publish(Event::Profile(view));
+                        publish(Event::Profile(display.to_view()));
                         crate::boot::mark("worker:profile-net");
                         publish(
                             breakdown_event(&art, fetcher.clone(), profile.as_ref(), "ready", "")
@@ -892,6 +913,25 @@ where
                                 .await,
                         );
                     }
+                }
+            }
+        }
+
+        // Playlist switch: re-parse the last body in memory and republish the
+        // Overview frame only — breakdown, matches, rank and art are untouched
+        // (see `parse_for_playlist`). With no body yet (offline boot with a
+        // restored playlist) the frame stays until the first read lands.
+        if flags.playlist_pending.swap(false, Ordering::Relaxed) {
+            selected_playlist = flags.playlist.lock().map(|p| p.clone()).unwrap_or_default();
+            if selected_playlist.trim().is_empty()
+                || !trn_profile::is_known_playlist(&selected_playlist)
+            {
+                selected_playlist = trn_profile::DEFAULT_PLAYLIST.to_string();
+            }
+            if let Some(payload) = last_payload.as_ref() {
+                match trn_profile::parse_for_playlist(payload, &selected_playlist) {
+                    Ok(display) => publish(Event::Profile(display.to_view())),
+                    Err(e) => eprintln!("[trn] playlist re-parse failed: {e}"),
                 }
             }
         }
@@ -1178,10 +1218,15 @@ where
 }
 
 /// Sleep `total`, waking often enough that `stop` is honoured promptly.
+/// A pending playlist switch also cuts the sleep short: it is a user action,
+/// not network cadence, and the re-parse is in-memory.
 async fn sleep_or_stop(flags: &Flags, total: Duration) {
     let mut slept = Duration::ZERO;
     while slept < total {
         if flags.stop.load(Ordering::Relaxed) {
+            return;
+        }
+        if flags.playlist_pending.load(Ordering::Relaxed) {
             return;
         }
         let chunk = SLEEP_STEP.min(total - slept);

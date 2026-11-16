@@ -27,6 +27,33 @@ pub const CACHE_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 /// Cache schema version; a future shape is ignored rather than misread.
 pub const CACHE_VERSION: u32 = 1;
 
+/// Playlists the Overview can show, as `(payload id, UI label)`. Exactly the
+/// four season playlists the live payload carries (live probe 2026-11-16:
+/// competitive 161 stats, deathmatch 158, skirmish2v2 158, swiftplay 158 — no
+/// unrated segment). No dead options: the dropdown offers exactly these.
+pub const PLAYLISTS: [(&str, &str); 4] = [
+    ("competitive", "Competitive"),
+    ("deathmatch", "Deathmatch"),
+    ("swiftplay", "Swiftplay"),
+    ("skirmish2v2", "2v2"),
+];
+/// The playlist [`parse`] reads: the competitive season the rank, peak, score
+/// and breakdown tabs are built from.
+pub const DEFAULT_PLAYLIST: &str = "competitive";
+
+/// UI label for a playlist id, or `None` for an id this build does not offer.
+pub fn playlist_label(id: &str) -> Option<&'static str> {
+    PLAYLISTS
+        .iter()
+        .find(|(key, _)| *key == id)
+        .map(|(_, label)| *label)
+}
+
+/// True for exactly the four ids in [`PLAYLISTS`].
+pub fn is_known_playlist(id: &str) -> bool {
+    playlist_label(id.trim()).is_some()
+}
+
 // ---------------------------------------------------------------------------
 // Typed profile
 // ---------------------------------------------------------------------------
@@ -121,6 +148,10 @@ pub struct Profile {
     #[serde(default)]
     pub avatar_url: String,
     pub season_id: String,
+    /// Playlist this profile's season frame was read for. Breakdown rows and
+    /// the matches list stay competitive — see [`parse_for_playlist`].
+    #[serde(default)]
+    pub playlist: String,
     /// Full season name from `metadata.seasons` ("Season 26 Act 6").
     pub season_name: String,
     /// Short act label ("E26: A6").
@@ -166,6 +197,7 @@ impl Profile {
             handle: self.handle.clone(),
             season: self.season_name.clone(),
             season_short: self.season_short.clone(),
+            playlist: self.playlist.clone(),
             matches: count_line(s.matches, "match", "matches"),
             win_pct: percent(s.win_pct),
             kd: decimal(s.kd, 2),
@@ -281,6 +313,7 @@ pub struct ProfileView {
     pub handle: String,
     pub season: String,
     pub season_short: String,
+    pub playlist: String,
     pub matches: String,
     pub win_pct: String,
     pub kd: String,
@@ -352,8 +385,27 @@ impl ProfileView {
 // Parsing
 // ---------------------------------------------------------------------------
 
-/// Parse one `data` envelope from the profile route.
+/// Parse one `data` envelope from the profile route, competitive season.
 pub fn parse(payload: &Value) -> Result<Profile, String> {
+    parse_for_playlist(payload, DEFAULT_PLAYLIST)
+}
+
+/// Parse one `data` envelope for one playlist's season frame.
+///
+/// The switch moves the Overview season numbers only — headlines, strip,
+/// highlights, accuracy, score, rank/peak cells. Agent/map rows, the top
+/// agent and the matches list stay competitive: agent/map segments do carry a
+/// `playlist` attribute in the live payload, but `trn_breakdown::parse` is
+/// season-scoped only and this pass does not rewire it (nor the career-wide
+/// matches endpoint). A playlist with no reported stats parses to honest
+/// empties, never zeros. Unknown playlists fall back to competitive.
+pub fn parse_for_playlist(payload: &Value, playlist: &str) -> Result<Profile, String> {
+    let wanted = playlist.trim();
+    let wanted = if is_known_playlist(wanted) {
+        wanted
+    } else {
+        DEFAULT_PLAYLIST
+    };
     let data = payload
         .get("data")
         .filter(|d| d.is_object())
@@ -386,7 +438,7 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
         .pointer("/metadata/defaultSeason")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let season_segment = pick_season(segments, default_season);
+    let season_segment = pick_season(segments, default_season, wanted);
     let season_id = season_segment
         .and_then(|s| s.pointer("/attributes/seasonId"))
         .and_then(Value::as_str)
@@ -401,7 +453,13 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
 
     let rank = rank_stat(&stats, "rank");
     let peak = rank_stat(&stats, "peakRank");
-    let (agents, maps) = trn_breakdown::parse(segments, &season_id);
+    // Breakdowns stay on the competitive season (see the fn docs): the
+    // season id below is the competitive segment's, not the picked one.
+    let competitive_id = pick_season(segments, default_season, DEFAULT_PLAYLIST)
+        .and_then(|s| s.pointer("/attributes/seasonId"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let (agents, maps) = trn_breakdown::parse(segments, competitive_id);
     let agent = top_agent(&agents);
     let mut acts = peak_rows(segments);
     if acts.is_empty() {
@@ -417,6 +475,7 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
         avatar_url,
         country,
         season_id,
+        playlist: wanted.to_string(),
         season_name,
         season_short,
         rank,
@@ -430,19 +489,23 @@ pub fn parse(payload: &Value) -> Result<Profile, String> {
     })
 }
 
-fn pick_season<'a>(segments: &'a [Value], default_season: &str) -> Option<&'a Value> {
-    let competitive = |s: &&Value| {
+fn pick_season<'a>(
+    segments: &'a [Value],
+    default_season: &str,
+    playlist: &str,
+) -> Option<&'a Value> {
+    let queued = |s: &&Value| {
         s.get("type").and_then(Value::as_str) == Some("season")
-            && s.pointer("/attributes/playlist").and_then(Value::as_str) == Some("competitive")
+            && s.pointer("/attributes/playlist").and_then(Value::as_str) == Some(playlist)
     };
     if !default_season.is_empty() {
-        if let Some(segment) = segments.iter().filter(competitive).find(|s| {
+        if let Some(segment) = segments.iter().filter(queued).find(|s| {
             s.pointer("/attributes/seasonId").and_then(Value::as_str) == Some(default_season)
         }) {
             return Some(segment);
         }
     }
-    segments.iter().filter(competitive).next()
+    segments.iter().filter(queued).next()
 }
 
 fn season_labels(data: &Value, season_id: &str) -> (String, String) {
@@ -904,6 +967,93 @@ mod tests {
         assert_eq!(view.agent_kd, "0.86");
         assert_eq!(view.agent_adr, "122.6");
         assert_eq!(view.agent_acs, "183");
+    }
+
+    /// Two season segments, one season, two playlists — the shape the live
+    /// payload carries (verified 2026-11-16: competitive/deathmatch/
+    /// skirmish2v2/swiftplay, no unrated). Fixture only, no network.
+    fn two_playlist_payload() -> Value {
+        serde_json::json!({
+            "data": {
+                "platformInfo": { "platformUserHandle": "someone#tag" },
+                "metadata": { "defaultSeason": "s1" },
+                "segments": [
+                    { "type": "season",
+                      "attributes": { "seasonId": "s1", "playlist": "competitive" },
+                      "stats": {
+                          "matchesPlayed": { "value": 85 },
+                          "kills": { "value": 1092 },
+                          "rank": { "metadata": { "tierName": "Diamond 3" }, "value": null }
+                      } },
+                    { "type": "season",
+                      "attributes": { "seasonId": "s1", "playlist": "deathmatch" },
+                      "stats": {
+                          "matchesPlayed": { "value": 12 },
+                          "kills": { "value": 300 }
+                      } },
+                    { "type": "agent",
+                      "attributes": { "key": "601dbbe7-43ce-be57-2a40-4abd24953621",
+                                     "seasonId": "s1", "playlist": "competitive" },
+                      "metadata": { "name": "KAY/O", "role": "Initiator" },
+                      "stats": { "matchesPlayed": { "value": 48 } } }
+                ]
+            }
+        })
+    }
+
+    #[test]
+    fn parse_stays_competitive_and_names_its_playlist() {
+        let payload = two_playlist_payload();
+        let profile = parse(&payload).expect("competitive parses");
+        assert_eq!(profile.playlist, "competitive");
+        assert_eq!(profile.season.matches, Some(85));
+        assert_eq!(profile.to_view().playlist, "competitive");
+        // Delegation, not duplication: explicit competitive == default.
+        let explicit = parse_for_playlist(&payload, "competitive").expect("explicit parses");
+        assert_eq!(explicit.season, profile.season);
+    }
+
+    #[test]
+    fn deathmatch_parses_different_numbers_with_honest_empties() {
+        let payload = two_playlist_payload();
+        let profile = parse_for_playlist(&payload, "deathmatch").expect("deathmatch parses");
+        assert_eq!(profile.playlist, "deathmatch");
+        assert_eq!(profile.season.matches, Some(12));
+        assert_eq!(profile.season.kills, Some(300));
+        // No rank on a deathmatch frame: em dash, never a zero or a copy.
+        assert_eq!(profile.rank, None);
+        assert_eq!(profile.season.wins, None);
+        let view = profile.to_view();
+        assert_eq!(view.playlist, "deathmatch");
+        assert_eq!(view.matches, "12 matches");
+        assert_eq!(view.wins, "");
+        assert_eq!(view.kills, "300");
+        // Breakdowns stay competitive this pass (see `parse_for_playlist`).
+        assert_eq!(profile.agents.len(), 1);
+        assert_eq!(
+            profile.top_agent.as_ref().map(|a| a.name.as_str()),
+            Some("KAY/O")
+        );
+    }
+
+    #[test]
+    fn an_unknown_playlist_falls_back_to_competitive() {
+        let payload = two_playlist_payload();
+        let profile = parse_for_playlist(&payload, "ranked").expect("fallback parses");
+        assert_eq!(profile.playlist, "competitive");
+        assert_eq!(profile.season.matches, Some(85));
+    }
+
+    #[test]
+    fn a_playlist_with_no_segment_is_all_empties_never_zeros() {
+        let payload = two_playlist_payload();
+        let profile = parse_for_playlist(&payload, "skirmish2v2").expect("missing parses");
+        assert_eq!(profile.playlist, "skirmish2v2");
+        assert_eq!(profile.season.matches, None);
+        let view = profile.to_view();
+        assert_eq!(view.matches, "");
+        assert_eq!(view.kills, "");
+        assert_eq!(view.win_pct, "");
     }
 
     #[test]
