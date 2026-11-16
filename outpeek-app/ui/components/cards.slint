@@ -213,6 +213,15 @@ component CombatHighlights inherits Card {
         height: 18px;
         spacing: Space.sm;
         CardTitle { text: "Combat Highlights"; horizontal-stretch: 1; }
+        if Tracker.profile-state != "ready" && Tracker.profile-state != "cached": Text {
+            // State, not decoration: one quiet word instead of a pill on every
+            // card. Nothing is shown when the read succeeded.
+            text: Tracker.profile-state == "loading" ? "reading" : "not read";
+            font-family: Theme.font-mono;
+            font-size: TypeScale.micro;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
+        }
     }
 
     HighlightRow {
@@ -243,12 +252,20 @@ component TopAgent inherits Card {
         spacing: Space.sm;
         CardTitle { text: "Top Agent"; horizontal-stretch: 1; }
         VCenter {
-            // The role chip is a fact from the agent catalogue; with no agent
-            // read it says so rather than naming a role nothing proved.
-            Chip {
-                text: Tracker.agent-role == "" ? "NOT READ" : Tracker.agent-role;
-                tone: Tracker.agent-role == "" ? "off" : "neutral";
+            // The role is a fact from the agent catalogue, so it stays a chip.
+            // No agent read is one quiet word, like the other cards: naming a
+            // role nothing proved was the alternative.
+            if Tracker.agent-role != "": Chip {
+                text: Tracker.agent-role;
+                tone: "neutral";
                 pad-y: 1px;
+            }
+            if Tracker.agent-role == "": Text {
+                text: "not read";
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
             }
         }
     }
@@ -427,6 +444,15 @@ component Accuracy inherits Card {
         height: 18px;
         spacing: Space.sm;
         CardTitle { text: "Accuracy"; horizontal-stretch: 1; }
+        if Tracker.profile-state != "ready" && Tracker.profile-state != "cached": Text {
+            // State, not decoration: one quiet word instead of a pill on every
+            // card. Nothing is shown when the read succeeded.
+            text: Tracker.profile-state == "loading" ? "reading" : "not read";
+            font-family: Theme.font-mono;
+            font-size: TypeScale.micro;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
+        }
     }
 
     HorizontalLayout {

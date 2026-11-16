@@ -264,8 +264,10 @@ mod tests {
         ]) {
             assert!(body.contains(key), "row must bind {key}: {body}");
         }
-        // The chip reports the source state instead of a permanent NOT READ.
-        assert!(card.contains(r#"Tracker.profile-state == "ready""#));
+        // The empty state is one quiet word, not a badge on every card: a pill
+        // per card was decoration. Nothing is drawn once the read succeeded.
+        assert!(card.contains(r#"text: Tracker.profile-state == "loading" ? "reading" : "not read""#));
+        assert!(!card.contains("Chip {"), "no badge in the combat card");
     }
 
     /// Text from `start` up to the next `end` marker; panics if either is gone.
