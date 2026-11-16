@@ -50,7 +50,18 @@ export struct MatchAgentUi {
     name: string,
     record: string,
     kd: string,
+    // 0–1: widths the cell's bar, nothing else reads it.
+    win-share: float,
     art: image,
+}
+
+/// The season cell at the left of the top strip: TRN's own summary block.
+/// Empty strings are drawn as em dashes; the share only widths the bar.
+export struct MatchSummaryUi {
+    record: string,
+    kd: string,
+    adr: string,
+    win-share: float,
 }
 
 /// One cell of the recent-form strip: age, rounds score, K/D. `won` picks the
@@ -158,6 +169,7 @@ export global Tracker {
     // loading|empty|error and `matches-note` carries the reason/age line.
     in-out property <[MatchRowUi]> matches: [];
     // TRN-website strips, derived from the same rows/payload as `matches`.
+    in-out property <MatchSummaryUi> match-summary;
     in-out property <[MatchAgentUi]> match-agents: [];
     in-out property <[MatchFormUi]> match-form: [];
     // Day groups: `match-days[i]` heads `match-day-rows[i]`. The two models

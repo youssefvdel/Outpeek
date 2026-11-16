@@ -406,6 +406,9 @@ pub struct AgentStripRow {
     pub record: String,
     /// The agent's own K/D, the same 2-decimal label as the Agents tab.
     pub kd: String,
+    /// Share of that agent's matches won (0–1). Widths the strip's bar; the
+    /// number beside it is TRN's reported percentage, never re-derived here.
+    pub win_share: f32,
     /// Cached portrait URL, filled by the worker through the existing art
     /// pipeline. Empty = the catalogue missed and the strip draws its glyph.
     pub art_url: String,
@@ -420,22 +423,77 @@ pub fn top_agents(rows: &[BreakdownRow]) -> Vec<AgentStripRow> {
         .into_iter()
         .take(3)
         .map(|b| {
-            let record = match (b.matches, b.win_pct) {
+            let (record, win_share) = match (b.matches, b.win_pct) {
                 (Some(m), Some(p)) if m >= 0 && p.is_finite() => {
                     let wins = ((m as f64) * p / 100.0).round().clamp(0.0, m as f64) as i64;
-                    format!("{}W - {}L ({:.0}%)", wins, m - wins, p)
+                    (
+                        format!("{}W - {}L ({:.0}%)", wins, m - wins, p),
+                        (p / 100.0).clamp(0.0, 1.0) as f32,
+                    )
                 }
-                _ => String::new(),
+                _ => (String::new(), 0.0),
             };
             AgentStripRow {
                 key: b.key.clone(),
                 name: b.name.clone(),
                 record,
                 kd: b.kd_label(),
+                win_share,
                 art_url: String::new(),
             }
         })
         .collect()
+}
+
+/// The season cell at the left of the strip: TRN prints the overall record on
+/// the first line and `K/D | ADR` under it, with the same bar the agent cells
+/// carry. Every part comes from the season segment TRN reported.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SeasonStrip {
+    /// `8W - 12L (40%)`; empty when the wins or losses were not reported.
+    pub record: String,
+    /// `0.91 K/D`; empty when the payload carried no ratio.
+    pub kd: String,
+    /// `128 ADR`; empty when the payload carried no damage per round.
+    pub adr: String,
+    /// Season win share (0–1) for the bar.
+    pub win_share: f32,
+}
+
+/// Build the strip's season cell from the already-parsed season stats.
+pub fn season_strip(season: &crate::trn_profile::SeasonStats) -> SeasonStrip {
+    let record = match (season.wins, season.losses) {
+        (Some(w), Some(l)) if w >= 0 && l >= 0 => {
+            let total = w + l;
+            let pct = if total > 0 {
+                format!(" ({:.0}%)", (w as f64) * 100.0 / (total as f64))
+            } else {
+                String::new()
+            };
+            format!("{w}W - {l}L{pct}")
+        }
+        _ => String::new(),
+    };
+    let win_share = match (season.wins, season.losses) {
+        (Some(w), Some(l)) if w >= 0 && l >= 0 && w + l > 0 => {
+            (w as f32) / ((w + l) as f32)
+        }
+        _ => 0.0,
+    };
+    SeasonStrip {
+        record,
+        kd: season
+            .kd
+            .filter(|v| v.is_finite())
+            .map(|v| format!("{v:.2} K/D"))
+            .unwrap_or_default(),
+        adr: season
+            .dmg_per_round
+            .filter(|v| v.is_finite())
+            .map(|v| format!("{v:.0} ADR"))
+            .unwrap_or_default(),
+        win_share,
+    }
 }
 
 /// One day group: the header aggregates plus that day's rows, newest first.
@@ -1099,6 +1157,35 @@ mod tests {
             kd,
             ..BreakdownRow::default()
         }
+    }
+
+    /// The strip's season cell: TRN's three facts, and a bar share that is a
+    /// proportion of the reported record rather than a re-derived percentage.
+    #[test]
+    fn the_season_cell_reports_record_kd_and_adr() {
+        let season = crate::trn_profile::SeasonStats {
+            wins: Some(8),
+            losses: Some(12),
+            kd: Some(0.91),
+            dmg_per_round: Some(128.4),
+            ..Default::default()
+        };
+        let cell = season_strip(&season);
+        assert_eq!(cell.record, "8W - 12L (40%)");
+        assert_eq!(cell.kd, "0.91 K/D");
+        assert_eq!(cell.adr, "128 ADR");
+        assert!((cell.win_share - 0.4).abs() < 0.001);
+    }
+
+    /// No record yet draws nothing and no bar fill: absence is never a zero
+    /// record.
+    #[test]
+    fn the_season_cell_leaves_missing_facts_empty() {
+        let cell = season_strip(&crate::trn_profile::SeasonStats::default());
+        assert_eq!(cell.record, "");
+        assert_eq!(cell.kd, "");
+        assert_eq!(cell.adr, "");
+        assert_eq!(cell.win_share, 0.0);
     }
 
     #[test]

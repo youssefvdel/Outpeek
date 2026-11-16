@@ -11,7 +11,7 @@
 // failure is an inline error card with a retry, never a blank view.
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
-import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchFormUi, MatchDayUi } from "../state.slint";
+import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchFormUi, MatchDayUi, MatchSummaryUi } from "../state.slint";
 import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
 component StatChip inherits Rectangle {
@@ -184,26 +184,31 @@ component MatchLine inherits Rectangle {
     }
 }
 
-component AgentCard inherits Rectangle {
+/// One agent cell of the top strip, TRN-shaped: portrait, name, the season
+/// record, the agent's K/D and a bar whose width is the reported win share.
+/// The number is Rust's string; the bar only reads the share.
+component AgentCell inherits Rectangle {
     in property <MatchAgentUi> item;
-    horizontal-stretch: 1;
+    width: 210px;
+    height: 60px;
+
     HorizontalLayout {
         spacing: Space.sm;
 
-        // Portrait: the agent's own face, like the Agents tab. The tinted
-        // plate is the fallback floor when the catalogue missed.
+        // Portrait: the agent's own face. The tinted plate is the fallback
+        // floor when the catalogue missed.
         VCenter {
             Rectangle {
-                width: 44px;
-                height: 44px;
-                border-radius: 9px;
+                width: 40px;
+                height: 40px;
+                border-radius: 8px;
                 background: Theme.primary-deep;
                 clip: true;
 
                 if root.item.art.width > 0: Image {
                     source: root.item.art;
-                    width: 44px;
-                    height: 44px;
+                    width: 40px;
+                    height: 40px;
                     image-fit: contain;
                 }
                 if root.item.art.width == 0: Glyph {
@@ -217,36 +222,95 @@ component AgentCard inherits Rectangle {
             }
         }
 
-        // Name over record over K/D.
-        VCenter {
-            VerticalLayout {
-                spacing: 1px;
+        VerticalLayout {
+            spacing: 1px;
+            alignment: center;
 
-                Text {
-                    text: root.item.name == "" ? "—" : root.item.name;
-                    font-family: Theme.font-body;
-                    font-size: TypeScale.title;
-                    font-weight: 700;
-                    color: Theme.ink;
-                    vertical-alignment: center;
-                    overflow: elide;
+            Text {
+                text: root.item.name == "" ? "—" : root.item.name;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 700;
+                color: Theme.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.record == "" ? "—" : root.item.record;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-dim;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.kd == "" ? "K/D —" : "K/D " + root.item.kd;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Rectangle {
+                height: 3px;
+                border-radius: 1.5px;
+                background: Theme.line;
+
+                Rectangle {
+                    x: 0;
+                    width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
+                    height: parent.height;
+                    border-radius: 1.5px;
+                    background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
                 }
-                Text {
-                    text: root.item.record == "" ? "—" : root.item.record;
-                    font-family: Theme.font-body;
-                    font-size: TypeScale.micro;
-                    color: Theme.ink-faint;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-                Text {
-                    text: root.item.kd == "" ? "—" : root.item.kd;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.micro;
-                    color: Theme.ink-dim;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
+            }
+        }
+    }
+}
+
+/// The season cell at the left of the strip: TRN prints the whole-season
+/// record on the first line, `K/D | ADR` under it, then the same bar.
+component SeasonCell inherits Rectangle {
+    in property <MatchSummaryUi> item;
+    width: 230px;
+    height: 62px;
+    border-radius: Shape.sm;
+    background: Theme.container-high;
+
+    VerticalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: 2px;
+        alignment: center;
+
+        Text {
+            text: root.item.record == "" ? "—" : root.item.record;
+            font-family: Theme.font-body;
+            font-size: TypeScale.title;
+            font-weight: 700;
+            color: Theme.mint;
+            overflow: elide;
+        }
+        Text {
+            text: (root.item.kd == "" ? "K/D —" : root.item.kd)
+                + (root.item.adr == "" ? "" : " | " + root.item.adr);
+            font-family: Theme.font-mono;
+            font-size: TypeScale.micro;
+            color: Theme.mint;
+            opacity: 0.75;
+            overflow: elide;
+        }
+        Rectangle {
+            height: 3px;
+            border-radius: 1.5px;
+            background: Theme.line;
+
+            Rectangle {
+                x: 0;
+                width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
+                height: parent.height;
+                border-radius: 1.5px;
+                background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
             }
         }
     }
@@ -527,19 +591,20 @@ export component MatchesPage inherits VerticalLayout {
     if Tracker.match-id == "": VerticalLayout {
         spacing: Space.md;
 
-        // Top-3 agents this season: portrait, name, W-L record, K/D.
+        // Top strip, TRN-shaped: the season summary on the left, then the
+        // three most-played agents spread across the rest of the row.
         if Tracker.match-agents.length > 0: Card {
-            VerticalLayout {
+            HorizontalLayout {
                 padding-left: Space.md;
                 padding-right: Space.md;
                 padding-top: Space.sm;
                 padding-bottom: Space.sm;
-                spacing: Space.sm;
-                ColumnLabel { text: "TOP AGENTS"; }
-                HorizontalLayout {
-                    spacing: Space.md;
-                    for agent in Tracker.match-agents: AgentCard { item: agent; }
-                }
+                spacing: Space.md;
+
+                SeasonCell { item: Tracker.match-summary; }
+                Rectangle { horizontal-stretch: 1; }
+                for agent in Tracker.match-agents: AgentCell { item: agent; }
+                Rectangle { horizontal-stretch: 1; }
             }
         }
 

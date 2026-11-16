@@ -1207,6 +1207,13 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     };
     let rows: Vec<MatchRowUi> = view.rows.iter().map(&row).collect();
     t.set_matches(ModelRc::new(VecModel::from(rows)));
+    let summary = &view.summary;
+    t.set_match_summary(MatchSummaryUi {
+        record: summary.record.clone().into(),
+        kd: summary.kd.clone().into(),
+        adr: summary.adr.clone().into(),
+        win_share: summary.win_share,
+    });
     let agents: Vec<MatchAgentUi> = view
         .agents
         .iter()
@@ -1214,6 +1221,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             name: a.name.clone().into(),
             record: a.record.clone().into(),
             kd: a.kd.clone().into(),
+            win_share: a.win_share,
             art: load(&a.art_url, 96),
         })
         .collect();

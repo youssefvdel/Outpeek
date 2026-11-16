@@ -85,6 +85,8 @@ pub enum Event {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchesView {
     pub rows: Vec<MatchRow>,
+    /// Season cell at the left of the strip (record, K/D, ADR, bar share).
+    pub summary: trn_matches::SeasonStrip,
     /// Top-3 agents by matches from the profile payload's own breakdown.
     pub agents: Vec<AgentStripRow>,
     /// Last 8 matches, newest first, for the recent-form strip.
@@ -99,6 +101,7 @@ impl MatchesView {
     fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
         Self {
             rows: Vec::new(),
+            summary: trn_matches::SeasonStrip::default(),
             agents: Vec::new(),
             form: Vec::new(),
             days: Vec::new(),
@@ -280,6 +283,9 @@ fn matches_frame(
 ) -> MatchesView {
     let now = now_ms();
     MatchesView {
+        summary: profile
+            .map(|p| trn_matches::season_strip(&p.season))
+            .unwrap_or_default(),
         form: trn_matches::form_strip(&rows, now),
         days: trn_matches::group_days(&rows),
         agents: profile
