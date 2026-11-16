@@ -586,6 +586,44 @@ fn wire_callbacks(
         });
     }
 
+    // Match detail: a Matches row click opens the scoreboard in place.
+    // Rust owns the selection like select-tab; the worker fetches on demand
+    // (memory-only, no disk) and publishes the frame. Back clears the
+    // selection and the table returns — there is no separate tab.
+    {
+        let app_weak = app.as_weak();
+        let flags = flags.clone();
+        app.global::<Tracker>().on_select_match(move |id| {
+            let id = id.to_string();
+            if id.trim().is_empty() {
+                return;
+            }
+            if let Ok(mut slot) = flags.match_request.lock() {
+                *slot = Some(id.clone());
+            }
+            flags.match_pending.store(true, Ordering::Relaxed);
+            // Optimistic: the detail view opens at once with its loading
+            // line; the worker's event lands the rows on its next tick.
+            if let Some(app) = app_weak.upgrade() {
+                let t = app.global::<Tracker>();
+                t.set_match_id(id.into());
+                t.set_match_state("loading".into());
+                t.set_match_note("Reading match…".into());
+            }
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        app.global::<Tracker>().on_close_match_detail(move || {
+            if let Some(app) = app_weak.upgrade() {
+                let t = app.global::<Tracker>();
+                t.set_match_id("".into());
+                t.set_match_state("empty".into());
+                t.set_match_note("".into());
+            }
+        });
+    }
+
     // PLAYLIST dropdown: Rust owns the value like select-tab. Unknown ids fall
     // back to competitive; the worker re-parses the last body in memory (no
     // refetch) and the choice persists beside last_tab/last_view.
@@ -1040,10 +1078,93 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     t.set_dda_pctile(view.dda_pctile.clone().into());
     // The header says where the numbers came from while a profile is loaded.
     let subtitle = match view.state {
-        ProfileState::Ready | ProfileState::Cached if !view.handle.is_empty() => view.handle.clone(),
+        ProfileState::Ready | ProfileState::Cached if !view.handle.is_empty() => {
+            view.handle.clone()
+        }
         _ => String::new(),
     };
     t.set_profile_subtitle(subtitle.into());
+}
+
+/// Push one scoreboard frame into the Matches detail view.
+///
+/// A stale event (Back was pressed, or another row was clicked while this
+/// fetch was in flight) is dropped: the open selection owns the screen.
+fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailView) {
+    use outpeek_app::trn_match_detail::{DetailPlayer, DetailRound};
+    let t = ui.global::<Tracker>();
+    if t.get_match_id().as_str() != view.id {
+        return;
+    }
+    t.set_match_state(view.state.into());
+    t.set_match_note(view.message.clone().into());
+    let Some(d) = view.detail.as_ref() else {
+        t.set_match_title("".into());
+        t.set_match_score("".into());
+        t.set_match_blue_won(false);
+        t.set_match_red_won(false);
+        t.set_match_blue(ModelRc::new(VecModel::from(Vec::<MatchPlayerUi>::new())));
+        t.set_match_red(ModelRc::new(VecModel::from(Vec::<MatchPlayerUi>::new())));
+        t.set_match_rounds(ModelRc::new(VecModel::from(Vec::<MatchRoundUi>::new())));
+        return;
+    };
+    let dash = |s: &str| {
+        if s.is_empty() {
+            "—".to_string()
+        } else {
+            s.to_string()
+        }
+    };
+    let title = [
+        dash(&d.map),
+        dash(&d.mode),
+        dash(&d.date),
+        dash(&d.duration),
+    ]
+    .join(" · ");
+    t.set_match_title(title.into());
+    t.set_match_score(d.score_line().into());
+    t.set_match_blue_won(d.blue_won);
+    t.set_match_red_won(d.red_won);
+    let dir = outpeek_app::assets::art_dir();
+    let load = |url: &str| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) if !url.is_empty() => {
+                outpeek_overlay::image_cache::load_from_scaled(dir, url, 96)
+            }
+            _ => slint::Image::default(),
+        }
+    };
+    let rows = |players: &[DetailPlayer]| -> Vec<MatchPlayerUi> {
+        players
+            .iter()
+            .map(|p| MatchPlayerUi {
+                name: p.name.clone().into(),
+                agent: dash(&p.agent).into(),
+                art: load(&p.art_url),
+                rank: dash(&p.rank).into(),
+                acs: p.acs.clone().into(),
+                kda: p.kda.clone().into(),
+                kd: p.kd.clone().into(),
+                hs: p.hs.clone().into(),
+                kast: p.kast.clone().into(),
+                dd: p.delta.clone().into(),
+            })
+            .collect()
+    };
+    t.set_match_blue(ModelRc::new(VecModel::from(rows(&d.blue))));
+    t.set_match_red(ModelRc::new(VecModel::from(rows(&d.red))));
+    let rounds: Vec<MatchRoundUi> = d
+        .rounds
+        .iter()
+        .map(|r: &DetailRound| MatchRoundUi {
+            label: r.n.to_string().into(),
+            blue: r.winner == "Blue",
+            result: r.result.clone().into(),
+            tip: format!("Round {} — {}, {}", r.n, r.winner, dash(&r.result)).into(),
+        })
+        .collect();
+    t.set_match_rounds(ModelRc::new(VecModel::from(rounds)));
 }
 
 /// Push the recent-match rows into the Matches tab. The rows arrive already
@@ -1268,6 +1389,7 @@ fn start_worker(
                     Event::Art(art) => apply_art(&app, &art),
                     Event::Profile(view) => apply_profile(&app, &view),
                     Event::Matches(view) => apply_matches(&app, &view),
+                    Event::MatchDetail(view) => apply_match_detail(&app, &view),
                     Event::Breakdown(view) => apply_breakdown(&app, &view),
                     Event::Live(view) => apply_live(&app, &view),
                 }

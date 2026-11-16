@@ -36,6 +36,7 @@ use crate::model::{format_player_tag, RankState, RankView, TrackerSnapshot};
 use crate::rank;
 use crate::trn;
 use crate::trn_breakdown::{self, AgentRow, MapRow};
+use crate::trn_match_detail::{self, MatchDetail};
 use crate::trn_matches::{self, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
@@ -66,6 +67,10 @@ pub enum Event {
     /// rows are (`ready`, `cached`, `loading`, `empty`, `error`) so the view can
     /// say "showing the saved list" instead of pretending it is live.
     Matches(MatchesView),
+    /// One match's scoreboard, fetched on demand when a Matches row is
+    /// clicked. `state` is loading|ready|error; `detail` is `None` until the
+    /// read lands, and an error keeps the message with a retry (re-click).
+    MatchDetail(MatchDetailView),
     /// Agent and map breakdowns from the same profile payload. Published with
     /// every profile frame; rows carry cached art URLs, never raw TRN ones.
     Breakdown(BreakdownView),
@@ -86,6 +91,27 @@ impl MatchesView {
     fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
         Self {
             rows: Vec::new(),
+            state,
+            message: message.into(),
+        }
+    }
+}
+
+/// One scoreboard plus the honesty label beside it. Memory-only: the body is
+/// ~1.5 MB live and is never written to disk, so every open refetches.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchDetailView {
+    pub id: String,
+    pub detail: Option<MatchDetail>,
+    pub state: &'static str,
+    pub message: String,
+}
+
+impl MatchDetailView {
+    fn placeholder(id: impl Into<String>, state: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            detail: None,
             state,
             message: message.into(),
         }
@@ -127,6 +153,11 @@ pub struct Flags {
     /// Set by `select-playlist`; consumed by the poller, which re-parses the
     /// last payload kept in memory — no refetch, no network.
     pub playlist_pending: AtomicBool,
+    /// Set by `select-match(matchId)`; consumed by the poller, which fetches
+    /// that one scoreboard on demand. The id travels beside the flag so a
+    /// second click while a fetch is in flight replaces the first.
+    pub match_request: Mutex<Option<String>>,
+    pub match_pending: AtomicBool,
 }
 
 pub fn now_ms() -> u64 {
@@ -207,10 +238,7 @@ async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchR
         let Some(id) = row.agent_id.as_deref().filter(|id| !id.is_empty()) else {
             continue;
         };
-        if let Some(url) = art
-            .agent_icon(fetcher.clone(), id, SystemTime::now())
-            .await
-        {
+        if let Some(url) = art.agent_icon(fetcher.clone(), id, SystemTime::now()).await {
             row.art_url = url;
             changed = true;
         }
@@ -1001,6 +1029,66 @@ where
             }
         }
 
+        // On-demand scoreboard: one row click, one fetch, memory-only. No
+        // disk cache — the body is ~1.5 MB live — so every open refetches
+        // and a fetch error is an inline card with a retry (re-click the
+        // row), never a blank view.
+        if flags.match_pending.swap(false, Ordering::Relaxed) {
+            let id = flags
+                .match_request
+                .lock()
+                .map(|mut slot| slot.take())
+                .unwrap_or_default();
+            if let Some(id) = id.filter(|id| !id.trim().is_empty()) {
+                publish(Event::MatchDetail(MatchDetailView::placeholder(
+                    &id,
+                    "loading",
+                    "Reading match…",
+                )));
+                match trn::fetch_match(&id).await.and_then(|json| {
+                    trn_match_detail::parse(&json).ok_or_else(|| "TRN_HTTP_BAD_BODY".to_string())
+                }) {
+                    Ok(mut detail) => {
+                        eprintln!(
+                            "[trn] match detail: {} · {} · {} round(s)",
+                            detail.id,
+                            detail.map,
+                            detail.rounds.len()
+                        );
+                        // Agent portraits reuse the catalogue pipeline, like the
+                        // Matches rows (`fill_match_art`): a miss stays empty
+                        // and the row draws its glyph. Say so, do not invent.
+                        for player in detail.blue.iter_mut().chain(detail.red.iter_mut()) {
+                            if player.agent_id.is_empty() {
+                                continue;
+                            }
+                            if let Some(url) = art
+                                .agent_icon(fetcher.clone(), &player.agent_id, SystemTime::now())
+                                .await
+                            {
+                                player.art_url = url;
+                            }
+                        }
+                        publish(Event::MatchDetail(MatchDetailView {
+                            id,
+                            detail: Some(detail),
+                            state: "ready",
+                            message: String::new(),
+                        }));
+                    }
+                    Err(e) => {
+                        publish(Event::MatchDetail(MatchDetailView::placeholder(
+                            &id,
+                            "error",
+                            format!(
+                                "Tracker Network did not answer ({e}). Re-click the row to retry."
+                            ),
+                        )));
+                    }
+                }
+            }
+        }
+
         // Matches cache: the last read is the first frame, like the profile.
         // Loaded once; the network replaces it below.
         if !matches_cache_loaded && matches.is_none() {
@@ -1218,8 +1306,8 @@ where
 }
 
 /// Sleep `total`, waking often enough that `stop` is honoured promptly.
-/// A pending playlist switch also cuts the sleep short: it is a user action,
-/// not network cadence, and the re-parse is in-memory.
+/// A pending playlist switch or match open also cuts the sleep short: both
+/// are user actions, and the playlist re-parse is in-memory.
 async fn sleep_or_stop(flags: &Flags, total: Duration) {
     let mut slept = Duration::ZERO;
     while slept < total {
@@ -1227,6 +1315,9 @@ async fn sleep_or_stop(flags: &Flags, total: Duration) {
             return;
         }
         if flags.playlist_pending.load(Ordering::Relaxed) {
+            return;
+        }
+        if flags.match_pending.load(Ordering::Relaxed) {
             return;
         }
         let chunk = SLEEP_STEP.min(total - slept);

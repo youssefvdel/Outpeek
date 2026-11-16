@@ -154,6 +154,28 @@ pub async fn fetch_matches(handle: &str) -> Result<Value, String> {
     fetch_json(&path).await
 }
 
+/// Path of one match's scoreboard. The id is a TRN uuid: hex + dashes only,
+/// so anything else (a slash, `..`, whitespace) is a bad path, never a
+/// request. It lives under [`PROFILE_ROOT`], so the allowlist below accepts
+/// it with no new surface.
+pub fn match_path(id: &str) -> Result<String, String> {
+    let id = id.trim();
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err("TRN_HTTP_BAD_PATH".to_string());
+    }
+    let path = append_source(&format!("{PROFILE_ROOT}matches/{id}"));
+    validate_path(&path)?;
+    Ok(path)
+}
+
+/// One scoreboard read, parsed by `trn_match_detail::parse`. Memory-only: the
+/// body (~1.5 MB live) is never cached on disk; every open refetches.
+pub async fn fetch_match(id: &str) -> Result<Value, String> {
+    let path = match_path(id)?;
+    fetch_json(&path).await
+}
+
 /// One client for the life of the process: rustls TLS, HTTP/2 via ALPN, the
 /// OS-independent fingerprint TRN's edge accepts. Built once; a failure to
 /// build is a transport error, never a panic.
@@ -281,6 +303,17 @@ mod tests {
         assert_eq!(status_error(403).as_deref(), Some("HTTP 403"));
         assert_eq!(status_error(500).as_deref(), Some("HTTP 500"));
         assert_eq!(status_error(302).as_deref(), Some("HTTP 302"));
+    }
+
+    #[test]
+    fn the_match_path_is_the_proven_scoreboard_route() {
+        assert_eq!(
+            match_path("cadcc206-9d07-4695-b792-4215ec6ef341").unwrap(),
+            "/api/v2/valorant/standard/matches/cadcc206-9d07-4695-b792-4215ec6ef341?source=overwolf-2"
+        );
+        for bad in ["", "../admin", "a/b", "a b", "a?b", "x".repeat(65).as_str()] {
+            assert!(match_path(bad).is_err(), "must refuse {bad:?}");
+        }
     }
 
     #[test]

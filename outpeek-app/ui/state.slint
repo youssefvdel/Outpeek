@@ -34,6 +34,31 @@ export struct MatchRowUi {
     acs: string,
 }
 
+/// One scoreboard row on the match detail view, pre-formatted by Rust.
+/// Empty strings draw as em dashes (`Cell` owns that rule).
+export struct MatchPlayerUi {
+    name: string,
+    agent: string,
+    art: image,
+    rank: string,
+    acs: string,
+    kda: string,
+    kd: string,
+    hs: string,
+    kast: string,
+    dd: string,
+}
+
+/// One round cell on the match detail strip. `blue` picks the colour;
+/// `tip` ("Round 3 — Blue, Elimination") is the accessible name and the
+/// tapped/hovered result line, so the colour is never the only signal.
+export struct MatchRoundUi {
+    label: string,
+    blue: bool,
+    result: string,
+    tip: string,
+}
+
 /// One agent row on the Agents tab, pre-formatted by Rust from the same
 /// Tracker Network payload as the Overview. `win-share` (0–1) only widths the
 /// bar; the percentage beside it is the reported number. `art` is the cached
@@ -94,6 +119,25 @@ export global Tracker {
     in-out property <[MatchRowUi]> matches: [];
     in-out property <string> matches-state: "empty";
     in-out property <string> matches-note: "No matches read yet.";
+
+    // Match detail (one scoreboard, opened from a Matches row — NO separate
+    // tab). `match-id` is the open selection: empty = the table shows.
+    // `match-state` is empty|loading|ready|error, `match-note` the reason.
+    // Row click -> `select-match(id)` (Rust fetches on demand, memory-only);
+    // Back -> `close-match-detail()` clears the selection, table returns.
+    callback select-match(string);
+    callback close-match-detail();
+    in-out property <string> match-id: "";
+    in-out property <string> match-state: "empty";
+    in-out property <string> match-note: "";
+    // "Bind · Competitive · Nov 14 · 48m 27s" and "Blue 14 – 16 Red".
+    in-out property <string> match-title: "";
+    in-out property <string> match-score: "";
+    in-out property <bool> match-blue-won: false;
+    in-out property <bool> match-red-won: false;
+    in-out property <[MatchPlayerUi]> match-blue: [];
+    in-out property <[MatchPlayerUi]> match-red: [];
+    in-out property <[MatchRoundUi]> match-rounds: [];
 
     // Agent and map breakdowns (same Tracker Network payload as the profile,
     // never a second request). Maps arrive pre-chunked three per row: Slint's

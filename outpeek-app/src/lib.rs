@@ -49,6 +49,7 @@ pub mod settings;
 pub mod settings_model;
 pub mod trn;
 pub mod trn_breakdown;
+pub mod trn_match_detail;
 pub mod trn_matches;
 pub mod trn_profile;
 pub mod worker;

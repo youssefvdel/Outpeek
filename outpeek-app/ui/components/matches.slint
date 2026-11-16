@@ -3,28 +3,35 @@
 // HS %, DDΔ, ACS). Every cell is pre-formatted by Rust (`MatchRowUi`), so this
 // view cannot round, re-derive or invent a value.
 //
-// When there is nothing to show, the note says why: no account read yet, a
-// network failure with the saved list's age, or a genuinely empty history are
-// three different sentences on purpose.
+// A row click opens the scoreboard in place (`Tracker.select-match(id)`): the
+// detail view replaces the table, Back clears the selection and the table
+// returns — there is no separate tab. Loading reads "Reading match…", a fetch
+// failure is an inline error card with a retry, never a blank view.
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
-import { Tracker, MatchRowUi } from "../state.slint";
-import { Card, Cell, Chip, ColumnLabel, VCenter, Glyph } from "widgets.slint";
+import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi } from "../state.slint";
+import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
 component MatchLine inherits Rectangle {
     in property <MatchRowUi> item;
     height: 48px;
     background: line-touch.has-hover ? Theme.container-low : transparent;
     animate background { duration: Motion.fast; easing: ease-out; }
+    accessible-role: button;
+    accessible-label: root.item.date + " " + root.item.map + " " + root.item.score;
+    accessible-action-default => { line-touch.clicked(); }
 
-    line-touch := TouchArea {}
+    line-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Tracker.select-match(root.item.id); }
+    }
 
     HorizontalLayout {
         padding-left: Space.md;
         padding-right: Space.md;
         spacing: Space.sm;
 
-        // Agent portrait: the row's own face, like the desktop client's. The
+        // Agent portrait: the row's own face, like the desktop client. The
         // tinted plate is the fallback floor when the catalogue missed.
         VCenter {
             Rectangle {
@@ -119,16 +126,164 @@ component MatchLine inherits Rectangle {
     }
 }
 
+component DetailPlayerLine inherits Rectangle {
+    in property <MatchPlayerUi> item;
+    height: 44px;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 7px;
+                background: Theme.primary-deep;
+                clip: true;
+
+                if root.item.art.width > 0: Image {
+                    source: root.item.art;
+                    width: 28px;
+                    height: 28px;
+                    image-fit: contain;
+                }
+                if root.item.art.width == 0: Glyph {
+                    kind: "user";
+                    size: 13px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    stroke: Theme.primary;
+                    opacity: 0.7;
+                }
+            }
+        }
+
+        // Name over rank: one player, two lines.
+        VerticalLayout {
+            width: 150px;
+            spacing: 1px;
+
+            Text {
+                text: root.item.name == "" ? "—" : root.item.name;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 600;
+                color: Theme.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: root.item.rank == "" ? "—" : root.item.rank;
+                font-family: Theme.font-body;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        Cell { col-width: 72px; value: root.item.agent; }
+        Cell { col-width: 48px; value: root.item.acs; mono: true; align-right: true; }
+        Cell { col-width: 92px; value: root.item.kda; mono: true; align-right: true; }
+        Cell { col-width: 48px; value: root.item.kd; mono: true; align-right: true; }
+        Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; }
+        Cell { col-width: 56px; value: root.item.kast; mono: true; align-right: true; }
+        Cell {
+            col-width: 64px;
+            value: root.item.dd;
+            mono: true;
+            align-right: true;
+            ink: root.item.dd == ""
+                ? Theme.ink-dim
+                : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+
+    Rectangle {
+        x: Space.md;
+        y: parent.height - 1px;
+        width: parent.width - Space.md * 2;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+}
+
+component TeamCard inherits VerticalLayout {
+    in property <string> title: "";
+    in property <bool> won: false;
+    in property <[MatchPlayerUi]> rows: [];
+
+    Card {
+        pad: 0px;
+        gap: 0px;
+
+        Rectangle {
+            height: 34px;
+            background: transparent;
+
+            HorizontalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                spacing: Space.sm;
+
+                ColumnLabel { col-width: 28px; text: ""; }
+                ColumnLabel { col-width: 150px; text: root.title; }
+                ColumnLabel { col-width: 72px; text: "AGENT"; }
+                ColumnLabel { col-width: 48px; text: "ACS"; align-right: true; }
+                ColumnLabel { col-width: 92px; text: "K / D / A"; align-right: true; }
+                ColumnLabel { col-width: 48px; text: "K/D"; align-right: true; }
+                ColumnLabel { col-width: 56px; text: "HS %"; align-right: true; }
+                ColumnLabel { col-width: 56px; text: "KAST"; align-right: true; }
+                ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
+            }
+        }
+
+        for player in root.rows: DetailPlayerLine { item: player; }
+    }
+}
+
+component RoundCell inherits Rectangle {
+    in property <MatchRoundUi> item;
+    callback tapped(string);
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: root.item.blue ? Theme.mint : Theme.coral;
+    accessible-role: button;
+    accessible-label: root.item.tip;
+
+    Text {
+        text: root.item.label;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        font-weight: 700;
+        color: Theme.surface-dim;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => { root.tapped(root.item.tip); }
+        mouse-cursor: pointer;
+    }
+}
+
 export component MatchesPage inherits VerticalLayout {
-    // Same page box as Overview/Agents/Maps/Live: the table used to start at
-    // the rail's edge and end at the window's, which read as a different app.
+    // Same page box as Overview/Agents/Maps/Live.
     padding-left: Space.xl;
     padding-right: Space.xl;
     padding-top: 20px;
     padding-bottom: 20px;
     spacing: Space.md;
 
-    Card {
+    // The tapped round's result line: the colour is never the only signal.
+    property <string> round-tip: "";
+
+    if Tracker.match-id == "": Card {
         pad: 0px;
         gap: 0px;
 
@@ -171,5 +326,156 @@ export component MatchesPage inherits VerticalLayout {
         }
 
         for entry in Tracker.matches: MatchLine { item: entry; }
+    }
+
+    if Tracker.match-id != "": VerticalLayout {
+        spacing: Space.md;
+
+        // Header strip: Back, then map + mode + date + duration, then the
+        // Blue X – Y Red score the rounds voted for.
+        Card {
+            HorizontalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                padding-top: Space.sm;
+                padding-bottom: Space.sm;
+                spacing: Space.md;
+
+                back-touch := TouchArea {
+                    clicked => { Tracker.close-match-detail(); }
+                    mouse-cursor: pointer;
+                }
+                VCenter {
+                    Text {
+                        text: "‹ Back";
+                        accessible-role: button;
+                        accessible-label: "Back to matches";
+                        accessible-action-default => { back-touch.clicked(); };
+                        font-family: Theme.font-body;
+                        font-size: TypeScale.caption;
+                        font-weight: 600;
+                        color: back-touch.has-hover ? Theme.ink : Theme.primary;
+                    }
+                }
+                VCenter {
+                    VerticalLayout {
+                        spacing: 1px;
+                        Text {
+                            text: Tracker.match-title == "" ? "—" : Tracker.match-title;
+                            font-family: Theme.font-body;
+                            font-size: TypeScale.caption;
+                            font-weight: 700;
+                            color: Theme.ink;
+                            overflow: elide;
+                        }
+                        if root.round-tip != "": Text {
+                            text: root.round-tip;
+                            font-family: Theme.font-body;
+                            font-size: TypeScale.micro;
+                            color: Theme.ink-faint;
+                            overflow: elide;
+                        }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VCenter {
+                    Text {
+                        text: Tracker.match-score == "" ? "—" : Tracker.match-score;
+                        font-family: Theme.font-mono;
+                        font-size: TypeScale.body;
+                        font-weight: 700;
+                        color: Theme.ink;
+                    }
+                }
+            }
+        }
+
+        if Tracker.match-state == "loading": Card {
+            Rectangle {
+                height: 120px;
+                background: transparent;
+                Text {
+                    text: "Reading match…";
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    color: Theme.ink-faint;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if Tracker.match-state == "error": Card {
+            VerticalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                padding-top: Space.md;
+                padding-bottom: Space.md;
+                spacing: Space.sm;
+                Text {
+                    text: Tracker.match-note == "" ? "The scoreboard did not load." : Tracker.match-note;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    color: Theme.coral;
+                    wrap: word-wrap;
+                }
+                retry-touch := TouchArea {
+                    clicked => { Tracker.select-match(Tracker.match-id); }
+                    mouse-cursor: pointer;
+                }
+                Text {
+                    text: "Retry";
+                    accessible-role: button;
+                    accessible-label: "Retry loading match";
+                    accessible-action-default => { retry-touch.clicked(); };
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    font-weight: 600;
+                    color: retry-touch.has-hover ? Theme.ink : Theme.primary;
+                }
+            }
+        }
+
+        if Tracker.match-state == "ready": VerticalLayout {
+            spacing: Space.md;
+
+            TeamCard {
+                title: Tracker.match-blue-won ? "Blue — Victory" : "Blue";
+                won: Tracker.match-blue-won;
+                rows: Tracker.match-blue;
+            }
+            TeamCard {
+                title: Tracker.match-red-won ? "Red — Victory" : "Red";
+                won: Tracker.match-red-won;
+                rows: Tracker.match-red;
+            }
+
+            // Rounds strip: one cell per round, coloured by the winner. The
+            // result names each cell to screen readers (`accessible-label`)
+            // and a tap lands it in the header line above.
+            Card {
+                VerticalLayout {
+                    padding-left: Space.md;
+                    padding-right: Space.md;
+                    padding-top: Space.sm;
+                    padding-bottom: Space.sm;
+                    spacing: Space.sm;
+                    HorizontalLayout {
+                        spacing: 4px;
+                        for r in Tracker.match-rounds: RoundCell {
+                            item: r;
+                            tapped(tip) => { root.round-tip = tip; }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    Text {
+                        text: "Each cell is one round — tap it for the result.";
+                        font-family: Theme.font-body;
+                        font-size: TypeScale.micro;
+                        color: Theme.ink-faint;
+                    }
+                }
+            }
+        }
     }
 }
