@@ -1,83 +1,109 @@
 # AGENTS.md — Outpeek
 
-Instructions for AI coding agents (opencode and Kilo both auto-load this file). Human docs: `README.md`, `ROADMAP.md`, `RELEASING.md`.
+Instructions for AI coding agents. Human docs: `README.md`, `ROADMAP.md`, `RELEASING.md`.
 
 ## Project overview
 
-Outpeek is a Windows desktop VALORANT companion + competitive display toolkit. Tauri v2 app: live lobby scouting (rank, RR, parties, incognito resolution), in-game HUD overlays, true stretched resolution (1.45:1), sensitivity matcher, resolution switcher with safe-mode watchdog, VALORANT config editor, GPU scaling report.
+Outpeek is a Windows desktop VALORANT companion. Fully Rust + Slint now:
+one process, two windows (tracker shell + in-game HUD overlay).
 
-Safety rules (non-negotiable): read-only. No memory reading, no injection, no mutating Riot calls. Hovering an agent is fine; locking one is not. Never claim raw/hidden MMR — Riot does not expose it (see `ROADMAP.md`). Never display a GPU/display state that was not read back from the machine — mark unverifiable rows UNVERIFIED.
+Safety rules (non-negotiable): read-only. No memory reading, no injection,
+no mutating Riot calls. Never claim raw/hidden MMR — Riot does not expose it.
+Never display a GPU/display state that was not read back — mark unverified
+rows UNVERIFIED.
 
-Note: "agents" in this codebase means VALORANT game characters (`TrackerAgents.tsx`, `tracker.rs`), not AI agents.
+Note: "agents" in this codebase means VALORANT game characters, not AI
+agents.
 
 ## Tech stack
 
-- Frontend: TypeScript, React 19, Vite, Tailwind CSS 3, Framer Motion, Lucide icons. Material Design 3 dark violet theme.
-- Backend: Rust (edition 2021, `rust-version 1.77.2`), Tauri v2, Win32 via `windows-rs` + `winreg`, tokio runtime.
-- Graphics: DirectComposition GPU pipeline. Do not use `WS_EX_LAYERED` or CSS backdrop blur.
-- Package manager / runner: Bun. Target: `x86_64-pc-windows-msvc`, Windows 10/11 only.
+- UI: Slint 1.18 (`winit` + `femtoVG-wgpu`, DX12 on Windows), two crates.
+- Backend: Rust (edition 2021), Win32 via `windows-rs`, tokio runtime.
+- Data: Riot Client loopback (lockfile creds) + Tracker Network (keyless,
+  rustls + HTTP/2).
+- Target: `x86_64-pc-windows-msvc`, Windows 10/11 only.
 - Separate `website/` Vite site (reconlab.app), independent package.
 
 ## Directory map
 
-- `src/` — React frontend: `App.tsx`, `main.tsx`, `types.ts`, `components/` (~35 views: tracker, overlay, stretch, config), `hooks/`, `utils/` (ipc, tracker, trn, riotChat, store, updater), `assets/`.
-- `src-tauri/src/` — Rust backend: `lib.rs` (commands/state), `main.rs`, `display.rs`, `custom_res.rs`, `gpu.rs`, `game_config.rs`, `tracker.rs`, `trn_proxy.rs`, `calculator.rs`, `accounts.rs`, `perf.rs`, `shortcuts.rs`, `window_manager.rs`, `updater.rs`.
-- `src-tauri/` — `Cargo.toml` (crate `outpeek`, version must match root `package.json`), `tauri.conf.json` (windows: `main`, `overlay`, `dev`), `icons/`, `capabilities/`.
-- `scripts/` — Bun/Node checks: `bump-version.js`, `*-check.ts` (loadout, devqa, perf, trn-*, match-server, party-color, consent, live-poll, guards).
-- `website/` — standalone Vite + React + Tailwind marketing site. Own `package.json`, `bun.lock`.
-- `dist/` — Vite frontend output (Tauri `frontendDist`). Generated, never edit.
+- `outpeek-app/` — the app: tracker window + HUD window, one event loop.
+  `Cargo.toml` (name `outpeek-app`, version = release version),
+  `src/` (worker, trn, live, identity, model, settings, hwnds),
+  `ui/` (Slint: `app.slint`, `state.slint`, `components/`).
+- `outpeek-overlay/` — the HUD surface lib + headless test binary.
+  `src/lib.rs` (`hud`, `win_style`, `roles`, generated `ui`),
+  `ui/overlay.slint` + `tokens.slint` (shared with the app by include
+  path, never copied). The `outpeek-overlay` binary is `--probe` /
+  `--health` / `--show-test` / `--soak` only — not shipped.
+- `legacy/` — the OLD Tauri v2 + React tree, reference only. Do NOT run
+  it (known-corrupted from an unsupervised run). May be read for porting
+  logic/art. Its `src-tauri/src/*.rs` modules are compiled **by path**
+  into `outpeek-app` (see below) — do not rename them.
+- `website/` — standalone marketing site. Own `package.json`.
+- `contracts/` — shared TRN error-surface contract. `ops/` — notices.
+  `docs/` — live docs + history. `design/`, `assets/brand/` — mockups.
 
 ## Setup / build / dev / test
 
-Prerequisites: Bun, Rust stable (`x86_64-pc-windows-msvc`), VS 2022 Build Tools with C++ desktop workload.
-
 ```bash
-bun install                  # install root deps
-bun run dev                  # app with hot-reload UI (Vite on 127.0.0.1:5173, strictPort)
-bun run dev:ui               # Vite frontend only (browser preview, no Rust)
-bun run build:ui             # type-check (tsc -b) + vite build -> dist/
-bun run build                # UI + Rust, no installer -> src-tauri/target/release/outpeek.exe
-bun run build:bundle          # full release -> src-tauri/target/release/bundle/
-bun run lint                 # oxlint
-bun run bump -- X.Y.Z        # bump version in BOTH package.json and Cargo.toml (always use this)
-bun scripts/loadout-check.ts # example check; see scripts/*-check.ts run with bun
+cargo build -p outpeek-app                      # Linux check (HUD inert)
+cargo test -p outpeek-overlay -p outpeek-app    # 11 + 45 tests
+cargo build --release --manifest-path outpeek-app/Cargo.toml   # Windows ship
+# -> outpeek-app/target/release/outpeek-app.exe
+cargo xwin check --manifest-path outpeek-app/Cargo.toml --target x86_64-pc-windows-msvc
 ```
 
-- `website/` commands run from `website/`: `bun install`, `bun run dev`, `bun run build` (`tsc && vite build`).
-- Dev server port 5173 is `strictPort` — a conflict fails fast rather than shifting; do not change the port to work around it, kill the stale process.
-- Updater reads crate version (`Cargo.toml`); bundle version comes from `package.json`. Keep them in sync via `bun run bump`.
+- Flags: `--mcp-port PORT` (Slint UI-driving MCP), `--trn-probe [HANDLE]`,
+  `OUTPEEK_SMOKE_EXIT_MS`, `OUTPEEK_BENCH_REPAINTS`, `OUTPEEK_LOOP_PROBE`.
+- Bump: edit `version` in `outpeek-app/Cargo.toml` +
+  `outpeek-overlay/Cargo.toml` + `legacy/src-tauri/Cargo.toml` +
+  `legacy/package.json` + `website/index.html` (`softwareVersion`).
+  `legacy/scripts/bump-version.js` still does the first four from
+  `legacy/` (run it there); `website/index.html` is hand-edited.
+- Legacy verify (`legacy/scripts/verify.ts`, `bun run verify`) is
+  legacy-rooted; new work verifies with `cargo test` + Slint MCP
+  screenshots.
 
 ## Code conventions
 
-TypeScript / React:
+Slint / Rust:
 
-- Strict TS (`tsc -b` must pass). Prefer existing `src/utils/` helpers (`ipc.ts`, `logger.ts`, `version.ts`) over new one-offs.
-- Tauri IPC via `@tauri-apps/api`; backend commands defined in `src-tauri/src/lib.rs`. Keep command signatures `-> Result<_, String>`.
-- Tailwind for styling; Lucide icons; Framer Motion for animation. No CSS backdrop blur.
-- Overlay windows (`overlay` label) must stay click-through except in edit mode (`OVERLAY_EDIT_MODE` in `lib.rs`).
-
-Rust:
-
-- `cargo fmt` clean; no new warnings. Use named constants for registry/magic values (e.g. WDDM scaling values, not bare `3`/`4`).
-- Windows-only code paths: guard platform assumptions, handle missing registry keys gracefully.
-- GPU/display module rule: read back every claimed state; expose `verified` + `detail` rather than asserting writes succeeded.
-- Never add memory-read, injection, input-automation, or mutating Riot-client dependencies or calls.
+- Rust owns every value; `.slint` renders, never formats a fact. Empty
+  string = "not reported" = em dash, never a zero.
+- Stay frameless: app window `no-frame: true` + drawn `titlebar.slint`.
+  The HUD recipe (`win_style::apply`) touches the OVERLAY hwnd only —
+  never the app window (`roles::wants_clickthrough` is tested).
+- Shared UI is imported, never copied: `outpeek-app/build.rs` include
+  paths `../outpeek-overlay/ui`. Keep both crates as siblings or fix
+  `Cargo.toml` path dep + `build.rs` includes together.
+- `outpeek-app/src/lib.rs` `#[path = "../../legacy/src-tauri/src/..."]`
+  compiles five legacy modules by path (`fs_migrate`, `live_facts`,
+  `overlay_renderer`, `paths`, `riot_http`). Renaming `legacy/` needs
+  these five lines updated.
+- `cargo fmt` clean; no new warnings. Windows-only paths guard missing
+  registry keys. Never add memory-read, injection, input-automation, or
+  mutating Riot-client deps.
+- Icons: `outpeek-app/ui/components/icons.slint` is generated from
+  `lucide-react` (`legacy/` scripts). Badges are byte-identical art in
+  `outpeek-app/ui/assets/badges/`.
 
 General:
 
-- `ROADMAP.md` records verified dead-ends (MMR, live-data sources, Overwolf sidecar). Read it before re-investigating data-source questions.
-- Keep changes minimal and scoped; do not reformat unrelated files.
+- `ROADMAP.md` records verified dead-ends. Read it before re-researching.
+- Keep changes minimal; do not reformat unrelated files.
 
 ## Do NOT touch
 
-- Generated / deps: `dist/`, `dist-ssr/`, `node_modules/`, `website/node_modules/`, `.opencode/node_modules/`, `src-tauri/target/`, `*.tsbuildinfo`, `*.local`.
-- Secrets / local: `.env`, `bot/.env`, `vault/`, `logs/`, `*.log`.
-- Tooling state: `.hermes/`, `.kilo/worktrees/`, `.kilo/agent-manager.json` (diagnostic UI state, never edit for config), `.opencode/` (not loaded by Kilo — do not put project config here).
-- Kilo project config lives in `.kilo/command/*.md`, `.kilo/agent/*.md`, and `kilo.json` — not in this file.
+- Generated: `outpeek-app/target/`, `outpeek-overlay/target/`,
+  `legacy/node_modules/`, `legacy/dist/`, `legacy/.webview2-cache/`,
+  `legacy/src-tauri/target/`, `legacy/src-tauri/binaries/`,
+  `legacy/src-tauri/webview2-runtime/`, `*.local`, `*.tsbuildinfo`.
+- Secrets / local: `.env`, `logs/`, `*.log`.
+- Tooling state: `.hermes/`, `.agents/`, `.cortexkit/`, `.opencode/`.
 
 ## Git / worktrees
 
-- Windows repo, PowerShell shell. Default branch workflow: small focused commits; do not commit secrets.
-- Never use `git stash` (including autostash on merge/rebase) — stashes are shared across worktrees and leak unrelated changes into other sessions. Commit, or use a temp branch / worktree-local patch instead.
-- When merging a worktree branch with conflicts, merge or rebase the base branch inside that worktree, resolve there, run `bun run build:ui` + `bun run lint`, then integrate.
-- Respect root `.gitignore` (covers `.opencode/`, `opencode.json`, `vault/`, `.hermes/`, `node_modules`, `dist`, `src-tauri/target/`).
+- Small focused commits; do not commit secrets.
+- Never use `git stash` — stashes leak across worktrees. Commit, or use
+  a temp branch / worktree-local patch instead.
+- Respect root `.gitignore` (covers `legacy/`, targets, caches).

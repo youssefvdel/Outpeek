@@ -96,7 +96,7 @@ pub fn data_dir(app_data: Option<&Path>) -> PathState {
 }
 
 /// `%LOCALAPPDATA%\<identifier>\logs`, the path the Tauri build logs to, with
-/// the same fallback order as `src-tauri/src/lib.rs`: LOCALAPPDATA, then
+/// the same fallback order as `legacy/src-tauri/src/lib.rs`: LOCALAPPDATA, then
 /// APPDATA, then the temp directory. The fallback is shown, not hidden.
 pub fn log_dir(
     local_app_data: Option<&Path>,

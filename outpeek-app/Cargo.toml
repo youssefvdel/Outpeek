@@ -1,6 +1,6 @@
 [package]
 name = "outpeek-app"
-version = "0.4.4"
+version = "0.6.0"
 description = "Outpeek native app: tracker window + HUD overlay window in one Slint process"
 authors = ["Youssef Adel <contact@reconlab.app>"]
 license = "Proprietary"

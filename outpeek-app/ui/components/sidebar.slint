@@ -102,11 +102,10 @@ component RankCell inherits VerticalLayout {
     }
 }
 
-/// Player card: token-gradient banner (the shipping app puts the account's
-/// background art there — this shell has no image pipeline, so the banner is
-/// paint), avatar, name, and two rank cells split by a hairline.
+/// Player card: token-gradient banner on top with the avatar overlapping it
+/// (TRN-desktop shaped), name centered, current rank + peak side by side.
 component PlayerCard inherits Rectangle {
-    height: 210px;
+    height: 192px;
     border-radius: Shape.md;
     background: Theme.container;
     clip: true;
@@ -115,7 +114,7 @@ component PlayerCard inherits Rectangle {
         x: 0;
         y: 0;
         width: root.width;
-        height: 62px;
+        height: 56px;
         background: @linear-gradient(118deg, Theme.primary-dim 0%, Theme.primary-deep 58%, Theme.container 100%);
         clip: true;
 
@@ -134,12 +133,12 @@ component PlayerCard inherits Rectangle {
     Rectangle {
         y: 0;
         width: root.width;
-        height: 62px;
+        height: 56px;
         background: @linear-gradient(180deg, transparent 55%, Theme.container 100%);
     }
 
     Rectangle {
-        y: 61px;
+        y: 55px;
         width: root.width;
         height: 1px;
         background: Theme.line-soft;
@@ -147,7 +146,7 @@ component PlayerCard inherits Rectangle {
 
     Rectangle {
         x: (root.width - 40px) / 2;
-        y: 42px;
+        y: 36px;
         width: 40px;
         height: 40px;
         border-radius: 20px;
@@ -174,7 +173,7 @@ component PlayerCard inherits Rectangle {
     }
 
     Text {
-        y: 88px;
+        y: 80px;
         width: root.width;
         horizontal-alignment: center;
         text: Tracker.player-display == "" ? "Not signed in" : Tracker.player-display;
@@ -186,7 +185,7 @@ component PlayerCard inherits Rectangle {
     }
 
     Rectangle {
-        y: 110px;
+        y: 100px;
         width: root.width;
         height: 1px;
         background: Theme.line-soft;
@@ -194,9 +193,9 @@ component PlayerCard inherits Rectangle {
 
     RankCell {
         x: 0;
-        y: 116px;
+        y: 104px;
         width: (root.width - 1px) / 2;
-        height: 88px;
+        height: 84px;
         crest: Tracker.rank-crest;
         label: Tracker.rank-label;
         // RR only exists on a local `/mmr` read. A Tracker Network rank is a
@@ -212,7 +211,7 @@ component PlayerCard inherits Rectangle {
 
     Rectangle {
         x: (root.width - 1px) / 2;
-        y: 132px;
+        y: 118px;
         width: 1px;
         height: 56px;
         background: Theme.line-soft;
@@ -220,9 +219,9 @@ component PlayerCard inherits Rectangle {
 
     RankCell {
         x: (root.width + 1px) / 2;
-        y: 116px;
+        y: 104px;
         width: (root.width - 1px) / 2;
-        height: 88px;
+        height: 84px;
         crest: Tracker.peak-crest;
         label: Tracker.peak-label;
         sub: "PEAK";

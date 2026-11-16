@@ -1,5 +1,5 @@
 //! Keyless Tracker Network client: the direct transport the overlay's RE proved
-//! (`src-tauri/src/trn_http.rs` is the Tauri-side twin).
+//! (`legacy/src-tauri/src/trn_http.rs` is the Tauri-side twin).
 //!
 //! What the RE established, and what this module relies on:
 //! * `api.tracker.network` accepts the profile route with **no API key and no

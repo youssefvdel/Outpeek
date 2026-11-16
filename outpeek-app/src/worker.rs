@@ -605,8 +605,6 @@ where
     let mut matches_pending = true;
     let mut matches: Option<Vec<MatchRow>> = None;
     let mut matches_saved_at: u64 = 0;
-    let mut matches_state: &'static str = "empty";
-    let mut matches_note = String::new();
     // The cache read is a first-frame read, not a per-tick one: repeating it
     // would overwrite a fresh `ready` frame with `cached` on every poll.
     let mut matches_cache_loaded = false;
@@ -731,14 +729,16 @@ where
             );
             // The first breakdown frame resolved art before the catalogues
             // landed; re-resolve so map cards fill in without waiting for a
-            // profile refresh.
-            if !matches_note.is_empty() || matches.is_some() {
+            // profile refresh. No state/message is tracked here — the UI
+            // already holds the last frame's own values.
+            if matches.is_some() {
                 if let Some(rows) = matches.as_mut() {
                     if fill_match_art(&art, fetcher.clone(), rows).await {
+                        let (state, message) = ("cached", String::new());
                         publish(Event::Matches(MatchesView {
                             rows: rows.clone(),
-                            state: matches_state,
-                            message: matches_note.clone(),
+                            state,
+                            message,
                         }));
                     }
                 }
@@ -926,14 +926,12 @@ where
                         eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
                         let mut rows = rows;
                         fill_match_art(&art, fetcher.clone(), &mut rows).await;
-                        matches_state = "ready";
-                        matches_note = String::new();
-                        matches = Some(rows.clone());
                         publish(Event::Matches(MatchesView {
-                            rows,
+                            rows: rows.clone(),
                             state: "ready",
                             message: String::new(),
                         }));
+                        matches = Some(rows);
                     }
                     Err(e) => {
                         let (rows, state, message) = match &matches {
@@ -953,8 +951,6 @@ where
                                 format!("Tracker Network did not answer ({e})."),
                             ),
                         };
-                        matches_state = state;
-                        matches_note = message.clone();
                         publish(Event::Matches(MatchesView {
                             rows,
                             state,
@@ -975,16 +971,14 @@ where
                 matches_saved_at = cache.saved_at;
                 let mut rows = cache.matches;
                 fill_match_art(&art, fetcher.clone(), &mut rows).await;
-                matches_state = "cached";
-                matches_note = format!(
-                    "Showing the saved list from {}.",
-                    trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
-                );
                 matches = Some(rows.clone());
                 publish(Event::Matches(MatchesView {
                     rows,
-                    state: matches_state,
-                    message: matches_note.clone(),
+                    state: "cached",
+                    message: format!(
+                        "Showing the saved list from {}.",
+                        trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
+                    ),
                 }));
             }
         }

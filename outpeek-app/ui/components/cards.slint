@@ -8,7 +8,7 @@
 // empty means "not reported" and the cell draws an em dash — never a zero.
 // A real zero (0 aces) arrives as "0" and is shown.
 
-import { Theme, TypeScale, Space } from "tokens.slint";
+import { Theme, TypeScale, Space, Shape } from "tokens.slint";
 import { Tracker } from "../state.slint";
 import { Card, Chip, Glyph, HCenter, PanelTitle, VCenter } from "widgets.slint";
 
@@ -34,6 +34,44 @@ component CardTitle inherits Text {
     font-weight: 700;
     color: Theme.ink;
     vertical-alignment: center;
+}
+
+/// Playlist / Act filter boxes: static display of the queue + season the
+/// numbers belong to (TRN desktop puts these above the headline numerals).
+/// Not buttons: there is one queue and one season per read, so there is
+/// nothing to pick. Playlist is always the competitive read Rust filters;
+/// Act binds to Tracker.profile-season and shows an em dash until a read
+/// reports one — never a guessed season.
+component FilterBox inherits Rectangle {
+    in property <string> label: "";
+    in property <string> value: "";
+    in property <bool> known: false;
+
+    height: 38px;
+    border-radius: Shape.sm;
+    background: Theme.container;
+    border-width: Shape.stroke;
+    border-color: Theme.line-soft;
+
+    HorizontalLayout {
+        padding-left: Space.md;
+        padding-right: Space.md;
+        spacing: Space.sm;
+
+        VCenter {
+            PanelTitle { text: root.label; letter-spacing: 1px; }
+        }
+        VCenter {
+            Text {
+                text: root.value == "" ? "—" : root.value;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                font-weight: 600;
+                color: root.known ? Theme.ink : Theme.ink-faint;
+                overflow: elide;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -719,6 +757,30 @@ export component TrackerPage inherits VerticalLayout {
         }
     }
 
+    // Playlist / Act selectors, TRN-desktop shaped: two boxes side by side
+    // above the headline numerals, left-aligned. Display only — one queue and
+    // one season per read, so there is nothing to pick. Act binds to
+    // Tracker.profile-season and shows an em dash until a read reports one.
+    HorizontalLayout {
+        height: 38px;
+        spacing: Space.md;
+
+        FilterBox {
+            label: "PLAYLIST";
+            value: "Competitive";
+            known: true;
+            width: 210px;
+        }
+        FilterBox {
+            label: "ACT";
+            value: Tracker.profile-season;
+            known: Tracker.profile-season != "";
+            width: 270px;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+    }
+
     HorizontalLayout {
         height: 96px;
         spacing: Space.md;
@@ -761,15 +823,15 @@ export component TrackerPage inherits VerticalLayout {
     HorizontalLayout {
         height: 176px;
         spacing: Space.md;
-        CombatHighlights { horizontal-stretch: 1; }
-        TopAgent { horizontal-stretch: 1; }
-        Accuracy { horizontal-stretch: 1; }
+        CombatHighlights { horizontal-stretch: 4; }
+        TopAgent { horizontal-stretch: 5; }
+        Accuracy { horizontal-stretch: 5; }
     }
 
     HorizontalLayout {
         height: 165px;
         spacing: Space.md;
-        PreviousActs { horizontal-stretch: 1; }
-        TrackerScore { horizontal-stretch: 1; }
+        PreviousActs { horizontal-stretch: 2; }
+        TrackerScore { horizontal-stretch: 5; }
     }
 }

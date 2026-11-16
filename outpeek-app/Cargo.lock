@@ -3416,7 +3416,7 @@ dependencies = [
 
 [[package]]
 name = "outpeek-app"
-version = "0.4.4"
+version = "0.6.0"
 dependencies = [
  "image",
  "log",
@@ -3434,7 +3434,7 @@ dependencies = [
 
 [[package]]
 name = "outpeek-overlay"
-version = "0.4.4"
+version = "0.6.0"
 dependencies = [
  "image",
  "raw-window-handle",

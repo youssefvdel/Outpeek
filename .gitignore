@@ -11,11 +11,14 @@ node_modules
 dist
 dist-ssr
 src-tauri/target/
+legacy/src-tauri/target/
 # Fetched WebView2 Fixed Runtime (169 MB) — never commit; CI fetches it.
 src-tauri/webview2-runtime/
+legacy/src-tauri/webview2-runtime/
 # Built sidecar binary (cargo xwin -> src-tauri/binaries/) — never commit;
 # CI rebuilds it from outpeek-overlay/.
 src-tauri/binaries/
+legacy/src-tauri/binaries/
 *.local
 .env
 bot/.env
@@ -23,6 +26,8 @@ bot/node_modules/
 tsconfig.tsbuildinfo
 # Sidecar crate build output (local cargo xwin / slint builds).
 outpeek-overlay/target/
+# App crate build output (local cargo / slint builds).
+outpeek-app/target/
 
 # Editor directories and files
 .hermes/
@@ -44,4 +49,6 @@ docs/overwolf/captures/
 
 # WebView2 fixed runtime (679 MB, fetched in CI)
 src-tauri/webview2-runtime/
+legacy/src-tauri/webview2-runtime/
 .webview2-cache/
+legacy/.webview2-cache/

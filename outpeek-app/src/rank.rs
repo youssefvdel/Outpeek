@@ -3,7 +3,7 @@
 //! Rank is the one fact Riot does **not** expose on the loopback API: the
 //! shipping app reads `/mmr/v1/players/{puuid}` from the regional shard with
 //! the entitlement triple the local client hands out. This module mirrors that
-//! read (`src-tauri/src/tracker.rs` is canonical) and keeps it **off the live
+//! read (`legacy/src-tauri/src/tracker.rs` is canonical) and keeps it **off the live
 //! tick**: one read at startup / account change / explicit refresh, never on
 //! the 2.5 s presence poll.
 //!
@@ -18,7 +18,7 @@ use crate::identity::Entitlements;
 use crate::riot_http::{self, Request};
 
 /// `X-Riot-ClientPlatform` blob Riot's remote APIs expect. Protocol data, not
-/// logic; identical to the value in `src-tauri/src/tracker.rs`.
+/// logic; identical to the value in `legacy/src-tauri/src/tracker.rs`.
 const CLIENT_PLATFORM: &str = "ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9";
 /// Used when the game log is not available; the same value the Tauri app
 /// falls back to. Riot tolerates a slightly stale version on `/mmr`.

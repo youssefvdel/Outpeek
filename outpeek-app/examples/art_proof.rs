@@ -51,6 +51,7 @@ fn main() {
                     tier,
                     peak_tier: 0,
                     agent_uuid: agent_uuid.clone(),
+                    banner_url: None,
                 },
                 SystemTime::now(),
             )
