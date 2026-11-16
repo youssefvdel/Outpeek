@@ -423,59 +423,6 @@ export component Caption inherits Text {
     wrap: word-wrap;
 }
 
-/// Note band above a Tracker Network page: the season (or the state) on the
-/// left, a state chip on the right only while the data is not live.
-/// A fresh read needs no badge — the numbers are the proof.
-export component SourceBand inherits Rectangle {
-    in property <string> live-text: "";
-    in property <string> note: "";
-    in property <string> state: "empty";
-    in property <string> glyph: "tracker";
-
-    height: 34px;
-    border-radius: Shape.sm;
-    background: Theme.container-low;
-    border-width: 1px;
-    border-color: Theme.line-soft;
-
-    HorizontalLayout {
-        padding-left: Space.md;
-        padding-right: Space.md;
-        spacing: Space.sm;
-
-        VCenter {
-            Glyph {
-                kind: root.glyph;
-                size: 14px;
-                stroke: Theme.ink-faint;
-            }
-        }
-        Text {
-            text: root.state == "ready" ? root.live-text : root.note;
-            font-family: Theme.font-body;
-            font-size: TypeScale.micro;
-            color: Theme.ink-dim;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
-        }
-        // No chip on a live read: the numbers are the proof. The chip only
-        // names a state that needs explaining (saved, reading, not read).
-        if root.state != "ready": VCenter {
-            Chip {
-                text: root.state == "cached"
-                    ? "SAVED"
-                    : root.state == "loading" ? "READING" : "NOT READ";
-                tone: root.state == "cached"
-                    ? "neutral"
-                    : root.state == "loading" ? "armed" : "off";
-                pad-x: 7px;
-                pad-y: 1px;
-            }
-        }
-    }
-}
-
 /// Tab in the header band. Active gets the 2px violet underline; `soon` tabs
 /// dim out and take no click. The optional dot is a fact, not decoration: the
 /// caller binds it to a live match.

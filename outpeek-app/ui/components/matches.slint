@@ -9,7 +9,7 @@
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
 import { Tracker, MatchRowUi } from "../state.slint";
-import { Card, Cell, Chip, ColumnLabel, SourceBand, VCenter, Glyph } from "widgets.slint";
+import { Card, Cell, Chip, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
 component MatchLine inherits Rectangle {
     in property <MatchRowUi> item;
@@ -128,12 +128,6 @@ export component MatchesPage inherits VerticalLayout {
     padding-bottom: 20px;
     spacing: Space.md;
 
-    SourceBand {
-        live-text: Tracker.profile-season;
-        note: Tracker.matches-note;
-        state: Tracker.matches-state;
-    }
-
     Card {
         pad: 0px;
         gap: 0px;
@@ -164,10 +158,10 @@ export component MatchesPage inherits VerticalLayout {
             height: 120px;
             background: transparent;
 
+            // The band is gone by design: the reason lives here, in the empty
+            // card, instead of a strip above the table.
             Text {
-                text: Tracker.matches-state == "error"
-                    ? "No matches could be read, and none are saved yet."
-                    : "No matches yet.";
+                text: Tracker.matches-note == "" ? "No matches yet." : Tracker.matches-note;
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 color: Theme.ink-faint;

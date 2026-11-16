@@ -9,7 +9,7 @@
 
 import { Theme, Space, Shape, TypeScale } from "tokens.slint";
 import { Tracker, MapRowUi } from "../state.slint";
-import { Card, Chip, Glyph, PanelTitle, SourceBand, VCenter } from "widgets.slint";
+import { Card, Chip, Glyph, PanelTitle, VCenter } from "widgets.slint";
 
 component MetricCell inherits VerticalLayout {
     in property <string> label: "";
@@ -130,22 +130,16 @@ export component MapsPage inherits VerticalLayout {
     padding-bottom: 20px;
     spacing: Space.md;
 
-    SourceBand {
-        live-text: Tracker.profile-season;
-        note: Tracker.breakdown-note;
-        state: Tracker.breakdown-state;
-    }
-
     if Tracker.map-grid.length == 0: Card {
         pad: Space.lg;
         Rectangle {
             height: 120px;
             background: transparent;
 
+            // The band is gone by design: the reason lives here, in the empty
+            // card, instead of a strip above the grid.
             Text {
-                text: Tracker.breakdown-state == "error"
-                    ? "No map rows could be read, and none are saved yet."
-                    : "No map rows for this act yet.";
+                text: Tracker.breakdown-note == "" ? "No map rows for this act yet." : Tracker.breakdown-note;
                 font-family: Theme.font-body;
                 font-size: TypeScale.caption;
                 color: Theme.ink-faint;
