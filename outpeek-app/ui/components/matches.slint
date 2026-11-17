@@ -99,6 +99,8 @@ component StatCell inherits Rectangle {
     in property <brush> ink: Theme.ink;
     in property <length> col-width: 52px;
     in property <bool> flip: false;
+    // Drawn faint beside the value ("K/D/A" after the day's ratio).
+    in property <string> suffix: "";
     width: root.col-width;
 
     VerticalLayout {
@@ -115,15 +117,27 @@ component StatCell inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
         }
-        Text {
-            text: root.value == "" ? "—" : root.value;
-            font-family: Theme.font-mono;
-            font-size: TypeScale.value;
-            font-weight: 700;
-            color: root.value == "" ? Theme.ink-dim : root.ink;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+
+            Text {
+                text: root.value == "" ? "—" : root.value;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.value;
+                font-weight: 700;
+                color: root.value == "" ? Theme.ink-dim : root.ink;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.suffix != "": Text {
+                text: root.suffix;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.value;
+                font-weight: 700;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+            }
         }
         if root.flip: Text {
             text: root.label == "" ? "—" : root.label;
@@ -522,7 +536,13 @@ component DayHeader inherits Rectangle {
             spacing: 10px;
 
             StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: Theme.ink; }
-            StatCell { col-width: 150px; label: root.item.kda_sub == "" ? "K/D/A" : root.item.kda_sub; value: root.item.kda; flip: root.item.kda_sub != ""; ink: Theme.ink; }
+            StatCell {
+                col-width: 150px;
+                label: root.item.kda;
+                value: root.item.kda_sub == "" ? "" : root.item.kda_sub;
+                suffix: root.item.kda_sub == "" ? "" : "K/D/A";
+                ink: Theme.ink;
+            }
             StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dda; ink: root.item.dda == "" ? Theme.ink-dim : (root.item.dda.starts-with("-") ? Theme.coral : Theme.mint); }
             StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
             StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }

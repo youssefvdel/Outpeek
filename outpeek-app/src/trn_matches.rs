@@ -491,12 +491,12 @@ pub struct DayGroup {
     /// Sum kills / sum deaths, 1 decimal. Empty unless both sides reported
     /// and deaths are non-zero.
     pub kd: String,
-    /// `90 / 95 / 40` — the same shape the rows use, so the day band's columns
-    /// line up with the rows beneath it; em dash per side when no
+    /// `90 K // 95 D // 40 A` — the day's counts, carrying their own letters
+    /// because they are the band's small top line; em dash per side when no
     /// match reported it.
     pub kda: String,
-    /// `0.61 K/D/A` — the day's ratio under its triple, TRN's own stacking.
-    /// Empty when the ratio is missing, so the cell draws its dash line.
+    /// `0.61` — the day's ratio under its counts. The `K/D/A` suffix is the
+    /// view's, drawn faint beside the number. Empty when the ratio is missing.
     pub kda_sub: String,
     /// Signed grouped damage-delta sum over reporting matches.
     pub dda: String,
@@ -619,12 +619,12 @@ pub fn group_days(rows: &[MatchRow]) -> Vec<DayGroup> {
                     String::new()
                 },
                 kda_sub: if has_kills && has_deaths && deaths > 0 {
-                    format!("{:.2} K/D/A", kills as f64 / deaths as f64)
+                    format!("{:.2}", kills as f64 / deaths as f64)
                 } else {
                     String::new()
                 },
                 kda: format!(
-                    "{} / {} / {}",
+                    "{} K // {} D // {} A",
                     side(has_kills, kills),
                     side(has_deaths, deaths),
                     side(has_assists, assists)
@@ -1056,8 +1056,8 @@ mod tests {
         assert_eq!(g.wins_label, "0 W");
         assert_eq!(g.losses_label, "1 L");
         // Same sums the row itself reports: 14 / 23 / 7.
-        assert_eq!(g.kda, "14 / 23 / 7");
-        assert_eq!(g.kda_sub, "0.61 K/D/A");
+        assert_eq!(g.kda, "14 K // 23 D // 7 A");
+        assert_eq!(g.kda_sub, "0.61");
         assert_eq!(g.kd, format!("{:.1}", 14.0 / 23.0));
         // Same derived strings, same formatting rules.
         assert_eq!(g.dda, m.damage_delta_label());
@@ -1073,9 +1073,9 @@ mod tests {
         assert_eq!(g.count, 6);
         assert_eq!(g.wins_label, "1 W");
         assert_eq!(g.losses_label, "5 L");
-        assert_eq!(g.kda, "90 / 95 / 40");
+        assert_eq!(g.kda, "90 K // 95 D // 40 A");
         assert_eq!(g.kd, "0.9");
-        assert_eq!(g.kda_sub, "0.95 K/D/A");
+        assert_eq!(g.kda_sub, "0.95");
         // Mean of the six per-match headshot rates, not a share of shots.
         assert_eq!(g.hs, "79%");
         assert_eq!(g.dda, "-1,822");
@@ -1120,7 +1120,7 @@ mod tests {
         row.damage_delta = None;
         let days = group_days(&[row]);
         let g = &days[0];
-        assert_eq!(g.kda, "— / — / —");
+        assert_eq!(g.kda, "— K // — D // — A");
         assert_eq!(g.kda_sub, "");
         assert_eq!(g.kd, "");
         assert_eq!(g.hs, "");
