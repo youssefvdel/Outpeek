@@ -50,6 +50,11 @@ pub struct MatchRow {
     /// `default` so caches written before this field still load.
     #[serde(default)]
     pub art_url: String,
+    /// `https://.../tiersv2/20.png` — the rank medal TRN draws beside the map
+    /// (`stats.rank.metadata.iconUrl`). Empty when the payload carried none.
+    pub rank_url: String,
+    /// `Diamond 3` — that medal's tier name, used as the image's label.
+    pub rank_name: String,
     /// TRN performance score for this match (`trnPerformanceScore` value).
     /// `default` so caches written before this field still load.
     #[serde(default)]
@@ -772,6 +777,20 @@ pub fn parse(payload: &Value) -> Option<Vec<MatchRow>> {
                 headshots: num(&stats, "headshots"),
                 damage_delta: signed(&stats, "damageDelta"),
                 art_url: opt_text(&seg_meta, "agentImageUrl").unwrap_or_default(),
+                rank_url: stats
+                    .get("rank")
+                    .and_then(|r| r.get("metadata"))
+                    .and_then(|m| m.get("iconUrl"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                rank_name: stats
+                    .get("rank")
+                    .and_then(|r| r.get("metadata"))
+                    .and_then(|m| m.get("tierName"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
                 trs: num(&stats, "trnPerformanceScore"),
                 clutch: first_tag_name(&seg_meta),
                 clutch_bad: first_tag_tone_is(&seg_meta, "Negative"),
@@ -1249,6 +1268,33 @@ mod tests {
         assert!(!r[2].clutch_bad);
         assert_eq!(r[2].placement, None);
         assert_eq!(r[2].map_label(), "Lotus");
+    }
+
+    #[test]
+    fn the_rank_medal_comes_from_the_rank_stat_metadata() {
+        let payload = serde_json::json!({"data": {"matches": [
+            {"attributes": {"id": "m1"}, "metadata": {"result": "victory"},
+             "segments": [{"type": "overview",
+                "metadata": {"agentName": "Omen"},
+                "stats": {"rank": {"metadata": {
+                    "iconUrl": "https://trackercdn.com/cdn/tracker.gg/valorant/icons/tiersv2/20.png",
+                    "tierName": "Diamond 3"}}}}]}
+        ]}});
+        let r = parse(&payload).expect("shape is valid");
+        assert_eq!(r[0].rank_name, "Diamond 3");
+        assert!(r[0].rank_url.ends_with("tiersv2/20.png"));
+    }
+
+    #[test]
+    fn a_match_without_a_rank_stat_is_left_empty() {
+        let payload = serde_json::json!({"data": {"matches": [
+            {"attributes": {"id": "m1"}, "metadata": {"result": "victory"},
+             "segments": [{"type": "overview", "metadata": {"agentName": "Omen"},
+                           "stats": {}}]}
+        ]}});
+        let r = parse(&payload).expect("shape is valid");
+        assert_eq!(r[0].rank_url, "");
+        assert_eq!(r[0].rank_name, "");
     }
 
     #[test]

@@ -36,6 +36,9 @@ export global Theme {
     in-out property <brush> mint: #a8f5cc;
     in-out property <brush> coral: #ff8a7a;
     in-out property <brush> error: #ffb4ab;
+    // Muted rose for a number that reads low but is not an error state — the
+    // matches row's sub-1.0 K/D. Tracker's own #bf868f, warmed to our coral.
+    in-out property <brush> coral-dim: #bf868f;
 
     // Wash + edge pairs for tinted chips and toggle fills. Alpha lives here so
     // component files never carry a hex literal.

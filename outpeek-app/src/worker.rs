@@ -247,6 +247,16 @@ fn trn_agent(profile: Option<&Profile>) -> Option<String> {
 async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchRow]) -> bool {
     let mut changed = false;
     for row in rows.iter_mut() {
+        // The rank medal is a second URL on the same row; warm it too.
+        if !row.rank_url.is_empty() {
+            if art
+                .ensure_url(fetcher.clone(), &row.rank_url, SystemTime::now())
+                .await
+                .is_some()
+            {
+                changed = true;
+            }
+        }
         if !row.art_url.is_empty() {
             let url = row.art_url.clone();
             if art
@@ -1508,6 +1518,8 @@ mod tests {
             headshots: Some(12),
             damage_delta: Some(-1091),
             art_url: url.to_string(),
+            rank_url: String::new(),
+            rank_name: String::new(),
             trs: Some(279),
             clutch: Some("1v1 Lost".to_string()),
             clutch_bad: true,

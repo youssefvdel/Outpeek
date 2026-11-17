@@ -34,6 +34,9 @@ export struct MatchRowUi {
     score-lost: string,
     // "6th" — the placement chip beside the map name; empty when unplaced.
     placement: string,
+    // The match's own rank medal and its tier name ("Diamond 3").
+    rank-art: image,
+    rank-name: string,
     won: bool,
     agent: string,
     // "TRS 279" — hidden when empty.
@@ -41,6 +44,8 @@ export struct MatchRowUi {
     trs: string,
     // Grade key for the badge art ("1K" | "S" | "A" | "B" | "C" | "D" | "").
     trs-grade: string,
+    // True when this match's K/D is under 1.0 — the muted rose tone.
+    kd-low: bool,
     // First tags[] name ("1v1 Lost") — hidden when empty.
     clutch: string,
     // The clutch tone was Negative: coral ink, else mint.

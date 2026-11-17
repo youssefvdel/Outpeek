@@ -80,7 +80,7 @@ component TrsCell inherits Rectangle {
                 height: 22px;
                 text: root.value == "" ? "—" : root.value;
                 font-family: Theme.font-mono;
-                font-size: TypeScale.value;
+                font-size: 16px;
                 font-weight: 700;
                 color: Theme.ink;
                 vertical-alignment: center;
@@ -124,7 +124,7 @@ component StatCell inherits Rectangle {
             Text {
                 text: root.value == "" ? "—" : root.value;
                 font-family: Theme.font-mono;
-                font-size: TypeScale.value;
+                font-size: 16px;
                 font-weight: 700;
                 color: root.value == "" ? Theme.ink-dim : root.ink;
                 vertical-alignment: center;
@@ -133,7 +133,7 @@ component StatCell inherits Rectangle {
             if root.suffix != "": Text {
                 text: root.suffix;
                 font-family: Theme.font-mono;
-                font-size: TypeScale.value;
+                font-size: 16px;
                 font-weight: 700;
                 color: Theme.ink-faint;
                 vertical-alignment: center;
@@ -154,10 +154,10 @@ component StatCell inherits Rectangle {
 
 component MatchLine inherits Rectangle {
     in property <MatchRowUi> item;
-    // The reference's row panel, measured from the live DOM: 72 px tall,
-    // 8 px radius, a 1 px raised border, and a 10 px gap between panels.
-    // Each match is its own card, not a stripe in a table.
-    height: 72px;
+    // The reference's row panel is 72 px on a 1068 px card. Ours is ~936 px
+    // at the 1280 floor, so the same proportions are 66 px — keep the ratio,
+    // not the absolute number.
+    height: 66px;
     border-radius: 8px;
     border-width: 1px;
     border-color: Theme.container-high;
@@ -191,16 +191,16 @@ component MatchLine inherits Rectangle {
         // tinted plate is the fallback floor when the catalogue missed.
         VCenter {
             Rectangle {
-                width: 48px;
-                height: 48px;
+                width: 44px;
+                height: 44px;
                 border-radius: 9px;
                 background: Theme.primary-deep;
                 clip: true;
 
                 if root.item.art.width > 0: Image {
                     source: root.item.art;
-                    width: 48px;
-                    height: 48px;
+                    width: 44px;
+                    height: 44px;
                     image-fit: contain;
                 }
                 if root.item.art.width == 0: Glyph {
@@ -218,7 +218,8 @@ component MatchLine inherits Rectangle {
         // stacking. Wide enough that "2d ago // Competitive" never elides.
         VerticalLayout {
             width: 146px;
-            spacing: 2px;
+            spacing: 1px;
+            alignment: center;
 
             Text {
                 text: root.item.age == "" ? "—" : root.item.age;
@@ -272,6 +273,20 @@ component MatchLine inherits Rectangle {
             }
         }
 
+        // The match's rank medal, TRN's own slot between map and score.
+        VCenter {
+            if root.item.rank-art.width > 0: Image {
+                source: root.item.rank-art;
+                width: 28px;
+                height: 28px;
+                image-fit: contain;
+            }
+            if root.item.rank-art.width == 0: Rectangle {
+                width: 28px;
+                height: 28px;
+            }
+        }
+
         // The rounds score: a micro label over the verdict, stacked exactly
         // like the TRS cell beside it.
         VCenter {
@@ -297,7 +312,7 @@ component MatchLine inherits Rectangle {
                     Text {
                         text: root.item.score-won == "" ? "—" : root.item.score-won;
                         font-family: Theme.font-mono;
-                        font-size: TypeScale.value;
+                        font-size: 16px;
                         font-weight: 700;
                         color: Theme.mint;
                         vertical-alignment: center;
@@ -305,7 +320,7 @@ component MatchLine inherits Rectangle {
                     Text {
                         text: ":";
                         font-family: Theme.font-mono;
-                        font-size: TypeScale.value;
+                        font-size: 16px;
                         font-weight: 700;
                         color: Theme.ink-faint;
                         vertical-alignment: center;
@@ -313,7 +328,7 @@ component MatchLine inherits Rectangle {
                     Text {
                         text: root.item.score-lost == "" ? "—" : root.item.score-lost;
                         font-family: Theme.font-mono;
-                        font-size: TypeScale.value;
+                        font-size: 16px;
                         font-weight: 700;
                         color: Theme.coral;
                         vertical-alignment: center;
@@ -354,11 +369,35 @@ component MatchLine inherits Rectangle {
         HorizontalLayout {
             spacing: 10px;
 
-            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: Theme.ink; }
+            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: root.item.kd-low ? Theme.coral-dim : Theme.ink; }
             StatCell { col-width: 150px; label: "K/D/A"; value: root.item.kda; ink: Theme.ink; }
             StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dd; ink: root.item.dd == "" ? Theme.ink-dim : (root.item.dd.starts-with("-") ? Theme.coral : Theme.mint); }
             StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
             StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }
+        }
+
+        // The row's "open" affordance, matching the client's kebab. It is a
+        // real button: it opens the same detail a row click does.
+        VCenter {
+            Rectangle {
+                width: 20px;
+                height: 36px;
+                background: transparent;
+
+                for dot in 3: Rectangle {
+                    x: 7px;
+                    y: 8px + dot * 8px;
+                    width: 3px;
+                    height: 3px;
+                    border-radius: 1.5px;
+                    background: TouchDot.has-hover ? Theme.ink : Theme.ink-faint;
+                }
+
+                TouchDot := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Tracker.select-match(root.item.id); }
+                }
+            }
         }
     }
 }
@@ -502,7 +541,7 @@ component DayHeader inherits Rectangle {
     // Reference band: 54 px and rounded, the date at 18 px/700 in the
     // secondary ink, the W/L verdict in the middle, then the day's totals over
     // the columns they total. No numeric label is repeated down here.
-    height: 54px;
+    height: 50px;
     border-radius: 8px;
     background: Theme.container-low;
     HorizontalLayout {
@@ -514,7 +553,7 @@ component DayHeader inherits Rectangle {
             Text {
                 text: root.item.title == "" ? "—" : root.item.title;
                 font-family: Theme.font-body;
-                font-size: TypeScale.value;
+                font-size: 16px;
                 font-weight: 700;
                 color: Theme.ink-dim;
                 vertical-alignment: center;
@@ -554,7 +593,7 @@ component DayHeader inherits Rectangle {
                 Text {
                     text: root.item.wins-label;
                     font-family: Theme.font-body;
-                    font-size: TypeScale.value;
+                    font-size: 16px;
                     font-weight: 700;
                     color: Theme.mint;
                     vertical-alignment: center;
@@ -562,7 +601,7 @@ component DayHeader inherits Rectangle {
                 Text {
                     text: "//";
                     font-family: Theme.font-body;
-                    font-size: TypeScale.value;
+                    font-size: 16px;
                     font-weight: 700;
                     color: Theme.ink-faint;
                     vertical-alignment: center;
@@ -570,7 +609,7 @@ component DayHeader inherits Rectangle {
                 Text {
                     text: root.item.losses-label;
                     font-family: Theme.font-body;
-                    font-size: TypeScale.value;
+                    font-size: 16px;
                     font-weight: 700;
                     color: Theme.coral;
                     vertical-alignment: center;

@@ -1206,12 +1206,16 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         score_won: r.rounds_won_label().into(),
         score_lost: r.rounds_lost_label().into(),
         placement: r.placement_label().into(),
+        rank_art: load(&r.rank_url, 64),
+        rank_name: r.rank_name.clone().into(),
         won: r.won(),
         agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
         trs: r.trs.map(|v| v.to_string()).unwrap_or_default().into(),
         // The same banding the Tracker Score card uses, applied to this
         // match's own performance score.
         trs_grade: outpeek_app::badges::badge_key("", r.trs.map(|v| v as i32)).into(),
+        // A sub-1.0 ratio reads in the client's muted rose.
+        kd_low: matches!((r.kills, r.deaths), (Some(k), Some(d)) if d > 0 && k < d),
         clutch: r.clutch.clone().unwrap_or_default().into(),
         clutch_bad: r.clutch_bad,
         art: load(&r.art_url, 96),
