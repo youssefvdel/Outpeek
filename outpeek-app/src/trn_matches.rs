@@ -1036,8 +1036,10 @@ mod tests {
         assert_eq!(days.iter().map(|d| d.wins).sum::<u64>(), 7);
         assert_eq!(days.iter().map(|d| d.losses).sum::<u64>(), 13);
         let nov9 = days.iter().find(|d| d.key == "2026-11-09").unwrap();
-        assert_eq!(nov9.title, "Nov 9 [4]");
-        assert_eq!(nov9.wl, "3 W // 1 L");
+        assert_eq!(nov9.title, "Nov 9");
+        assert_eq!(nov9.count_label, "4");
+        assert_eq!(nov9.wins_label, "3 W");
+        assert_eq!(nov9.losses_label, "1 L");
     }
 
     #[test]
