@@ -510,7 +510,8 @@ pub struct DayGroup {
     /// Sum kills / sum deaths, 1 decimal. Empty unless both sides reported
     /// and deaths are non-zero.
     pub kd: String,
-    /// `90 K // 95 D // 40 A` — comma-grouped sums, em dash per side when no
+    /// `90 / 95 / 40` — the same shape the rows use, so the day band's columns
+    /// line up with the rows beneath it; em dash per side when no
     /// match reported it.
     pub kda: String,
     /// Signed grouped damage-delta sum over reporting matches.
@@ -632,7 +633,7 @@ pub fn group_days(rows: &[MatchRow]) -> Vec<DayGroup> {
                     String::new()
                 },
                 kda: format!(
-                    "{} K // {} D // {} A",
+                    "{} / {} / {}",
                     side(has_kills, kills),
                     side(has_deaths, deaths),
                     side(has_assists, assists)
@@ -1060,7 +1061,7 @@ mod tests {
         assert_eq!(g.title, "Nov 14 [1]");
         assert_eq!(g.wl, "0 W // 1 L");
         // Same sums the row itself reports: 14 / 23 / 7.
-        assert_eq!(g.kda, "14 K // 23 D // 7 A");
+        assert_eq!(g.kda, "14 / 23 / 7");
         assert_eq!(g.kd, format!("{:.1}", 14.0 / 23.0));
         // Same derived strings, same formatting rules.
         assert_eq!(g.dda, m.damage_delta_label());
@@ -1075,7 +1076,7 @@ mod tests {
         let g = days.iter().find(|d| d.key == "2026-11-11").unwrap();
         assert_eq!(g.count, 6);
         assert_eq!(g.wl, "1 W // 5 L");
-        assert_eq!(g.kda, "90 K // 95 D // 40 A");
+        assert_eq!(g.kda, "90 / 95 / 40");
         assert_eq!(g.kd, "0.9");
         // Mean of the six per-match headshot rates, not a share of shots.
         assert_eq!(g.hs, "79%");
@@ -1120,7 +1121,7 @@ mod tests {
         row.damage_delta = None;
         let days = group_days(&[row]);
         let g = &days[0];
-        assert_eq!(g.kda, "— K // — D // — A");
+        assert_eq!(g.kda, "— / — / —");
         assert_eq!(g.kd, "");
         assert_eq!(g.hs, "");
         assert_eq!(g.acs, "");

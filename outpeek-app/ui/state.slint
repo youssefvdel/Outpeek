@@ -31,7 +31,10 @@ export struct MatchRowUi {
     won: bool,
     agent: string,
     // "TRS 279" — hidden when empty.
+    // Just the number (`279`); the cell draws the label, TRN's own layout.
     trs: string,
+    // Grade key for the badge art ("1K" | "S" | "A" | "B" | "C" | "D" | "").
+    trs-grade: string,
     // First tags[] name ("1v1 Lost") — hidden when empty.
     clutch: string,
     // The clutch tone was Negative: coral ink, else mint.

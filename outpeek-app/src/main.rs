@@ -1205,7 +1205,10 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         score: r.rounds().into(),
         won: r.won(),
         agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
-        trs: r.trs_chip().into(),
+        trs: r.trs.map(|v| v.to_string()).unwrap_or_default().into(),
+        // The same banding the Tracker Score card uses, applied to this
+        // match's own performance score.
+        trs_grade: outpeek_app::badges::badge_key("", r.trs.map(|v| v as i32)).into(),
         clutch: r.clutch.clone().unwrap_or_default().into(),
         clutch_bad: r.clutch_bad,
         art: load(&r.art_url, 96),
