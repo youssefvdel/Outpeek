@@ -228,14 +228,47 @@ component MatchLine inherits Rectangle {
                 vertical-alignment: center;
                 overflow: elide;
             }
-            Text {
-                text: root.item.map == "" ? "—" : root.item.map;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                font-weight: 700;
-                color: Theme.ink;
-                vertical-alignment: center;
-                overflow: elide;
+            // The name sizes to its own text (no fixed width), so the chip
+            // hugs it instead of floating at a fixed offset.
+            HorizontalLayout {
+                height: 20px;
+                vertical-stretch: 0;
+                // start-aligned: children take their preferred width, so the
+                // chip sits right after the name instead of at the column edge.
+                alignment: start;
+                spacing: 6px;
+
+                Text {
+                    vertical-stretch: 0;
+                    // Preferred width, not the column's: the chip must hug the
+                    // name instead of sitting at the column's right edge.
+                    horizontal-stretch: 0;
+                    text: root.item.map == "" ? "—" : root.item.map;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    font-weight: 700;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                }
+                if root.item.placement != "": Rectangle {
+                    vertical-stretch: 0;
+                    horizontal-stretch: 0;
+                    width: 28px;
+                    height: 20px;
+                    border-radius: 5px;
+                    border-width: 1px;
+                    border-color: Theme.line;
+
+                    Text {
+                        text: root.item.placement;
+                        font-family: Theme.font-body;
+                        font-size: TypeScale.micro;
+                        font-weight: 600;
+                        color: Theme.ink-dim;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
             }
         }
 
@@ -255,17 +288,36 @@ component MatchLine inherits Rectangle {
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
-                Text {
-                    width: 66px;
-                    text: root.item.score == "" ? "—" : root.item.score;
-                    font-family: Theme.font-mono;
-                    font-size: TypeScale.value;
-                    font-weight: 700;
-                    color: root.item.score == ""
-                        ? Theme.ink-faint
-                        : root.item.won ? Theme.mint : Theme.coral;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                // TRN colours the sides, not the result: our rounds mint,
+                // the opponent's coral, in a loss as well as a win.
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 4px;
+
+                    Text {
+                        text: root.item.score-won == "" ? "—" : root.item.score-won;
+                        font-family: Theme.font-mono;
+                        font-size: TypeScale.value;
+                        font-weight: 700;
+                        color: Theme.mint;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: ":";
+                        font-family: Theme.font-mono;
+                        font-size: TypeScale.value;
+                        font-weight: 700;
+                        color: Theme.ink-faint;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.item.score-lost == "" ? "—" : root.item.score-lost;
+                        font-family: Theme.font-mono;
+                        font-size: TypeScale.value;
+                        font-weight: 700;
+                        color: Theme.coral;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

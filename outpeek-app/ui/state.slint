@@ -27,7 +27,13 @@ export struct MatchRowUi {
     map: string,
     // "2d ago // Competitive" — the row's first line, owned by Rust.
     age: string,
+    // "11–13" — kept for accessibility and any single-colour use.
     score: string,
+    // The score's two sides, each drawn in its own result colour.
+    score-won: string,
+    score-lost: string,
+    // "6th" — the placement chip beside the map name; empty when unplaced.
+    placement: string,
     won: bool,
     agent: string,
     // "TRS 279" — hidden when empty.

@@ -1200,9 +1200,12 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     };
     let row = |r: &MatchRow| MatchRowUi {
         id: r.id.clone().into(),
-        map: r.map_label().into(),
+        map: r.map.clone().into(),
         age: r.age_line(now).into(),
         score: r.rounds().into(),
+        score_won: r.rounds_won_label().into(),
+        score_lost: r.rounds_lost_label().into(),
+        placement: r.placement_label().into(),
         won: r.won(),
         agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
         trs: r.trs.map(|v| v.to_string()).unwrap_or_default().into(),

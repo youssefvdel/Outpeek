@@ -167,6 +167,22 @@ impl MatchRow {
     }
 
     /// `14–16` from the round totals.
+    /// `11` — the side of the score the winner's colour belongs to.
+    pub fn rounds_won_label(&self) -> String {
+        self.rounds_won.map(|v| v.to_string()).unwrap_or_default()
+    }
+
+    /// `13` — the losing side, drawn in the loss colour.
+    pub fn rounds_lost_label(&self) -> String {
+        self.rounds_lost.map(|v| v.to_string()).unwrap_or_default()
+    }
+
+    /// `6th` — the placement alone, for the small chip beside the map name.
+    /// Empty when the payload reported none.
+    pub fn placement_label(&self) -> String {
+        self.placement.map(ordinal).unwrap_or_default()
+    }
+
     pub fn rounds(&self) -> String {
         match (self.rounds_won, self.rounds_lost) {
             (Some(w), Some(l)) => format!("{w}–{l}"),
