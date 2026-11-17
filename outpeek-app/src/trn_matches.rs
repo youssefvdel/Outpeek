@@ -191,8 +191,13 @@ impl MatchRow {
     pub fn rounds(&self) -> String {
         match (self.rounds_won, self.rounds_lost) {
             (Some(w), Some(l)) => format!("{w}–{l}"),
-            _ => "—".to_string(),
+            _ => String::new(),
         }
+    }
+
+    /// True when the reported delta is negative — the coral ink pick.
+    pub fn dd_negative(&self) -> bool {
+        matches!(self.damage_delta, Some(v) if v < 0)
     }
 
     /// `2026-11-14` → `Nov 14`. Anything unexpected is returned unchanged so a
@@ -412,8 +417,23 @@ pub struct AgentStripRow {
     pub art_url: String,
 }
 
+impl AgentStripRow {
+    /// "K/D 1.10" — "K/D —" when the payload reported none.
+    pub fn kd_line(&self) -> String {
+        if self.kd.is_empty() {
+            "K/D —".to_string()
+        } else {
+            format!("K/D {}", self.kd)
+        }
+    }
+}
+
 /// Top 3 agents by matches played (the breakdown arrives most-played first;
 /// this re-sorts so the strip never depends on input order).
+///
+/// The record uses the reported `matchesWon`/`matchesLost` — never a rounded
+/// estimate from `matches x win%` (ties would land in losses and a rounded
+/// share can be off by one). Anything unreported is empty, never guessed.
 pub fn top_agents(rows: &[BreakdownRow]) -> Vec<AgentStripRow> {
     let mut sorted: Vec<&BreakdownRow> = rows.iter().collect();
     sorted.sort_by(|a, b| b.matches.cmp(&a.matches).then_with(|| a.name.cmp(&b.name)));
@@ -421,12 +441,13 @@ pub fn top_agents(rows: &[BreakdownRow]) -> Vec<AgentStripRow> {
         .into_iter()
         .take(3)
         .map(|b| {
-            let (record, win_share) = match (b.matches, b.win_pct) {
-                (Some(m), Some(p)) if m >= 0 && p.is_finite() => {
-                    let wins = ((m as f64) * p / 100.0).round().clamp(0.0, m as f64) as i64;
+            let (record, win_share) = match (b.wins, b.losses, b.win_pct) {
+                (Some(w), Some(l), Some(pct))
+                    if w >= 0 && l >= 0 && pct.is_finite() =>
+                {
                     (
-                        format!("{}W - {}L ({:.0}%)", wins, m - wins, p),
-                        (p / 100.0).clamp(0.0, 1.0) as f32,
+                        format!("{w}W - {l}L ({pct:.0}%)"),
+                        (pct / 100.0).clamp(0.0, 1.0) as f32,
                     )
                 }
                 _ => (String::new(), 0.0),
@@ -456,6 +477,19 @@ pub struct SeasonStrip {
     pub adr: String,
     /// Season win share (0–1) for the bar.
     pub win_share: f32,
+}
+
+impl SeasonStrip {
+    /// Second line, joined by Rust; empty when both halves are missing.
+    /// The view draws its dash, so absence stays empty here.
+    pub fn line(&self) -> String {
+        match (self.kd.as_str(), self.adr.as_str()) {
+            ("", "") => String::new(),
+            (kd, "") => kd.to_string(),
+            ("", adr) => adr.to_string(),
+            (kd, adr) => format!("{kd} | {adr}"),
+        }
+    }
 }
 
 /// Build the strip's season cell from the already-parsed season stats.
@@ -528,6 +562,10 @@ pub struct DayGroup {
     /// Total score / total rounds, rounded — the same ratio as the per-match
     /// ACS, so a single-match day reads exactly its match's number.
     pub acs: String,
+    /// True when summed kills < deaths (deaths > 0).
+    pub kd_low: bool,
+    /// True when the summed delta is negative.
+    pub dda_negative: bool,
     pub count: usize,
     pub wins: u64,
     pub losses: u64,
@@ -628,6 +666,9 @@ pub fn group_days(rows: &[MatchRow]) -> Vec<DayGroup> {
             } else {
                 first.date_label()
             };
+            // Day band K/D low: summed kills < deaths, deaths > 0.
+            let kd_low = has_kills && has_deaths && deaths > 0 && kills < deaths;
+            let dda_negative = has_damage && damage < 0;
             DayGroup {
                 key,
                 title: day.clone(),
@@ -665,6 +706,8 @@ pub fn group_days(rows: &[MatchRow]) -> Vec<DayGroup> {
                 } else {
                     String::new()
                 },
+                kd_low,
+                dda_negative,
                 count: n,
                 wins,
                 losses,
@@ -951,7 +994,7 @@ mod tests {
         missing.assists = None;
         missing.rounds_lost = None;
         assert_eq!(missing.kda(), "— / 23 / —");
-        assert_eq!(missing.rounds(), "—");
+        assert_eq!(missing.rounds(), "");
     }
 
     #[test]
@@ -1169,9 +1212,20 @@ mod tests {
         win_pct: Option<f64>,
         kd: Option<f64>,
     ) -> BreakdownRow {
+        // Reported wins/losses for the honest record: split matches by the
+        // share only in tests that need a record without caring about ties.
+        let (wins, losses) = match (matches, win_pct) {
+            (Some(m), Some(pct)) if pct.is_finite() => {
+                let w = ((m as f64) * pct / 100.0).round() as i64;
+                (Some(w), Some(m - w))
+            }
+            _ => (None, None),
+        };
         BreakdownRow {
             name: name.to_string(),
             matches,
+            wins,
+            losses,
             win_pct,
             kd,
             ..BreakdownRow::default()
@@ -1223,7 +1277,9 @@ mod tests {
         );
         assert_eq!(strip[0].record, "7W - 9L (44%)");
         assert_eq!(strip[0].kd, "0.86");
+        assert_eq!(strip[0].kd_line(), "K/D 0.86");
         assert_eq!(strip[1].record, "3W - 9L (25%)");
+        assert_eq!(strip[1].kd_line(), "K/D 0.70");
         assert!(
             strip.iter().all(|a| a.art_url.is_empty()),
             "art is the worker's job"

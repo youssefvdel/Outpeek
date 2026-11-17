@@ -164,20 +164,13 @@ fn main() {
     // Boot the chrome from the persisted toggle so the first frame is honest.
     let t = app.global::<Tracker>();
     t.set_version(VERSION.into());
+    t.set_version_label(format!("v{VERSION}").into());
     // The drawn titlebar and the Win32 hit/region maths read the same numbers.
     t.set_titlebar_height(app_window::TITLEBAR_HEIGHT);
     t.set_control_width(app_window::CONTROL_WIDTH);
-    let platform_note = if !PLATFORM_SUPPORTS_HUD {
-        "HUD window styling is Win32-only; the overlay stays hidden on this host.".to_string()
-    } else if let Some(error) = &overlay_error {
-        format!("HUD window could not open: {error}")
-    } else {
-        String::new()
-    };
     if let Some(error) = &overlay_error {
         eprintln!("[{PRODUCT_NAME}] overlay window failed to open: {error}");
     }
-    t.set_platform_note(platform_note.into());
     apply_hud(&app, enabled.load(Ordering::Relaxed), false);
     apply_settings(&app);
     // Honest first frame: the glyph reflects the real window, not a default.
@@ -975,22 +968,27 @@ fn apply_snapshot(ui: &AppWindow, snap: &TrackerSnapshot) {
     let t = ui.global::<Tracker>();
     t.set_player_display(snap.player_display().into());
     t.set_player_initial(snap.player_initial().into());
-    t.set_phase_title(snap.phase_title().into());
-    t.set_phase_chip(snap.phase_chip().into());
     t.set_map_name(snap.map.clone().into());
     t.set_mode(snap.mode.clone().into());
     t.set_blue(snap.blue);
     t.set_red(snap.red);
     t.set_live_state(snap.live_state().into());
-    t.set_live_message(snap.live_message().into());
-
-    let (line, tone) = match &snap.client {
-        ClientState::Starting => ("Connecting to the Riot Client…", "warn"),
-        ClientState::Missing => ("Riot Client not running", "warn"),
-        ClientState::Ready => ("Riot Client connected", "ok"),
-        ClientState::Error(_) => ("Riot Client error", "error"),
+    // Header live line, joined here: "LIVE · Bind · 14–16".
+    let map_part = if snap.map.is_empty() {
+        "MATCH".to_string()
+    } else {
+        snap.map.clone()
     };
-    t.set_client_line(line.into());
+    let live_header = format!("LIVE · {map_part} · {}–{}", snap.blue, snap.red);
+    t.set_live_header(live_header.into());
+    t.set_live_score(format!("{} – {}", snap.blue, snap.red).into());
+
+    let tone = match &snap.client {
+        ClientState::Starting => "warn",
+        ClientState::Missing => "warn",
+        ClientState::Ready => "ok",
+        ClientState::Error(_) => "error",
+    };
     t.set_client_tone(tone.into());
 }
 
@@ -1000,8 +998,17 @@ fn apply_rank(ui: &AppWindow, view: &RankView) {
     t.set_rank_label(view.label.clone().into());
     t.set_rank_rr(view.rr as i32);
     t.set_rank_rr_known(view.rr_known);
-    t.set_rank_message(view.message.clone().into());
     t.set_peak_label(view.peak_label.clone().into());
+    // Rank cell sub line, joined here: RR, waiting, or the dash.
+    let rr_label = match view.state {
+        outpeek_app::model::RankState::Ok if view.rr_known => format!("{} RR", view.rr),
+        outpeek_app::model::RankState::Ok => "NO RR".to_string(),
+        outpeek_app::model::RankState::Waiting | outpeek_app::model::RankState::Loading => {
+            "WAITING".to_string()
+        }
+        _ => "—".to_string(),
+    };
+    t.set_rank_rr_label(rr_label.into());
 }
 
 /// The PLAYLIST dropdown's fixed options, from the parser's own table so Rust
@@ -1028,7 +1035,6 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     let t = ui.global::<Tracker>();
     t.set_profile_state(view.state.as_str().into());
     t.set_profile_message(view.message.clone().into());
-    t.set_profile_handle(view.handle.clone().into());
     t.set_profile_season(view.season.clone().into());
     t.set_playlist(view.playlist.clone().into());
     t.set_playlist_label(
@@ -1037,7 +1043,6 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
             .into(),
     );
     apply_playlist_options(ui);
-    t.set_profile_matches(view.matches.clone().into());
     t.set_win_pct(view.win_pct.clone().into());
     t.set_kd(view.kd.clone().into());
     t.set_hs_pct(view.hs_pct.clone().into());
@@ -1059,6 +1064,17 @@ fn apply_profile(ui: &AppWindow, view: &ProfileView) {
     t.set_acc_body_hits(view.acc_body_hits.clone().into());
     t.set_acc_legs(view.acc_legs.clone().into());
     t.set_acc_legs_hits(view.acc_legs_hits.clone().into());
+    // "1,962 hits" — the suffix lives here, never in the view.
+    let hits_label = |h: &str| {
+        if h.is_empty() {
+            "— hits".to_string()
+        } else {
+            format!("{h} hits")
+        }
+    };
+    t.set_acc_head_hits_label(hits_label(&view.acc_head_hits).into());
+    t.set_acc_body_hits_label(hits_label(&view.acc_body_hits).into());
+    t.set_acc_legs_hits_label(hits_label(&view.acc_legs_hits).into());
     t.set_agent_name(view.agent_name.clone().into());
     t.set_agent_role(view.agent_role.clone().into());
     t.set_agent_line(view.agent_line.clone().into());
@@ -1118,20 +1134,13 @@ fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailVie
         t.set_match_rounds(ModelRc::new(VecModel::from(Vec::<MatchRoundUi>::new())));
         return;
     };
-    let dash = |s: &str| {
-        if s.is_empty() {
-            "—".to_string()
-        } else {
-            s.to_string()
-        }
-    };
-    let title = [
-        dash(&d.map),
-        dash(&d.mode),
-        dash(&d.date),
-        dash(&d.duration),
-    ]
-    .join(" · ");
+    // Title joins non-empty parts only; empty when none were reported.
+    let title = [&d.map, &d.mode, &d.date, &d.duration]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .map(|part| part.as_str())
+        .collect::<Vec<_>>()
+        .join(" · ");
     t.set_match_title(title.into());
     t.set_match_score(d.score_line().into());
     t.set_match_blue_won(d.blue_won);
@@ -1150,9 +1159,9 @@ fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailVie
             .iter()
             .map(|p| MatchPlayerUi {
                 name: p.name.clone().into(),
-                agent: dash(&p.agent).into(),
+                agent: p.agent.clone().into(),
                 art: load(&p.art_url),
-                rank: dash(&p.rank).into(),
+                rank: p.rank.clone().into(),
                 acs: p.acs.clone().into(),
                 kda: p.kda.clone().into(),
                 kd: p.kd.clone().into(),
@@ -1167,11 +1176,18 @@ fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailVie
     let rounds: Vec<MatchRoundUi> = d
         .rounds
         .iter()
-        .map(|r: &DetailRound| MatchRoundUi {
-            label: r.n.to_string().into(),
-            blue: r.winner == "Blue",
-            result: r.result.clone().into(),
-            tip: format!("Round {} — {}, {}", r.n, r.winner, dash(&r.result)).into(),
+        .map(|r: &DetailRound| {
+            let tip = if r.result.is_empty() {
+                format!("Round {} — {}", r.n, r.winner)
+            } else {
+                format!("Round {} — {}, {}", r.n, r.winner, r.result)
+            };
+            MatchRoundUi {
+                label: r.n.to_string().into(),
+                blue: r.winner == "Blue",
+                result: r.result.clone().into(),
+                tip: tip.into(),
+            }
         })
         .collect();
     t.set_match_rounds(ModelRc::new(VecModel::from(rounds)));
@@ -1198,32 +1214,66 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             None => slint::Image::default(),
         }
     };
-    let row = |r: &MatchRow| MatchRowUi {
-        id: r.id.clone().into(),
-        map: r.map.clone().into(),
-        age: r.age_line(now).into(),
-        score: r.rounds().into(),
-        score_won: r.rounds_won_label().into(),
-        score_lost: r.rounds_lost_label().into(),
-        placement: r.placement_label().into(),
-        rank_art: load(&r.rank_url, 64),
-        rank_name: r.rank_name.clone().into(),
-        won: r.won(),
-        agent: r.agent.clone().unwrap_or_else(|| "—".to_string()).into(),
-        trs: r.trs.map(|v| v.to_string()).unwrap_or_default().into(),
-        // The same banding the Tracker Score card uses, applied to this
-        // match's own performance score.
-        trs_grade: outpeek_app::badges::badge_key("", r.trs.map(|v| v as i32)).into(),
-        // A sub-1.0 ratio reads in the client's muted rose.
-        kd_low: matches!((r.kills, r.deaths), (Some(k), Some(d)) if d > 0 && k < d),
-        clutch: r.clutch.clone().unwrap_or_default().into(),
-        clutch_bad: r.clutch_bad,
-        art: load(&r.art_url, 96),
-        kda: r.kda().into(),
-        kd: r.kd_ratio().into(),
-        hs: r.hs_pct().into(),
-        dd: r.damage_delta_label().into(),
-        acs: r.acs().into(),
+    let row = |r: &MatchRow| {
+        let age = r.age_line(now);
+        let map = r.map.clone();
+        let score = r.rounds();
+        let trs = r.trs.map(|v| v.to_string()).unwrap_or_default();
+        let clutch = r.clutch.clone().unwrap_or_default();
+        let agent = r.agent.clone().unwrap_or_default();
+        // Screen-reader line: same six facts as the old accessible-label,
+        // joined here; "—" when nothing was reported.
+        let parts = [
+            agent.clone(),
+            age.clone(),
+            map.clone(),
+            score.clone(),
+            trs.clone(),
+            clutch.clone(),
+        ];
+        let a11y = parts
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let a11y_label = if a11y.is_empty() {
+            "—".to_string()
+        } else {
+            a11y
+        };
+        MatchRowUi {
+            id: r.id.clone().into(),
+            map: map.into(),
+            age: age.into(),
+            score: score.into(),
+            score_won: r.rounds_won_label().into(),
+            score_lost: r.rounds_lost_label().into(),
+            placement: r.placement_label().into(),
+            rank_art: load(&r.rank_url, 64),
+            rank_name: r.rank_name.clone().into(),
+            won: r.won(),
+            agent: if agent.is_empty() {
+                "—".to_string().into()
+            } else {
+                agent.into()
+            },
+            trs: trs.into(),
+            // The same banding the Tracker Score card uses, applied to this
+            // match's own performance score.
+            trs_grade: outpeek_app::badges::badge_key("", r.trs.map(|v| v as i32)).into(),
+            // A sub-1.0 ratio reads in the client's muted rose.
+            kd_low: matches!((r.kills, r.deaths), (Some(k), Some(d)) if d > 0 && k < d),
+            clutch: clutch.into(),
+            clutch_bad: r.clutch_bad,
+            art: load(&r.art_url, 96),
+            kda: r.kda().into(),
+            kd: r.kd_ratio().into(),
+            hs: r.hs_pct().into(),
+            dd: r.damage_delta_label().into(),
+            dd_negative: r.dd_negative(),
+            acs: r.acs().into(),
+            a11y_label: a11y_label.into(),
+        }
     };
     let rows: Vec<MatchRowUi> = view.rows.iter().map(&row).collect();
     t.set_matches(ModelRc::new(VecModel::from(rows)));
@@ -1232,6 +1282,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         record: summary.record.clone().into(),
         kd: summary.kd.clone().into(),
         adr: summary.adr.clone().into(),
+        line: summary.line().into(),
         win_share: summary.win_share,
     });
     let agents: Vec<MatchAgentUi> = view
@@ -1241,6 +1292,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             name: a.name.clone().into(),
             record: a.record.clone().into(),
             kd: a.kd.clone().into(),
+            kd_line: a.kd_line().into(),
             win_share: a.win_share,
             art: load(&a.art_url, 96),
         })
@@ -1255,9 +1307,11 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             wins_label: d.wins_label.clone().into(),
             losses_label: d.losses_label.clone().into(),
             kd: d.kd.clone().into(),
+            kd_low: d.kd_low,
             kda: d.kda.clone().into(),
         kda_sub: d.kda_sub.clone().into(),
             dda: d.dda.clone().into(),
+            dda_negative: d.dda_negative,
             hs: d.hs.clone().into(),
             acs: d.acs.clone().into(),
         })
@@ -1306,6 +1360,7 @@ fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
             matches: r.matches.clone().into(),
             win: r.win.clone().into(),
             kd: r.kd.clone().into(),
+            kd_low: r.kd_low,
             acs: r.acs.clone().into(),
             adr: r.adr.clone().into(),
             hs: r.hs.clone().into(),
@@ -1324,6 +1379,7 @@ fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
             wins: r.wins.clone().into(),
             losses: r.losses.clone().into(),
             dd: r.dd.clone().into(),
+            dd_negative: r.dd_negative,
             kd: r.kd.clone().into(),
             kd_low: r.kd_low,
             acs: r.acs.clone().into(),
@@ -1380,10 +1436,12 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
                 agent: row.agent.clone().into(),
                 agent_art: load(&row.agent_art, 96),
                 level: row.level.clone().into(),
+                level_label: row.level_label.clone().into(),
                 rank: row.rank.clone().into(),
                 rr: row.rr.clone().into(),
                 crest: load(&row.crest, 64),
                 party: row.party.clone().into(),
+                party_label: row.party_label.clone().into(),
                 me: row.me,
                 incognito: row.incognito,
             })
@@ -1399,6 +1457,22 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
     t.set_live_mode(view.mode.clone().into());
     t.set_live_blue_score(view.blue_score as i32);
     t.set_live_red_score(view.red_score as i32);
+    // Count + score labels, joined here so the view binds verbatim.
+    let count_label = |n: usize| {
+        if n == 0 {
+            "—".to_string()
+        } else {
+            format!("{n} players")
+        }
+    };
+    t.set_live_blue_count_label(count_label(view.blue.len()).into());
+    t.set_live_red_count_label(count_label(view.red.len()).into());
+    let live_score = if view.state == "coregame" || view.state == "pregame" {
+        format!("{} – {}", view.blue_score, view.red_score)
+    } else {
+        "—".to_string()
+    };
+    t.set_live_score(live_score.into());
 }
 
 /// Decode the cached art this event names into the window's image slots.

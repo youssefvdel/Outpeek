@@ -539,7 +539,7 @@ component AccuracyRow inherits HorizontalLayout {
     height: 23px;
     in property <string> label: "";
     in property <string> value: "";
-    in property <string> hits: "";
+    in property <string> hits-label: "";
 
     spacing: Space.sm;
 
@@ -562,7 +562,7 @@ component AccuracyRow inherits HorizontalLayout {
         vertical-alignment: center;
     }
     Text {
-        text: root.hits == "" ? "— hits" : root.hits + " hits";
+        text: root.hits-label == "" ? "— hits" : root.hits-label;
         font-family: Theme.font-mono;
         font-size: TypeScale.micro;
         color: Theme.ink-faint;
@@ -604,17 +604,17 @@ component Accuracy inherits Card {
             AccuracyRow {
                 label: "Head";
                 value: Tracker.acc-head;
-                hits: Tracker.acc-head-hits;
+                hits-label: Tracker.acc-head-hits-label;
             }
             AccuracyRow {
                 label: "Body";
                 value: Tracker.acc-body;
-                hits: Tracker.acc-body-hits;
+                hits-label: Tracker.acc-body-hits-label;
             }
             AccuracyRow {
                 label: "Legs";
                 value: Tracker.acc-legs;
-                hits: Tracker.acc-legs-hits;
+                hits-label: Tracker.acc-legs-hits-label;
             }
         }
     }

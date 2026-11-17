@@ -110,9 +110,7 @@ export component Header inherits Rectangle {
                 }
             }
             Text {
-                text: "LIVE · "
-                    + (Tracker.map-name == "" ? "MATCH" : Tracker.map-name)
-                    + " · " + Tracker.blue + "–" + Tracker.red;
+                text: Tracker.live-header;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.micro;
                 font-weight: 700;

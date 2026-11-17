@@ -69,13 +69,17 @@ export component OverlayWindow inherits Window {
         }
         MatchStrip {
             map: Facts.map-name;
+            strip-title: Facts.strip-title;
             mode: Facts.mode;
+            mode-label: Facts.mode-label;
             label: Facts.phase-label;
             live: Facts.live;
             side: Facts.side;
+            side-label: Facts.side-label;
             server: Facts.server;
             blue: Facts.blue-score;
             red: Facts.red-score;
+            score-line: Facts.score-line;
             show-score: Facts.phase == "coregame";
             hot: Facts.phase != "idle";
             editing: Facts.edit-mode;
@@ -96,6 +100,7 @@ export component OverlayWindow inherits Window {
             source: Facts.hint-source;
             win01: Facts.hint-win01;
             games: Facts.hint-games;
+            games-label: Facts.hint-games-label;
             editing: Facts.edit-mode;
         }
     }

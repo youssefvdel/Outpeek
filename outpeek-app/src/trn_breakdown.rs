@@ -260,6 +260,7 @@ fn top_agents(
                     .map(|v| format!("{v:.0}%"))
                     .unwrap_or_default(),
                 win_share: win_pct
+                    .filter(|v| v.is_finite())
                     .map(|p| (p / 100.0) as f32)
                     .unwrap_or(0.0)
                     .clamp(0.0, 1.0),
@@ -324,6 +325,8 @@ pub struct AgentRow {
     pub matches: String,
     pub win: String,
     pub kd: String,
+    /// True when the reported K/D is under 1.0.
+    pub kd_low: bool,
     pub acs: String,
     pub adr: String,
     pub hs: String,
@@ -363,6 +366,8 @@ pub struct MapRow {
     pub hs: String,
     /// Signed `-21` / `+12`, the table's last numeric column.
     pub dd: String,
+    /// True when the reported per-round delta is negative.
+    pub dd_negative: bool,
     /// The map's two most-played agents, most played first.
     pub agents: Vec<MapAgent>,
     pub win_share: f32,
@@ -378,6 +383,7 @@ impl BreakdownRow {
             matches: self.matches_label(),
             win: self.win_label(),
             kd: self.kd_label(),
+            kd_low: self.kd.map(|v| v < 1.0).unwrap_or(false),
             acs: self.acs_label(),
             adr: self.adr_label(),
             hs: self.hs_label(),
@@ -400,6 +406,7 @@ impl BreakdownRow {
             adr: self.adr_label(),
             hs: self.hs_label(),
             dd: self.dd_label(),
+            dd_negative: self.dmg_delta.map(|v| v < 0).unwrap_or(false),
             agents: self.top_agents.clone(),
             win_share: self.win_share(),
             art_url: String::new(),

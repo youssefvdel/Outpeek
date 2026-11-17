@@ -16,14 +16,14 @@ import { Card, Chip, Glyph, PanelTitle, VCenter } from "widgets.slint";
 
 component TeamHeading inherits HorizontalLayout {
     in property <string> label: "";
-    in property <int> count: 0;
+    in property <string> count-label: "";
     height: 18px;
     spacing: Space.sm;
 
     PanelTitle { text: root.label; vertical-alignment: center; }
     Rectangle { horizontal-stretch: 1; }
     Text {
-        text: root.count + " players";
+        text: root.count-label == "" ? "—" : root.count-label;
         font-family: Theme.font-body;
         font-size: TypeScale.micro;
         color: Theme.ink-faint;
@@ -102,8 +102,8 @@ component PlayerRow inherits Rectangle {
                     color: Theme.ink-faint;
                     vertical-alignment: center;
                 }
-                if root.item.level != "": Text {
-                    text: "· " + root.item.level;
+                if root.item.level-label != "": Text {
+                    text: root.item.level-label;
                     font-family: Theme.font-mono;
                     font-size: TypeScale.micro;
                     color: Theme.ink-faint;
@@ -156,8 +156,8 @@ component PlayerRow inherits Rectangle {
         }
 
         // Party bracket: only when this player queued with someone.
-        if root.item.party != "": VCenter {
-            Chip { text: "×" + root.item.party; tone: "off"; pad-x: 6px; pad-y: 0px; }
+        if root.item.party-label != "": VCenter {
+            Chip { text: root.item.party-label; tone: "off"; pad-x: 6px; pad-y: 0px; }
         }
         Rectangle { horizontal-stretch: 1; }
     }
@@ -173,13 +173,14 @@ component PlayerRow inherits Rectangle {
 
 component TeamCard inherits Card {
     in property <string> title: "";
+    in property <string> count-label: "";
     in property <[LivePlayerUi]> players;
     pad: 0px;
     gap: 0px;
 
     TeamHeading {
         label: root.title;
-        count: root.players.length;
+        count-label: root.count-label;
     }
 
     for entry in root.players: PlayerRow { item: entry; }
@@ -263,17 +264,12 @@ export component LivePage inherits VerticalLayout {
         }
         Rectangle { horizontal-stretch: 1; }
         Text {
-            // A score is only a score in a match; in menus it would read 0 – 0
-            // and look like a read.
-            text: (Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame")
-                ? Tracker.live-blue-score + " – " + Tracker.live-red-score
-                : "—";
+            // A score is only a score in a match; in menus the label reads "—".
+            text: Tracker.live-score == "" ? "—" : Tracker.live-score;
             font-family: Theme.font-mono;
             font-size: TypeScale.big;
             font-weight: 700;
-            color: (Tracker.live-roster-state == "coregame" || Tracker.live-roster-state == "pregame")
-                ? Theme.ink
-                : Theme.ink-faint;
+            color: Tracker.live-score == "" || Tracker.live-score == "—" ? Theme.ink-faint : Theme.ink;
             vertical-alignment: center;
         }
     }
@@ -308,11 +304,13 @@ export component LivePage inherits VerticalLayout {
 
         TeamCard {
             title: "YOUR TEAM";
+            count-label: Tracker.live-blue-count-label;
             players: Tracker.live-blue-team;
             horizontal-stretch: 1;
         }
         TeamCard {
             title: "ENEMY";
+            count-label: Tracker.live-red-count-label;
             players: Tracker.live-red-team;
             horizontal-stretch: 1;
         }

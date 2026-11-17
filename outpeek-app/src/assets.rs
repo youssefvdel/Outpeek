@@ -959,8 +959,9 @@ impl Art {
             }
         }
         if let Some(url) = req.banner_url.as_deref().filter(|u| !u.is_empty()) {
-            if cache.ensure(fetcher.clone(), url, now).await.usable() {
-                view.banner = url.to_string();
+            // Same allowlist as row art: a payload URL names no new host.
+            if let Some(cached) = self.ensure_url(fetcher.clone(), url, now).await {
+                view.banner = cached;
             }
         }
         if let Some(uuid) = req.agent_uuid.as_deref() {

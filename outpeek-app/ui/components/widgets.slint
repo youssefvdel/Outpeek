@@ -345,10 +345,11 @@ export component ColumnLabel inherits Text {
     in property <length> col-width: 80px;
     // Numeric columns sit over right-aligned numbers, so their header does too.
     in property <bool> align-right: false;
+    in property <length> text-size: TypeScale.micro;
     width: root.col-width;
     horizontal-alignment: root.align-right ? right : left;
     font-family: Theme.font-body;
-    font-size: TypeScale.micro;
+    font-size: root.text-size;
     font-weight: 600;
     color: Theme.ink-faint;
     vertical-alignment: center;
@@ -385,17 +386,19 @@ export component WinCell inherits VerticalLayout {
     in property <length> col-width: 96px;
     in property <string> value: "";
     in property <float> share: 0;
+    in property <length> text-size: 16px;
     width: root.col-width;
     spacing: 3px;
 
     Text {
         text: root.value == "" ? "—" : root.value;
         font-family: Theme.font-body;
-        font-size: TypeScale.caption;
-        font-weight: 600;
+        font-size: root.text-size;
+        font-weight: 700;
         color: Theme.ink;
         horizontal-alignment: right;
         vertical-alignment: center;
+        overflow: elide;
     }
     Rectangle {
         // Full cell width, pinned left: the old `col-width - 14px` track was
@@ -409,7 +412,7 @@ export component WinCell inherits VerticalLayout {
 
         Rectangle {
             x: 0;
-            width: parent.width * root.share;
+            width: parent.width * Math.min(Math.max(root.share, 0), 1);
             height: parent.height;
             border-radius: 1.5px;
             background: root.share >= 0.5 ? Theme.mint : Theme.coral;

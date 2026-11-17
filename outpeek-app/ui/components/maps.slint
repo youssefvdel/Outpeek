@@ -12,26 +12,20 @@
 
 import { Theme, Space, Shape, TypeScale } from "tokens.slint";
 import { Tracker, MapRowUi, MapAgentUi } from "../state.slint";
-import { Cell, Glyph, VCenter } from "widgets.slint";
+import { Cell, ColumnLabel, Glyph, VCenter } from "widgets.slint";
 
-/// Header label over one column: the spec's 12px/600 faint-ink step. The
-/// shared ColumnLabel is the table's 11px step, so the header owns its size
-/// here instead of borrowing the wrong one.
-component Head inherits Rectangle {
-    in property <string> text: "";
-    in property <length> col-width: 60px;
-    width: root.col-width;
-
-    Text {
-        text: root.text;
-        font-family: Theme.font-body;
-        font-size: TypeScale.caption;
-        font-weight: 600;
-        color: Theme.ink-faint;
-        horizontal-alignment: right;
-        vertical-alignment: center;
-        overflow: elide;
-    }
+/// Single-sourced column widths shared by the header and every row.
+/// Banner 180 + agents 100 + 74/52/56/52/62/62/58 = 696px fixed + gaps.
+export global MapCols {
+    in-out property <length> banner: 180px;
+    in-out property <length> agents: 100px;
+    in-out property <length> win: 74px;
+    in-out property <length> wins: 52px;
+    in-out property <length> losses: 56px;
+    in-out property <length> kd: 52px;
+    in-out property <length> adr: 62px;
+    in-out property <length> acs: 62px;
+    in-out property <length> dd: 58px;
 }
 
 /// One portrait plus the win rate this player has on the map with it.
@@ -66,7 +60,7 @@ component AgentPick inherits VerticalLayout {
     Text {
         text: root.item.win == "" ? "—" : root.item.win;
         font-family: Theme.font-body;
-        font-size: 10px;
+        font-size: TypeScale.micro;
         color: Theme.ink-dim;
         horizontal-alignment: center;
     }
@@ -79,6 +73,8 @@ component MapTableRow inherits Rectangle {
     accessible-role: list-item;
     accessible-label: root.item.name + " " + root.item.win + " " + root.item.kd;
 
+    // Row sum (fixed): 180 banner + 100 agents + 74/52/56/52/62/62/58
+    // = 696px + 8 pad-r + 80 gaps = 784px.
     HorizontalLayout {
         padding-left: 0px;
         padding-right: Space.sm;
@@ -86,7 +82,7 @@ component MapTableRow inherits Rectangle {
 
         // The map banner, full row height: the picture *is* the first column.
         Rectangle {
-            min-width: 180px;
+            min-width: MapCols.banner;
             horizontal-stretch: 1;
             clip: true;
             border-radius: Shape.sm;
@@ -101,7 +97,7 @@ component MapTableRow inherits Rectangle {
             Rectangle {
                 width: parent.width;
                 height: parent.height;
-                background: @linear-gradient(90deg, #140b1be6 0%, #140b1b66 55%, #140b1b00 100%);
+                background: @linear-gradient(90deg, Theme.scrim-top 0%, Theme.scrim-mid 55%, Theme.scrim-clear 100%);
             }
             Text {
                 x: 12px;
@@ -120,7 +116,7 @@ component MapTableRow inherits Rectangle {
         // guessed portrait.
         VCenter {
             Rectangle {
-                width: 100px;
+                width: MapCols.agents;
                 height: 44px;
                 background: transparent;
 
@@ -136,7 +132,7 @@ component MapTableRow inherits Rectangle {
         // draws its em dash dim; Win % and DDΔ carry the result colours.
         VCenter {
             Cell {
-                col-width: 74px;
+                col-width: MapCols.win;
                 value: root.item.win;
                 mono: true;
                 align-right: true;
@@ -149,7 +145,7 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 52px;
+                col-width: MapCols.wins;
                 value: root.item.wins;
                 mono: true;
                 align-right: true;
@@ -160,7 +156,7 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 56px;
+                col-width: MapCols.losses;
                 value: root.item.losses;
                 mono: true;
                 align-right: true;
@@ -171,7 +167,7 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 52px;
+                col-width: MapCols.kd;
                 value: root.item.kd;
                 mono: true;
                 align-right: true;
@@ -184,7 +180,7 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 62px;
+                col-width: MapCols.adr;
                 value: root.item.adr;
                 mono: true;
                 align-right: true;
@@ -195,7 +191,7 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 62px;
+                col-width: MapCols.acs;
                 value: root.item.acs;
                 mono: true;
                 align-right: true;
@@ -206,15 +202,15 @@ component MapTableRow inherits Rectangle {
         }
         VCenter {
             Cell {
-                col-width: 58px;
+                col-width: MapCols.dd;
                 value: root.item.dd;
                 mono: true;
                 align-right: true;
                 weight: 700;
                 text-size: 16px;
-                ink: root.item.dd == ""
+                ink: root.item.dd == "" || root.item.dd == "0"
                     ? Theme.ink-dim
-                    : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+                    : root.item.dd-negative ? Theme.coral : Theme.mint;
             }
         }
     }
@@ -247,6 +243,8 @@ export component MapsPage inherits VerticalLayout {
             // Header: one label per column, on the column's own edge. The Top
             // Agents column carries no label — the portraits need no
             // introduction, and the website names no state here either.
+            // Header sum (fixed): 180 banner + 100 agents + 74/52/56/52/62/62/58
+            // = 696px + 20 pads + 80 gaps = 796px.
             Rectangle {
                 height: 34px;
                 background: transparent;
@@ -257,7 +255,7 @@ export component MapsPage inherits VerticalLayout {
                     spacing: 10px;
 
                     Text {
-                        min-width: 180px;
+                        min-width: MapCols.banner;
                         horizontal-stretch: 1;
                         text: "Map Name";
                         font-family: Theme.font-body;
@@ -266,14 +264,14 @@ export component MapsPage inherits VerticalLayout {
                         color: Theme.ink-faint;
                         vertical-alignment: center;
                     }
-                    Rectangle { width: 100px; }
-                    Head { col-width: 74px; text: "Win %"; }
-                    Head { col-width: 52px; text: "Wins"; }
-                    Head { col-width: 56px; text: "Losses"; }
-                    Head { col-width: 52px; text: "K/D"; }
-                    Head { col-width: 62px; text: "ADR"; }
-                    Head { col-width: 62px; text: "ACS"; }
-                    Head { col-width: 58px; text: "DDΔ"; }
+                    Rectangle { width: MapCols.agents; }
+                    ColumnLabel { col-width: MapCols.win; text: "Win %"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.wins; text: "Wins"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.losses; text: "Losses"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.kd; text: "K/D"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.adr; text: "ADR"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.acs; text: "ACS"; align-right: true; text-size: TypeScale.caption; }
+                    ColumnLabel { col-width: MapCols.dd; text: "DDΔ"; align-right: true; text-size: TypeScale.caption; }
                 }
             }
 

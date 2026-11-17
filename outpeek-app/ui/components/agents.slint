@@ -56,6 +56,7 @@ component AgentLine inherits Rectangle {
             // same stretch spacer, so the two can never drift apart.
             horizontal-stretch: 1;
             spacing: 1px;
+            alignment: center;
 
             Text {
                 text: root.item.name == "" ? "—" : root.item.name;
@@ -66,7 +67,7 @@ component AgentLine inherits Rectangle {
                 overflow: elide;
             }
             Text {
-                text: root.item.role == "" ? "NOT READ" : root.item.role;
+                text: root.item.role == "" ? "—" : root.item.role;
                 font-family: Theme.font-body;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
@@ -76,17 +77,18 @@ component AgentLine inherits Rectangle {
 
         Cell { col-width: 72px; value: root.item.matches; align-right: true; }
         VCenter { WinCell { col-width: 96px; value: root.item.win; share: root.item.win-share; } }
-        Cell { col-width: 54px; value: root.item.kd; mono: true; align-right: true; }
-        Cell { col-width: 54px; value: root.item.acs; mono: true; align-right: true; }
-        Cell { col-width: 58px; value: root.item.adr; mono: true; align-right: true; }
-        Cell { col-width: 54px; value: root.item.hs; mono: true; align-right: true; }
+        Cell { col-width: 54px; value: root.item.kd; mono: true; align-right: true; text-size: 16px; weight: 700; ink: root.item.kd == "" ? Theme.ink-dim : (root.item.kd-low ? Theme.coral-dim : Theme.ink); }
+        Cell { col-width: 54px; value: root.item.acs; mono: true; align-right: true; text-size: 16px; weight: 700; }
+        Cell { col-width: 58px; value: root.item.adr; mono: true; align-right: true; text-size: 16px; weight: 700; }
+        Cell { col-width: 54px; value: root.item.hs; mono: true; align-right: true; text-size: 16px; weight: 700; }
         Cell {
             col-width: 64px;
             value: root.item.pick;
             mono: true;
             align-right: true;
+            text-size: 16px;
             ink: Theme.ink;
-            weight: 600;
+            weight: 700;
         }
     }
 
@@ -105,6 +107,16 @@ export component AgentsPage inherits VerticalLayout {
     padding-top: 20px;
     padding-bottom: 20px;
     spacing: Space.md;
+
+    // The endpoint caps its list (5 agents today): the note names that when
+    // rows exist instead of implying a full roster.
+    if Tracker.agents.length > 0 && Tracker.breakdown-note != "": Text {
+        text: Tracker.breakdown-note;
+        font-family: Theme.font-body;
+        font-size: TypeScale.micro;
+        color: Theme.ink-faint;
+        wrap: word-wrap;
+    }
 
     Card {
         pad: 0px;

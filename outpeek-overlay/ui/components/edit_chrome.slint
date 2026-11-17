@@ -58,7 +58,7 @@ export component EditChrome inherits Rectangle {
         border-width: 1px;
         border-color: Theme.primary;
         background: #23192fd9;
-        drop-shadow-color: #000000b8;
+        drop-shadow-color: #000000b8; // edit chrome only, not data
         drop-shadow-offset-x: 0px;
         drop-shadow-offset-y: 12px;
         drop-shadow-blur: 32px;
@@ -193,7 +193,7 @@ export component EditChrome inherits Rectangle {
         height: parent.height - 24px;
         border-radius: Shape.xl;
         border-width: 1px;
-        border-color: #d0bcff40;
+        border-color: Theme.primary-edge;
         background: transparent;
     }
     frame-tag := Text {

@@ -198,14 +198,9 @@ component PlayerCard inherits Rectangle {
         height: 84px;
         crest: Tracker.rank-crest;
         label: Tracker.rank-label;
-        // RR only exists on a local `/mmr` read. A Tracker Network rank is a
-        // real Tier, but TRN publishes no RR, so the cell says so instead of
-        // printing a 0 nobody measured.
-        sub: Tracker.rank-state == "ok"
-            ? (Tracker.rank-rr-known ? Tracker.rank-rr + " RR" : "NO RR")
-            : Tracker.rank-state == "waiting" || Tracker.rank-state == "loading"
-                ? "WAITING"
-                : "—";
+        // RR only exists on a local `/mmr` read. The label is Rust's own
+        // sub line, so the view never joins a number with its suffix.
+        sub: Tracker.rank-rr-label;
         known: Tracker.rank-state == "ok";
     }
 
@@ -378,8 +373,8 @@ export component Sidebar inherits Rectangle {
                 vertical-alignment: center;
             }
             Rectangle { horizontal-stretch: 1; }
-            if Tracker.version != "": VCenter {
-                VersionPill { text: "v" + Tracker.version; }
+            if Tracker.version-label != "": VCenter {
+                VersionPill { text: Tracker.version-label; }
             }
         }
     }

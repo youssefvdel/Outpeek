@@ -169,10 +169,23 @@ pub fn apply_facts(win: &OverlayWindow, msg: FactsMsg) {
         facts.set_tab_held(v);
     }
     if let Some(v) = msg.map {
+        // Rust-owned strip title: the view binds verbatim, never joins.
+        let title = if v.is_empty() {
+            String::new()
+        } else {
+            format!("{v}  •  TEAM SCOUT")
+        };
         facts.set_map_name(v.into());
+        facts.set_strip_title(title.into());
     }
     if let Some(v) = msg.mode {
+        let label = if v.is_empty() {
+            String::new()
+        } else {
+            format!("•  {v}")
+        };
         facts.set_mode(v.into());
+        facts.set_mode_label(label.into());
     }
     if let Some(v) = msg.phase_label {
         facts.set_phase_label(v.into());
@@ -181,7 +194,14 @@ pub fn apply_facts(win: &OverlayWindow, msg: FactsMsg) {
         facts.set_live(v);
     }
     if let Some(v) = msg.side {
+        // "Defense" -> "DEF", "Attack" -> "ATK", else empty.
+        let label = match v.as_str() {
+            "Defense" => "DEF".to_string(),
+            "Attack" => "ATK".to_string(),
+            _ => String::new(),
+        };
         facts.set_side(v.into());
+        facts.set_side_label(label.into());
     }
     if let Some(v) = msg.server {
         facts.set_server(v.into());
@@ -191,6 +211,10 @@ pub fn apply_facts(win: &OverlayWindow, msg: FactsMsg) {
     }
     if let Some(v) = msg.red {
         facts.set_red_score(v);
+    }
+    if msg.blue.is_some() || msg.red.is_some() {
+        let (blue, red) = (facts.get_blue_score(), facts.get_red_score());
+        facts.set_score_line(format!("{blue} — {red}").into());
     }
     if let Some(list) = msg.your_five {
         let model = std::rc::Rc::new(slint::VecModel::from(roster_to_facts(list)));
@@ -203,8 +227,14 @@ pub fn apply_facts(win: &OverlayWindow, msg: FactsMsg) {
     if let Some(h) = msg.hint {
         facts.set_hint_line(h.line.into());
         facts.set_hint_source(h.source.into());
-        facts.set_hint_win01(h.win01);
+        facts.set_hint_win01(h.win01.clamp(0.0, 1.0));
         facts.set_hint_games(h.games);
+        let games_label = if h.games > 0 {
+            format!("{} games", h.games)
+        } else {
+            String::new()
+        };
+        facts.set_hint_games_label(games_label.into());
     }
     if let Some(w) = msg.whisper {
         facts.set_whisper(w.text.into());

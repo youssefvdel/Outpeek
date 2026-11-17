@@ -24,13 +24,17 @@ export global Facts {
 
     // Match strip.
     in-out property <string> map-name: "Ascent";
+    in-out property <string> strip-title: "Ascent  •  TEAM SCOUT";
     in-out property <string> mode: "Competitive";
+    in-out property <string> mode-label: "•  Competitive";
     in-out property <string> phase-label: "SELECT";
     in-out property <bool> live: false;
     in-out property <string> side: "";
+    in-out property <string> side-label: "";
     in-out property <string> server: "";
     in-out property <int> blue-score: 0;
     in-out property <int> red-score: 0;
+    in-out property <string> score-line: "0 — 0";
 
     // Rosters. Lite renders icons + crests only; Full adds names/stats.
     in-out property <[PlayerFact]> your-five;
@@ -42,6 +46,7 @@ export global Facts {
     in-out property <string> hint-source: "";
     in-out property <float> hint-win01: 0.0;
     in-out property <int> hint-games: 0;
+    in-out property <string> hint-games-label: "";
 
     // Status whisper — one self-hiding line. Rust clears it; UI just fades.
     in-out property <string> whisper: "";

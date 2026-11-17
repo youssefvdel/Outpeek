@@ -464,10 +464,20 @@ fn fake_live_frame() -> Option<LiveView> {
         agent: agent.to_string(),
         agent_art: String::new(),
         level: level.to_string(),
+        level_label: if level.is_empty() {
+            String::new()
+        } else {
+            format!("· {level}")
+        },
         rank: rank.to_string(),
         rr: rr.to_string(),
         crest: String::new(),
         party: party.to_string(),
+        party_label: if party.is_empty() {
+            String::new()
+        } else {
+            format!("×{party}")
+        },
         me,
         incognito,
     };

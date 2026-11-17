@@ -33,7 +33,7 @@ pub const TABS: [&str; 5] = ["overview", "matches", "agents", "maps", "live"];
 /// The shell's own size bounds, mirroring `ui/app.slint`'s min/max. Used to
 /// clamp a restored window size, so a hand-edited `40x40` cannot open an
 /// unusable window.
-pub const MIN_WINDOW: (u32, u32) = (1120, 680);
+pub const MIN_WINDOW: (u32, u32) = (1280, 720);
 pub const MAX_WINDOW: (u32, u32) = (3840, 2160);
 
 /// Persisted settings. Every field needs a `default` so an older or newer file

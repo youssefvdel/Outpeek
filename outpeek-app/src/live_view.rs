@@ -35,6 +35,8 @@ pub struct LivePlayerUi {
     pub agent_art: String,
     /// `Lv 214`, empty when Riot reported no level.
     pub level: String,
+    /// `"· Lv 214"` — empty when Riot reported no level.
+    pub level_label: String,
     /// `Diamond 2` | `UNRATED` | `RANK HIDDEN` | `NOT READ`.
     pub rank: String,
     /// `47 RR`, empty when there is no public RR to show.
@@ -43,6 +45,8 @@ pub struct LivePlayerUi {
     pub crest: String,
     /// `2` when this player queued with someone else, empty solo.
     pub party: String,
+    /// `"×2"` — empty when solo.
+    pub party_label: String,
     pub me: bool,
     pub incognito: bool,
 }
@@ -259,19 +263,33 @@ pub async fn build(
                 _ => String::new(),
             }
         };
+        // Prefixes live here, not in the view: the row binds verbatim.
+        let level = if player.account_level > 0 {
+            format!("Lv {}", player.account_level)
+        } else {
+            String::new()
+        };
+        let level_label = if level.is_empty() {
+            String::new()
+        } else {
+            format!("· {level}")
+        };
+        let party_label = if party.is_empty() {
+            String::new()
+        } else {
+            format!("×{party}")
+        };
         let row = LivePlayerUi {
             name: display,
             agent: agent_name,
             agent_art,
-            level: if player.account_level > 0 {
-                format!("Lv {}", player.account_level)
-            } else {
-                String::new()
-            },
+            level,
+            level_label,
             rank: rank_text,
             rr,
             crest,
             party,
+            party_label,
             me: player.puuid.eq_ignore_ascii_case(local_puuid),
             incognito: player.incognito,
         };

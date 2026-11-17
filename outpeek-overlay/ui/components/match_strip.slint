@@ -6,13 +6,17 @@ import { Plate } from "plate.slint";
 
 export component MatchStrip inherits Plate {
     in property <string> map: "Ascent";
+    in property <string> strip-title: "";
     in property <string> mode: "Competitive";
+    in property <string> mode-label: "";
     in property <string> label: "SELECT";
     in property <bool> live: false;
     in property <string> side: "";
+    in property <string> side-label: "";
     in-out property <string> server: "";
     in property <int> blue: 0;
     in property <int> red: 0;
+    in property <string> score-line: "";
     in property <bool> show-score: false;
 
     VerticalLayout {
@@ -31,7 +35,7 @@ export component MatchStrip inherits Plate {
                 background: live ? Theme.mint : Theme.primary;
             }
             title := Text {
-                text: map + "  •  TEAM SCOUT";
+                text: root.strip-title == "" ? "—" : root.strip-title;
                 font-family: Theme.font-display;
                 font-size: TypeScale.title;
                 font-weight: 800;
@@ -41,13 +45,15 @@ export component MatchStrip inherits Plate {
                 horizontal-stretch: 1;
             }
             mode-chip := Text {
-                text: "•  " + mode;
+                overflow: elide;
+                text: root.mode-label == "" ? "—" : root.mode-label;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.micro;
                 color: Theme.ink-dim;
             }
-            if side != "": Text {
-                text: side == "Defense" ? "DEF" : "ATK";
+            if root.side-label != "": Text {
+                overflow: elide;
+                text: root.side-label;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.micro;
                 font-weight: 700;
@@ -55,7 +61,7 @@ export component MatchStrip inherits Plate {
             }
             live-chip := Rectangle {
                 border-radius: Shape.pill;
-                background: live ? #a8f5cc26 : #d0bcff26;
+                background: live ? Theme.mint-wash : Theme.primary-wash;
                 chip-label := Text {
                     x: 8px;
                     y: 3px;
@@ -82,7 +88,7 @@ export component MatchStrip inherits Plate {
             opacity: show-score ? 1 : 0;
             animate opacity { duration: Motion.fast; easing: ease-in-out; }
             Text {
-                text: blue + " — " + red;
+                text: root.score-line == "" ? "—" : root.score-line;
                 font-family: Theme.font-display;
                 font-size: TypeScale.big;
                 font-weight: 800;

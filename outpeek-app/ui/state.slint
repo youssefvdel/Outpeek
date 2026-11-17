@@ -55,7 +55,11 @@ export struct MatchRowUi {
     kd: string,
     hs: string,
     dd: string,
+    // True when the reported DD is negative — coral ink, else mint.
+    dd-negative: bool,
     acs: string,
+    // Screen-reader line, joined by Rust; "—" when nothing was reported.
+    a11y-label: string,
 }
 
 /// One card of the top-3 agent strip: portrait, name, `7W - 9L (44%)`, K/D.
@@ -64,6 +68,8 @@ export struct MatchAgentUi {
     name: string,
     record: string,
     kd: string,
+    // "K/D 1.10" — "K/D —" when the payload reported none.
+    kd-line: string,
     // 0–1: widths the cell's bar, nothing else reads it.
     win-share: float,
     art: image,
@@ -75,6 +81,8 @@ export struct MatchSummaryUi {
     record: string,
     kd: string,
     adr: string,
+    // Second line, joined by Rust; empty when both halves are missing.
+    line: string,
     win-share: float,
 }
 
@@ -91,8 +99,12 @@ export struct MatchDayUi {
     // `0.61 K/D/A` — the day's ratio rendered under its K/D/A triple.
     kda-sub: string,
     kd: string,
+    // True when summed kills < deaths (deaths > 0) — the muted rose tone.
+    kd-low: bool,
     kda: string,
     dda: string,
+    // True when the summed delta is negative — coral ink, else mint.
+    dda-negative: bool,
     hs: string,
     acs: string,
 }
@@ -132,6 +144,8 @@ export struct AgentRowUi {
     matches: string,
     win: string,
     kd: string,
+    // True when the reported K/D is under 1.0 — the muted rose tone.
+    kd-low: bool,
     acs: string,
     adr: string,
     hs: string,
@@ -147,10 +161,14 @@ export struct LivePlayerUi {
     agent: string,
     agent-art: image,
     level: string,
+    // "· Lv 214" — empty when Riot reported no level.
+    level-label: string,
     rank: string,
     rr: string,
     crest: image,
     party: string,
+    // "×2" — empty when solo.
+    party-label: string,
     me: bool,
     incognito: bool,
 }
@@ -180,6 +198,8 @@ export struct MapRowUi {
     acs: string,
     adr: string,
     hs: string,
+    // True when the reported per-round delta is negative.
+    dd-negative: bool,
     win-share: float,
     // Two most-played agents on this map, most played first.
     agents: [MapAgentUi],
@@ -236,7 +256,6 @@ export global Tracker {
     in-out property <string> breakdown-note: "No profile read yet.";
 
     // Riot Client / poll state.
-    in-out property <string> client-line: "Starting…";
     in-out property <string> client-tone: "warn"; // "ok" | "warn" | "error"
 
     // Local account.
@@ -250,7 +269,6 @@ export global Tracker {
     // False when the rank cell is filled from Tracker Network, which publishes
     // no RR. The card then prints NO RR instead of a zero nobody measured.
     in-out property <bool> rank-rr-known: false;
-    in-out property <string> rank-message: "Waiting for the Riot Client.";
     // Peak rank from Riot's own act history (the best tier across the acts the
     // `/mmr` payload reports). Empty = no act reported one: the cell keeps its
     // em dash rather than printing "Unrated".
@@ -265,10 +283,8 @@ export global Tracker {
     in-out property <string> profile-state: "empty";
     // One honest line: the cache age, the failure reason, or nothing.
     in-out property <string> profile-message: "";
-    in-out property <string> profile-handle: "";
     // Season the numbers belong to ("Season 26 Act 6").
     in-out property <string> profile-season: "";
-    in-out property <string> profile-matches: "";
     // Page-header subtitle while a profile is loaded (Rust owns the wording).
     in-out property <string> profile-subtitle: "";
     // Playlist the Overview season frame shows ("competitive" | "deathmatch" |
@@ -384,9 +400,6 @@ export global Tracker {
 
     // Live panel. state: loading | empty | live | error.
     in-out property <string> live-state: "loading";
-    in-out property <string> live-message: "Reading the Riot Client…";
-    in-out property <string> phase-title: "Waiting";
-    in-out property <string> phase-chip: "…";
     in-out property <string> map-name: "";
     in-out property <string> mode: "";
     in-out property <int> blue: 0;
@@ -398,7 +411,6 @@ export global Tracker {
     in-out property <string> hud-tone: "armed";
 
     // Honest platform note (e.g. "Windows only" on a Linux dev host).
-    in-out property <string> platform-note: "";
 
     // Active display, for the sidebar footer card. Empty means "this shell has
     // not read the display": the card prints UNAVAILABLE rather than a guessed
@@ -429,6 +441,20 @@ export global Tracker {
     in-out property <string> max-label: "Maximize";
 
     in-out property <string> version: "";
+    // "v0.3.2" — empty draws no badge. The "v" lives here, not in the view.
+    in-out property <string> version-label: "";
+    // Header live line ("LIVE · Bind · 14–16") and Live strip score ("14 – 16" / "—").
+    in-out property <string> live-header: "";
+    in-out property <string> live-score: "";
+    // "3 players" team counts for the Live board.
+    in-out property <string> live-blue-count-label: "";
+    in-out property <string> live-red-count-label: "";
+    // "47 RR" / "NO RR" / "WAITING" / "—" — the rank cell's sub line.
+    in-out property <string> rank-rr-label: "";
+    // "1,962 hits" — "— hits" when no count was reported.
+    in-out property <string> acc-head-hits-label: "";
+    in-out property <string> acc-body-hits-label: "";
+    in-out property <string> acc-legs-hits-label: "";
 }
 
 // Settings page values. Every string is resolved by `settings_model` at boot;

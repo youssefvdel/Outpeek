@@ -10,6 +10,7 @@ export component MapHint inherits Plate {
     in property <string> source: "";
     in property <float> win01: 0.0;
     in property <int> games: 0;
+    in property <string> games-label: "";
 
     min-height: 56px;
 
@@ -25,7 +26,7 @@ export component MapHint inherits Plate {
             alignment: start;
             chip := Rectangle {
                 border-radius: Shape.pill;
-                background: source == "META" ? #e8b73a26 : #d0bcff26;
+                background: source == "META" ? Theme.amber-wash : Theme.primary-wash;
                 chip-label := Text {
                     x: 8px;
                     y: 3px;
@@ -48,8 +49,8 @@ export component MapHint inherits Plate {
                 horizontal-stretch: 1;
                 vertical-alignment: center;
             }
-            if games > 0: Text {
-                text: games + " games";
+            if root.games-label != "": Text {
+                text: root.games-label;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
@@ -64,7 +65,7 @@ export component MapHint inherits Plate {
             fill := Rectangle {
                 x: 0px;
                 y: 0px;
-                width: parent.width * win01;
+                width: parent.width * Math.min(Math.max(win01, 0), 1);
                 height: parent.height;
                 border-radius: 2px;
                 background: win01 >= 0.5 ? Theme.mint : Theme.ink-faint;

@@ -13,6 +13,12 @@ import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
 import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchDayUi, MatchSummaryUi } from "../state.slint";
 import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
+/// Single-sourced fixed widths shared by rows and day bands.
+export global MatchCols {
+    in-out property <length> trs: 96px;
+    in-out property <length> clutch: 86px;
+}
+
 component StatChip inherits Rectangle {
     in property <string> text;
     in property <brush> chip-ink: Theme.ink;
@@ -50,10 +56,12 @@ component TrsBadge inherits Rectangle {
 }
 
 /// TRS cell, TRN's own shape: the grade badge, then `TRS` over the number.
+/// Width lives in MatchCols.trs so rows and day bands share it.
 component TrsCell inherits Rectangle {
     in property <string> grade: "";
     in property <string> value: "";
-    width: 96px;
+    in property <length> col-width: 96px;
+    width: root.col-width;
     height: 44px;
 
     HorizontalLayout {
@@ -89,16 +97,14 @@ component TrsCell inherits Rectangle {
     }
 }
 
-/// One numeric column, TRN's own shape: a micro label stacked with its value.
-/// `flip` puts the value on top (the day band's K/D/A column, where the triple
-/// sits over its ratio). One component, one set of widths — a band and its rows
-/// can never drift apart again.
+/// One numeric column, TRN's own shape: a micro label over its 16px mono/700
+/// value. One component, one set of widths — a band and its rows share it, so
+/// they can never drift apart again.
 component StatCell inherits Rectangle {
     in property <string> label: "";
     in property <string> value: "";
     in property <brush> ink: Theme.ink;
     in property <length> col-width: 52px;
-    in property <bool> flip: false;
     // Drawn faint beside the value ("K/D/A" after the day's ratio).
     in property <string> suffix: "";
     width: root.col-width;
@@ -107,7 +113,7 @@ component StatCell inherits Rectangle {
         spacing: 1px;
         alignment: center;
 
-        if !root.flip: Text {
+        Text {
             text: root.label == "" ? "—" : root.label;
             font-family: Theme.font-body;
             font-size: TypeScale.micro;
@@ -137,17 +143,8 @@ component StatCell inherits Rectangle {
                 font-weight: 700;
                 color: Theme.ink-faint;
                 vertical-alignment: center;
+                overflow: elide;
             }
-        }
-        if root.flip: Text {
-            text: root.label == "" ? "—" : root.label;
-            font-family: Theme.font-body;
-            font-size: TypeScale.micro;
-            font-weight: 500;
-            color: Theme.ink-faint;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            overflow: elide;
         }
     }
 }
@@ -164,7 +161,7 @@ component MatchLine inherits Rectangle {
     background: line-touch.has-hover ? Theme.container-high : Theme.container;
     animate background { duration: Motion.fast; easing: ease-out; }
     accessible-role: button;
-    accessible-label: root.item.agent + " " + root.item.age + " " + root.item.map + " " + root.item.score + " " + root.item.trs + " " + root.item.clutch;
+    accessible-label: root.item.a11y-label;
     accessible-action-default => { line-touch.clicked(); }
 
     line-touch := TouchArea {
@@ -215,9 +212,10 @@ component MatchLine inherits Rectangle {
         }
 
         // Age + mode over map: one moment, two lines, the website's own
-        // stacking. Wide enough that "2d ago // Competitive" never elides.
+        // stacking. 120px fits "2d ago // Competitive" at 11px; 146px pushed
+        // the row over the ~928px inner card and elided the score.
         VerticalLayout {
-            width: 146px;
+            width: 120px;
             spacing: 1px;
             alignment: center;
 
@@ -250,6 +248,7 @@ component MatchLine inherits Rectangle {
                     font-weight: 700;
                     color: Theme.ink;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
                 if root.item.placement != "": Rectangle {
                     vertical-stretch: 0;
@@ -268,6 +267,7 @@ component MatchLine inherits Rectangle {
                         color: Theme.ink-dim;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
             }
@@ -316,6 +316,7 @@ component MatchLine inherits Rectangle {
                         font-weight: 700;
                         color: Theme.mint;
                         vertical-alignment: center;
+                        overflow: elide;
                     }
                     Text {
                         text: ":";
@@ -332,6 +333,7 @@ component MatchLine inherits Rectangle {
                         font-weight: 700;
                         color: Theme.coral;
                         vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
             }
@@ -348,7 +350,7 @@ component MatchLine inherits Rectangle {
         // its width on rows without one and the tail never shifts.
         VCenter {
             Rectangle {
-                width: 86px;
+                width: MatchCols.clutch;
                 height: 24px;
 
                 if root.item.clutch != "": StatChip {
@@ -359,19 +361,22 @@ component MatchLine inherits Rectangle {
                 }
             }
         }
-        // The slack lives BEFORE the tail: the numeric block then ends on the
-        // card's right edge, which is the edge every day band ends on.
+        // Slack before the tail: the numeric block ends before the kebab,
+        // and the day band carries the same trailing spacer so both end even.
         Rectangle { horizontal-stretch: 1; }
 
         // TRN's own column order: K/D, then the K/D/A triple, then DDΔ, HS %
         // and ACS. Every column is a StatCell — the day band reuses them, so
         // no widths are repeated anywhere else in this file.
+        // Row sum (fixed): 14 pad-l + 44 portrait + 120 identity + 28 rank +
+        // ~60 score + 96 TRS + 86 clutch + 380 numerics + 40 gutters + 20 kebab
+        // + 8 pad-r + 32 gaps ≈ 928px; identity is the shrink slot, never fonts.
         HorizontalLayout {
             spacing: 10px;
 
             StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: root.item.kd-low ? Theme.coral-dim : Theme.ink; }
             StatCell { col-width: 150px; label: "K/D/A"; value: root.item.kda; ink: Theme.ink; }
-            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dd; ink: root.item.dd == "" ? Theme.ink-dim : (root.item.dd.starts-with("-") ? Theme.coral : Theme.mint); }
+            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dd; ink: root.item.dd == "" ? Theme.ink-dim : (root.item.dd-negative ? Theme.coral : Theme.mint); }
             StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
             StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }
         }
@@ -405,11 +410,12 @@ component MatchLine inherits Rectangle {
 /// One agent cell of the top strip, TRN-shaped: portrait, name, the season
 /// record, the agent's K/D and a bar whose width is the reported win share.
 /// The number is Rust's string; the bar only reads the share.
+/// Strip sum (fixed): 200 season + 3×150 agents + 24 pads + 24 gaps = 698px.
 component AgentCell inherits Rectangle {
     in property <MatchAgentUi> item;
     horizontal-stretch: 1;
     min-width: 150px;
-    height: 60px;
+    height: 62px;
 
     HorizontalLayout {
         spacing: Space.sm;
@@ -464,7 +470,7 @@ component AgentCell inherits Rectangle {
                 overflow: elide;
             }
             Text {
-                text: root.item.kd == "" ? "K/D —" : "K/D " + root.item.kd;
+                text: root.item.kd-line;
                 font-family: Theme.font-mono;
                 font-size: TypeScale.micro;
                 color: Theme.ink-faint;
@@ -512,8 +518,7 @@ component SeasonCell inherits Rectangle {
             overflow: elide;
         }
         Text {
-            text: (root.item.kd == "" ? "K/D —" : root.item.kd)
-                + (root.item.adr == "" ? "" : " | " + root.item.adr);
+            text: root.item.line == "" ? "—" : root.item.line;
             font-family: Theme.font-mono;
             font-size: TypeScale.micro;
             color: Theme.mint;
@@ -538,9 +543,12 @@ component SeasonCell inherits Rectangle {
 
 component DayHeader inherits Rectangle {
     in property <MatchDayUi> item;
-    // Reference band: 54 px and rounded, the date at 18 px/700 in the
+    // Reference band: 50 px and rounded, the date at 16 px/700 in the
     // secondary ink, the W/L verdict in the middle, then the day's totals over
-    // the columns they total. No numeric label is repeated down here.
+    // the columns they total. The trailing 20px spacer keeps the numerics over
+    // the rows' numerics (rows end in a 20px kebab).
+    // Band sum (fixed): 14 pad-l + date + 30 chip + verdict + 96 TRS + 86 clutch
+    // + 380 numerics + 40 gutters + 20 tail + 8 pad-r + gaps ≈ 700px + flex.
     height: 50px;
     border-radius: 8px;
     background: Theme.container-low;
@@ -597,6 +605,7 @@ component DayHeader inherits Rectangle {
                     font-weight: 700;
                     color: Theme.mint;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
                 Text {
                     text: "//";
@@ -605,6 +614,7 @@ component DayHeader inherits Rectangle {
                     font-weight: 700;
                     color: Theme.ink-faint;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
                 Text {
                     text: root.item.losses-label;
@@ -613,20 +623,21 @@ component DayHeader inherits Rectangle {
                     font-weight: 700;
                     color: Theme.coral;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
             }
         }
 
         Rectangle { horizontal-stretch: 1; }
 
-        // Two chip-width spacers stand in for the rows' TRS/clutch slots, then
-        // the same shared tail as every row: one component, one set of widths.
-        Rectangle { width: 96px; }
-        Rectangle { width: 86px; }
+        // Two spacers stand in for the rows' TRS/clutch slots (MatchCols),
+        // then the same shared tail as every row.
+        Rectangle { width: MatchCols.trs; }
+        Rectangle { width: MatchCols.clutch; }
         HorizontalLayout {
             spacing: 10px;
 
-            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: Theme.ink; }
+            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: root.item.kd-low ? Theme.coral-dim : Theme.ink; }
             StatCell {
                 col-width: 150px;
                 label: root.item.kda;
@@ -634,10 +645,13 @@ component DayHeader inherits Rectangle {
                 suffix: root.item.kda_sub == "" ? "" : "K/D/A";
                 ink: Theme.ink;
             }
-            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dda; ink: root.item.dda == "" ? Theme.ink-dim : (root.item.dda.starts-with("-") ? Theme.coral : Theme.mint); }
+            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dda; ink: root.item.dda == "" ? Theme.ink-dim : (root.item.dda-negative ? Theme.coral : Theme.mint); }
             StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
             StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }
         }
+        // Trailing tail: same 20px the rows spend on the kebab, so the numeric
+        // columns sit over the rows' numerics.
+        Rectangle { width: 20px; }
     }
 
 }
@@ -708,7 +722,7 @@ component DetailPlayerLine inherits Rectangle {
         Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; }
         Cell { col-width: 56px; value: root.item.kast; mono: true; align-right: true; }
         Cell {
-            col-width: 58px;
+            col-width: 64px;
             value: root.item.dd;
             mono: true;
             align-right: true;
