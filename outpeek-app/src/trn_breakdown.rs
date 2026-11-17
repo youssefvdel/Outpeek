@@ -21,6 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::trn_profile::{count_line, decimal, percent, stat_f64, stat_i64};
 
@@ -36,13 +37,22 @@ pub struct BreakdownRow {
     /// TRN's art URL for the row (portrait or map splash); empty when absent.
     pub image_url: String,
     pub matches: Option<i64>,
+    /// Wins / losses as reported (`matchesWon`, `matchesLost`).
+    pub wins: Option<i64>,
+    pub losses: Option<i64>,
     pub win_pct: Option<f64>,
     pub kd: Option<f64>,
     pub acs: Option<f64>,
     pub dmg_per_round: Option<f64>,
     pub hs_pct: Option<f64>,
+    /// Signed per-round damage delta (`damageDeltaPerRound`, rounded) — the
+    /// website's DDΔ column. The match-total `damageDelta` is thousands deep
+    /// and never what that column prints.
+    pub dmg_delta: Option<i64>,
     /// Agents only: share of the accounted matches this agent was picked in.
     pub pick_rate: Option<f64>,
+    /// Maps only: the two most-played agents on this map. Empty for agents.
+    pub top_agents: Vec<MapAgent>,
 }
 
 impl BreakdownRow {
@@ -150,13 +160,118 @@ fn rows(segments: &[Value], kind: &str, season_id: &str) -> Vec<BreakdownRow> {
                     .trim()
                     .to_string(),
                 matches: stat_i64(&stats, "matchesPlayed"),
+                wins: stat_i64(&stats, "matchesWon"),
+                losses: stat_i64(&stats, "matchesLost"),
                 win_pct: stat_f64(&stats, "matchesWinPct"),
                 kd: stat_f64(&stats, "kDRatio"),
                 acs: stat_f64(&stats, "scorePerRound"),
                 dmg_per_round: stat_f64(&stats, "damagePerRound"),
                 hs_pct: stat_f64(&stats, "headshotsPercentage"),
+                dmg_delta: stat_f64(&stats, "damageDeltaPerRound").map(|v| v.round() as i64),
                 pick_rate: stat_f64(&stats, "pickRate"),
+                top_agents: Vec::new(),
             })
+        })
+        .collect()
+}
+
+/// Lowercased alphanumeric only, so a payload codename (`kayo`) meets the
+/// display name the agent row reports (`KAY/O`).
+fn normalize_agent_key(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+/// `mapKey` → the two most-played agents there, most played first. TRN ships
+/// these as standalone `map-agent` segments (one per map × agent, keyed
+/// `{mapKey}_{agentUuid}`), so they are grouped here instead of being read
+/// off the map segment.
+///
+/// A `map-agent` row carries no name or portrait of its own (`metadata` is
+/// empty); both come from the already-parsed agent rows, matched by codename.
+/// An agent the payload never names keeps its codename title-cased and no art
+/// rather than being dropped or guessed.
+fn top_agents(
+    segments: &[Value],
+    season_id: &str,
+    agents: &HashMap<String, (String, String)>,
+) -> HashMap<String, Vec<MapAgent>> {
+    let mut by_map: HashMap<String, Vec<(i64, MapAgent)>> = HashMap::new();
+    for s in segments {
+        if s.get("type").and_then(Value::as_str) != Some("map-agent") {
+            continue;
+        }
+        if !season_id.is_empty()
+            && s.pointer("/attributes/seasonId")
+                .and_then(Value::as_str)
+                .map(|id| id != season_id)
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        let Some(map_key) = s
+            .pointer("/attributes/mapKey")
+            .and_then(Value::as_str)
+            .map(|k| k.trim().to_lowercase())
+            .filter(|k| !k.is_empty())
+        else {
+            continue;
+        };
+        let agent_key = s
+            .pointer("/attributes/agentKey")
+            .and_then(Value::as_str)
+            .map(|k| k.trim().to_string())
+            .filter(|k| !k.is_empty());
+        let Some(agent_key) = agent_key else {
+            continue;
+        };
+        let stats = s.get("stats").cloned().unwrap_or(Value::Null);
+        let played = stat_i64(&stats, "matchesPlayed").unwrap_or(0);
+        // A map nobody played this agent on has no top agent.
+        if played <= 0 {
+            continue;
+        }
+        let win_pct = stat_f64(&stats, "matchesWinPct");
+        // Codenames meet the agent rows stripped of punctuation (`KAY/O` →
+        // `kayo`); a uuid-shaped key meets them verbatim instead.
+        let (name, art_url) = agents
+            .get(&normalize_agent_key(&agent_key))
+            .or_else(|| agents.get(&agent_key.trim().to_lowercase()))
+            .cloned()
+            .unwrap_or_else(|| {
+                let mut chars = agent_key.chars();
+                let fallback = match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                };
+                (fallback, String::new())
+            });
+        by_map.entry(map_key).or_default().push((
+            played,
+            MapAgent {
+                name,
+                // Whole percent like the website (`83%`, not `83.3%`) — the
+                // map's own Win % keeps the decimal, the portraits do not.
+                win: win_pct
+                    .filter(|v| v.is_finite())
+                    .map(|v| format!("{v:.0}%"))
+                    .unwrap_or_default(),
+                win_share: win_pct
+                    .map(|p| (p / 100.0) as f32)
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0),
+                art_url,
+            },
+        ));
+    }
+    by_map
+        .into_iter()
+        .map(|(k, mut v)| {
+            v.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.name.cmp(&b.1.name)));
+            (k, v.into_iter().take(2).map(|(_, a)| a).collect())
         })
         .collect()
 }
@@ -175,6 +290,26 @@ pub fn parse(segments: &[Value], season_id: &str) -> (Vec<BreakdownRow>, Vec<Bre
             })
             .then_with(|| a.name.cmp(&b.name))
     };
+    // `map-agent` segments are keyed by map, not nested under it: attach
+    // them before sorting so each map row carries its own two portraits.
+    // Names and art come from the agent rows (a `map-agent` row carries
+    // neither), matched by codename with the uuid as a fallback.
+    let mut lookup: HashMap<String, (String, String)> = HashMap::new();
+    for a in agents.iter() {
+        let value = (a.name.clone(), a.image_url.clone());
+        lookup
+            .entry(normalize_agent_key(&a.name))
+            .or_insert_with(|| value.clone());
+        if !a.key.is_empty() {
+            lookup.entry(a.key.clone()).or_insert(value);
+        }
+    }
+    let top = top_agents(segments, season_id, &lookup);
+    for row in maps.iter_mut() {
+        if let Some(list) = top.get(&row.key) {
+            row.top_agents = list.clone();
+        }
+    }
     agents.sort_by(by_play);
     maps.sort_by(by_play);
     (agents, maps)
@@ -200,16 +335,36 @@ pub struct AgentRow {
     pub art_url: String,
 }
 
-/// One card of the Maps page.
+/// One agent in a map row's Top Agents cell: the portrait, its win share and
+/// the same percentage pre-formatted. The payload's `map-agent` segments
+/// carry the numbers; the name and portrait resolve against the agent rows.
+/// A map with none keeps an empty vector and draws an empty cell.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MapAgent {
+    pub name: String,
+    pub win: String,
+    pub win_share: f32,
+    pub art_url: String,
+}
+
+/// One row of the Maps table.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MapRow {
     pub name: String,
     pub matches: String,
     pub win: String,
+    pub wins: String,
+    pub losses: String,
     pub kd: String,
+    /// True when the reported K/D is under 1.0 — the muted rose tone.
+    pub kd_low: bool,
     pub acs: String,
     pub adr: String,
     pub hs: String,
+    /// Signed `-21` / `+12`, the table's last numeric column.
+    pub dd: String,
+    /// The map's two most-played agents, most played first.
+    pub agents: Vec<MapAgent>,
     pub win_share: f32,
     /// Cached map art URL (valorant-api `listViewIcon`), empty on a miss.
     pub art_url: String,
@@ -237,12 +392,26 @@ impl BreakdownRow {
             name: self.name.clone(),
             matches: self.matches_label(),
             win: self.win_label(),
+            wins: self.wins.map(|v| v.to_string()).unwrap_or_default(),
+            losses: self.losses.map(|v| v.to_string()).unwrap_or_default(),
             kd: self.kd_label(),
+            kd_low: self.kd.map(|v| v < 1.0).unwrap_or(false),
             acs: self.acs_label(),
             adr: self.adr_label(),
             hs: self.hs_label(),
+            dd: self.dd_label(),
+            agents: self.top_agents.clone(),
             win_share: self.win_share(),
             art_url: String::new(),
+        }
+    }
+
+    /// `+12` / `-21` — the sign is the value's, never the layout's.
+    fn dd_label(&self) -> String {
+        match self.dmg_delta {
+            Some(v) if v > 0 => format!("+{v}"),
+            Some(v) => v.to_string(),
+            None => String::new(),
         }
     }
 }
@@ -375,6 +544,147 @@ mod tests {
         let (agents, maps) = parse(&[], "s1");
         assert!(agents.is_empty());
         assert!(maps.is_empty());
+    }
+
+    /// Wins, losses and the signed per-round delta come from the map segment's
+    /// own stats; an absent value stays empty, never a zero.
+    #[test]
+    fn wins_losses_and_dd_parse_from_stats_with_a_signed_delta() {
+        let segments = serde_json::json!([
+            { "type": "map",
+              "attributes": { "key": "lotus", "seasonId": "s1" },
+              "metadata": { "name": "Lotus" },
+              "stats": {
+                "matchesWon": { "value": 9 },
+                "matchesLost": { "value": 3 },
+                "damageDeltaPerRound": { "value": 12.4 } } },
+            { "type": "map",
+              "attributes": { "key": "bind", "seasonId": "s1" },
+              "metadata": { "name": "Bind" },
+              "stats": {
+                "matchesWon": { "value": 2 },
+                "matchesLost": { "value": 5 },
+                "damageDeltaPerRound": { "value": -21.2 } } },
+            { "type": "map",
+              "attributes": { "key": "haven", "seasonId": "s1" },
+              "metadata": { "name": "Haven" },
+              "stats": {} }
+        ]);
+        let (_, maps) = parse(segments.as_array().unwrap(), "s1");
+        assert_eq!(maps.len(), 3);
+        let view = map_rows(&maps);
+        let lotus = view.iter().find(|r| r.name == "Lotus").expect("lotus");
+        assert_eq!(lotus.wins, "9");
+        assert_eq!(lotus.losses, "3");
+        assert_eq!(lotus.dd, "+12", "a positive delta carries its sign");
+        let bind = view.iter().find(|r| r.name == "Bind").expect("bind");
+        assert_eq!(bind.wins, "2");
+        assert_eq!(bind.losses, "5");
+        assert_eq!(bind.dd, "-21");
+        let haven = view.iter().find(|r| r.name == "Haven").expect("haven");
+        assert_eq!(haven.wins, "");
+        assert_eq!(haven.losses, "");
+        assert_eq!(haven.dd, "", "an absent delta is empty, not a zero");
+    }
+
+    /// Top agents attach to the right map keyed by `mapKey`, capped at the
+    /// two most played; names and art resolve against the agent rows.
+    #[test]
+    fn top_agents_attach_to_the_right_map_capped_at_two() {
+        let agent = |uuid: &str, name: &str| {
+            serde_json::json!({
+                "type": "agent",
+                "attributes": { "key": uuid, "seasonId": "s1" },
+                "metadata": { "name": name, "imageUrl": format!("https://art/{uuid}.png") },
+                "stats": { "matchesPlayed": { "value": 10 } }
+            })
+        };
+        let pick = |map: &str, key: &str, played: i64, win: f64| {
+            serde_json::json!({
+                "type": "map-agent",
+                "attributes": {
+                    "key": format!("{map}_{key}"),
+                    "seasonId": "s1",
+                    "mapKey": map,
+                    "agentKey": key
+                },
+                "stats": {
+                    "matchesPlayed": { "value": played },
+                    "matchesWinPct": { "value": win }
+                }
+            })
+        };
+        let uuid_k = "601dbbe7-43ce-be57-2a40-4abd24953621";
+        let uuid_s = "569fdd95-4d10-43ab-ca70-79becc718b46";
+        let uuid_p = "eb93336a-449b-9c1b-0a54-a891f7921d69";
+        let segments = serde_json::json!([
+            agent(uuid_k, "KAY/O"),
+            agent(uuid_s, "Sage"),
+            agent(uuid_p, "Phoenix"),
+            { "type": "map",
+              "attributes": { "key": "lotus", "seasonId": "s1" },
+              "metadata": { "name": "Lotus" },
+              "stats": { "matchesPlayed": { "value": 13 } } },
+            { "type": "map",
+              "attributes": { "key": "bind", "seasonId": "s1" },
+              "metadata": { "name": "Bind" },
+              "stats": { "matchesPlayed": { "value": 5 } } },
+            pick("lotus", "kayo", 6, 83.33),
+            pick("lotus", uuid_s, 4, 50.0),
+            pick("lotus", uuid_p, 3, 66.67),
+            pick("bind", "kayo", 5, 40.0)
+        ]);
+        let (_, maps) = parse(segments.as_array().unwrap(), "s1");
+        let lotus = maps.iter().find(|r| r.key == "lotus").expect("lotus");
+        assert_eq!(
+            lotus
+                .top_agents
+                .iter()
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>(),
+            ["KAY/O", "Sage"],
+            "most played first, capped at two"
+        );
+        assert_eq!(lotus.top_agents[0].win, "83%", "whole percent, no decimal");
+        assert_eq!(
+            lotus.top_agents[0].art_url,
+            format!("https://art/{uuid_k}.png"),
+            "portraits resolve against the agent rows"
+        );
+        let bind = maps.iter().find(|r| r.key == "bind").expect("bind");
+        assert_eq!(bind.top_agents.len(), 1);
+        assert_eq!(bind.top_agents[0].name, "KAY/O");
+        // A zero-play row is not a top agent.
+        let segments = serde_json::json!([
+            agent(uuid_k, "KAY/O"),
+            { "type": "map",
+              "attributes": { "key": "abyss", "seasonId": "s1" },
+              "metadata": { "name": "Abyss" },
+              "stats": { "matchesPlayed": { "value": 7 } } },
+            pick("abyss", "kayo", 0, 0.0)
+        ]);
+        let (_, maps) = parse(segments.as_array().unwrap(), "s1");
+        let abyss = maps.iter().find(|r| r.key == "abyss").expect("abyss");
+        assert!(abyss.top_agents.is_empty());
+    }
+
+    /// A map with no `map-agent` segments keeps an empty agents vec.
+    #[test]
+    fn a_map_with_no_top_agent_segments_keeps_an_empty_agents_vec() {
+        let segments = serde_json::json!([
+            { "type": "map",
+              "attributes": { "key": "haven", "seasonId": "s1" },
+              "metadata": { "name": "Haven" },
+              "stats": { "matchesPlayed": { "value": 11 } } }
+        ]);
+        let (_, maps) = parse(segments.as_array().unwrap(), "s1");
+        assert_eq!(maps.len(), 1);
+        assert!(maps[0].top_agents.is_empty());
+        let view = map_rows(&maps);
+        assert!(
+            view[0].agents.is_empty(),
+            "the view row draws an empty cell"
+        );
     }
 
     #[test]

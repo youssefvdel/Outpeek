@@ -380,6 +380,17 @@ async fn breakdown_frame(
             .map_icon(fetcher.clone(), &breakdown.key, SystemTime::now())
             .await
             .unwrap_or_default();
+        // The row's two top-agent portraits come from TRN's own URLs.
+        for agent in row.agents.iter_mut() {
+            if agent.art_url.is_empty() {
+                continue;
+            }
+            let url = agent.art_url.clone();
+            agent.art_url = art
+                .ensure_url(fetcher.clone(), &url, SystemTime::now())
+                .await
+                .unwrap_or_default();
+        }
     }
     (agents, maps)
 }

@@ -1,125 +1,222 @@
-// Maps tab: every map Tracker Network reports for the current act, read from
-// the same profile payload as the Overview. Card art comes from valorant-api's
-// `listViewIcon` (456×100), not from TRN's 3840×2160 splash: the splash is past
-// the art budget and the wrong shape for a card.
+// Maps tab: Tracker Network's own table — one row per map in most-played
+// order. The banner is the first column (art with a dark left-to-right scrim
+// and the map name over it), then the map's two most-played agents (28px
+// portraits with their win rates underneath), then the website's numeric
+// columns: Win % | Wins | Losses | K/D | ADR | ACS | DDΔ. Values are
+// pre-formatted by Rust at the Matches surface's 16px mono/700 step; an
+// absent stat is an em dash. The portraits come from the payload's own
+// `map-agent` segments, resolved against the agent rows.
 //
-// The endpoint caps its list (7 maps today), so the band says "reported by
-// Tracker Network" and never implies a full map pool. Every value is
-// pre-formatted by Rust; an absent stat is an em dash, never a zero.
+// No kebab: the website's dots open a menu this app does not have, and a
+// button that opens nothing is chrome that lies.
 
 import { Theme, Space, Shape, TypeScale } from "tokens.slint";
-import { Tracker, MapRowUi } from "../state.slint";
-import { Card, Chip, Glyph, PanelTitle, VCenter } from "widgets.slint";
+import { Tracker, MapRowUi, MapAgentUi } from "../state.slint";
+import { Cell, Glyph, VCenter } from "widgets.slint";
 
-component MetricCell inherits VerticalLayout {
-    in property <string> label: "";
-    in property <string> value: "";
-    spacing: 1px;
+/// Header label over one column: the spec's 12px/600 faint-ink step. The
+/// shared ColumnLabel is the table's 11px step, so the header owns its size
+/// here instead of borrowing the wrong one.
+component Head inherits Rectangle {
+    in property <string> text: "";
+    in property <length> col-width: 60px;
+    width: root.col-width;
 
-    PanelTitle { text: root.label; }
     Text {
-        text: root.value == "" ? "—" : root.value;
-        font-family: Theme.font-mono;
+        text: root.text;
+        font-family: Theme.font-body;
         font-size: TypeScale.caption;
-        color: Theme.ink;
+        font-weight: 600;
+        color: Theme.ink-faint;
+        horizontal-alignment: right;
+        vertical-alignment: center;
         overflow: elide;
     }
 }
 
-component MapCard inherits Card {
-    in property <MapRowUi> item;
-    pad: Space.sm;
-    gap: Space.sm;
+/// One portrait plus the win rate this player has on the map with it.
+component AgentPick inherits VerticalLayout {
+    in property <MapAgentUi> item;
+    width: 46px;
+    spacing: 1px;
 
-    // Card art plate: the PNG's own colours on a container floor, rounded so it
-    // reads as an inset rather than a square pasted over the card corner.
     Rectangle {
-        height: 64px;
-        // Concentric with the card: outer radius minus the card's padding, so
-        // the art plate reads as inset rather than as a second, rounder box.
-        border-radius: Shape.md - Space.sm;
-        background: Theme.container-low;
+        width: 28px;
+        height: 28px;
+        x: (parent.width - self.width) / 2;
+        border-radius: 6px;
+        background: Theme.primary-deep;
         clip: true;
 
         if root.item.art.width > 0: Image {
-            width: parent.width;
-            height: parent.height;
             source: root.item.art;
+            width: 28px;
+            height: 28px;
             image-fit: cover;
         }
         if root.item.art.width == 0: Glyph {
-            kind: "tracker";
-            size: 18px;
+            kind: "user";
+            size: 13px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            stroke: Theme.ink-faint;
+            stroke: Theme.primary;
+            opacity: 0.7;
         }
     }
+    Text {
+        text: root.item.win == "" ? "—" : root.item.win;
+        font-family: Theme.font-body;
+        font-size: 10px;
+        color: Theme.ink-dim;
+        horizontal-alignment: center;
+    }
+}
+
+component MapTableRow inherits Rectangle {
+    in property <MapRowUi> item;
+    height: 56px;
+    background: Theme.container;
+    accessible-role: list-item;
+    accessible-label: root.item.name + " " + root.item.win + " " + root.item.kd;
 
     HorizontalLayout {
-        height: 20px;
-        spacing: Space.sm;
+        padding-left: 0px;
+        padding-right: Space.sm;
+        spacing: 10px;
 
-        Text {
-            text: root.item.name == "" ? "—" : root.item.name;
-            font-family: Theme.font-display;
-            font-size: TypeScale.title;
-            font-weight: 600;
-            color: Theme.ink;
-            vertical-alignment: center;
-            overflow: elide;
+        // The map banner, full row height: the picture *is* the first column.
+        Rectangle {
+            min-width: 180px;
             horizontal-stretch: 1;
-        }
-        VCenter {
-            Chip {
-                text: root.item.matches == "" ? "NOT READ" : root.item.matches;
-                tone: "off";
-                pad-x: 6px;
-                pad-y: 1px;
+            clip: true;
+            border-radius: Shape.sm;
+
+            if root.item.art.width > 0: Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.item.art;
+                image-fit: cover;
+            }
+            // Readable over any splash: a dark left-to-right scrim.
+            Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: @linear-gradient(90deg, #140b1be6 0%, #140b1b66 55%, #140b1b00 100%);
+            }
+            Text {
+                x: 12px;
+                text: root.item.name == "" ? "—" : root.item.name;
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 700;
+                color: Theme.ink;
+                vertical-alignment: center;
+                overflow: elide;
             }
         }
-    }
 
-    HorizontalLayout {
-        height: 16px;
-        spacing: 6px;
+        // Top agents: the two picks, most played first. Empty when the payload
+        // sent no `map-agent` segments for this map — an empty cell, never a
+        // guessed portrait.
+        VCenter {
+            Rectangle {
+                width: 100px;
+                height: 44px;
+                background: transparent;
 
-        PanelTitle { text: "WIN"; vertical-alignment: center; }
-        Text {
-            text: root.item.win == "" ? "—" : root.item.win;
-            font-family: Theme.font-body;
-            font-size: TypeScale.caption;
-            font-weight: 600;
-            color: Theme.ink;
-            vertical-alignment: center;
+                HorizontalLayout {
+                    spacing: 4px;
+
+                    for agent in root.item.agents: AgentPick { item: agent; }
+                }
+            }
         }
-        Rectangle { horizontal-stretch: 1; }
-    }
 
-    Rectangle {
-        height: 3px;
-        border-radius: 1.5px;
-        background: Theme.line;
-
-        Rectangle {
-            // Left-anchored: without `x: 0` the fill centres and reads as
-            // offset from its own number. Share clamped so a bad value
-            // cannot overdraw the track.
-            x: 0;
-            width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
-            height: parent.height;
-            border-radius: 1.5px;
-            background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
+        // Every numeric cell is right-aligned 16px mono/700. An absent value
+        // draws its em dash dim; Win % and DDΔ carry the result colours.
+        VCenter {
+            Cell {
+                col-width: 74px;
+                value: root.item.win;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.win == ""
+                    ? Theme.ink-dim
+                    : root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
+            }
         }
-    }
-
-    GridLayout {
-        spacing: 4px;
-
-        MetricCell { label: "K/D"; value: root.item.kd; col: 0; }
-        MetricCell { label: "ACS"; value: root.item.acs; col: 1; }
-        MetricCell { label: "ADR"; value: root.item.adr; col: 2; }
-        MetricCell { label: "HS %"; value: root.item.hs; col: 3; }
+        VCenter {
+            Cell {
+                col-width: 52px;
+                value: root.item.wins;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.wins == "" ? Theme.ink-dim : Theme.ink;
+            }
+        }
+        VCenter {
+            Cell {
+                col-width: 56px;
+                value: root.item.losses;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.losses == "" ? Theme.ink-dim : Theme.ink;
+            }
+        }
+        VCenter {
+            Cell {
+                col-width: 52px;
+                value: root.item.kd;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.kd == ""
+                    ? Theme.ink-dim
+                    : root.item.kd-low ? Theme.coral-dim : Theme.ink;
+            }
+        }
+        VCenter {
+            Cell {
+                col-width: 62px;
+                value: root.item.adr;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.adr == "" ? Theme.ink-dim : Theme.ink;
+            }
+        }
+        VCenter {
+            Cell {
+                col-width: 62px;
+                value: root.item.acs;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.acs == "" ? Theme.ink-dim : Theme.ink;
+            }
+        }
+        VCenter {
+            Cell {
+                col-width: 58px;
+                value: root.item.dd;
+                mono: true;
+                align-right: true;
+                weight: 700;
+                text-size: 16px;
+                ink: root.item.dd == ""
+                    ? Theme.ink-dim
+                    : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
+            }
+        }
     }
 }
 
@@ -130,38 +227,71 @@ export component MapsPage inherits VerticalLayout {
     padding-bottom: 20px;
     spacing: Space.md;
 
-    if Tracker.map-grid.length == 0: Card {
-        pad: Space.lg;
-        Rectangle {
-            height: 120px;
-            background: transparent;
+    // One table body card, the matches list's own: radius 16, a 1px border,
+    // 14/16px padding. The 34px header and every 56px row live inside it with
+    // no gaps, so an empty act reads as an inline note — never a strip above
+    // the table.
+    Rectangle {
+        border-radius: 16px;
+        background: Theme.container-low;
+        border-width: 1px;
+        border-color: Theme.container-high;
 
-            // The band is gone by design: the reason lives here, in the empty
-            // card, instead of a strip above the grid.
-            Text {
-                text: Tracker.breakdown-note == "" ? "No map rows for this act yet." : Tracker.breakdown-note;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                color: Theme.ink-faint;
-                horizontal-alignment: center;
-                vertical-alignment: center;
+        VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 14px;
+            padding-bottom: 14px;
+            spacing: 0px;
+
+            // Header: one label per column, on the column's own edge. The Top
+            // Agents column carries no label — the portraits need no
+            // introduction, and the website names no state here either.
+            Rectangle {
+                height: 34px;
+                background: transparent;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: Space.sm;
+                    spacing: 10px;
+
+                    Text {
+                        min-width: 180px;
+                        horizontal-stretch: 1;
+                        text: "Map Name";
+                        font-family: Theme.font-body;
+                        font-size: TypeScale.caption;
+                        font-weight: 600;
+                        color: Theme.ink-faint;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { width: 100px; }
+                    Head { col-width: 74px; text: "Win %"; }
+                    Head { col-width: 52px; text: "Wins"; }
+                    Head { col-width: 56px; text: "Losses"; }
+                    Head { col-width: 52px; text: "K/D"; }
+                    Head { col-width: 62px; text: "ADR"; }
+                    Head { col-width: 62px; text: "ACS"; }
+                    Head { col-width: 58px; text: "DDΔ"; }
+                }
             }
-        }
-    }
 
-    // Three cards per row: the chunking is done in Rust (`map-grid`), so the
-    // rows are data and a short last row is simply short. A fixed card width
-    // keeps every card the same size instead of stretching the lone last one.
-    VerticalLayout {
-        spacing: Space.md;
+            if Tracker.map-rows.length == 0: Rectangle {
+                height: 120px;
+                background: transparent;
 
-        for map-row in Tracker.map-grid: HorizontalLayout {
-            spacing: Space.md;
-
-            for card in map-row: MapCard {
-                item: card;
-                width: (parent.width - Space.md * 2) / 3;
+                Text {
+                    text: Tracker.breakdown-note == "" ? "No map rows for this act yet." : Tracker.breakdown-note;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    color: Theme.ink-faint;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
+
+            for row in Tracker.map-rows: MapTableRow { item: row; }
         }
     }
 }

@@ -155,17 +155,34 @@ export struct LivePlayerUi {
     incognito: bool,
 }
 
-/// One map card on the Maps tab. Art is valorant-api's `listViewIcon`, cached
-/// locally; the numbers come from the same profile payload as the agents.
+/// One portrait in a map row's Top Agents cell: the agent's cached portrait
+/// and the win rate this player has on the map with it, pre-formatted.
+export struct MapAgentUi {
+    win: string,
+    win-share: float,
+    art: image,
+}
+
+/// One row of the Maps table: Tracker Network's own per-map columns, read
+/// from the same profile payload as the agents. Every string is pre-formatted
+/// by Rust; `kd-low` only picks the K/D ink, `win-share` the Win % ink.
 export struct MapRowUi {
     name: string,
     matches: string,
     win: string,
+    // The table's own columns: wins, losses, the signed delta.
+    wins: string,
+    losses: string,
+    dd: string,
     kd: string,
+    // True when the reported K/D is under 1.0 — the muted rose tone.
+    kd-low: bool,
     acs: string,
     adr: string,
     hs: string,
     win-share: float,
+    // Two most-played agents on this map, most played first.
+    agents: [MapAgentUi],
     art: image,
 }
 
@@ -210,12 +227,11 @@ export global Tracker {
     in-out property <[MatchRoundUi]> match-rounds: [];
 
     // Agent and map breakdowns (same Tracker Network payload as the profile,
-    // never a second request). Maps arrive pre-chunked three per row: Slint's
-    // GridLayout ignores runtime `col:` inside a `for`, so the row grouping is
-    // data, not layout arithmetic. `breakdown-state` shares the five states;
+    // never a second request). The Maps tab is one flat table, one row per
+    // map, in most-played order. `breakdown-state` shares the five states;
     // `breakdown-note` carries the reason/age line when the rows are not live.
     in-out property <[AgentRowUi]> agents: [];
-    in-out property <[[MapRowUi]]> map-grid: [];
+    in-out property <[MapRowUi]> map-rows: [];
     in-out property <string> breakdown-state: "empty";
     in-out property <string> breakdown-note: "No profile read yet.";
 

@@ -1278,7 +1278,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
 /// Push the agent and map rows into the Agents/Maps tabs. Rows arrive already
 /// formatted and already sharing the Overview's season; only the art needs
 /// decoding here, at the size the views actually draw it (128 px portraits,
-/// 320 px map cards) instead of the full-size files.
+/// 320 px map banners) instead of the full-size files.
 fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
     use outpeek_app::trn_breakdown::{AgentRow, MapRow};
     let t = ui.global::<Tracker>();
@@ -1321,22 +1321,30 @@ fn apply_breakdown(ui: &AppWindow, view: &outpeek_app::worker::BreakdownView) {
             name: r.name.clone().into(),
             matches: r.matches.clone().into(),
             win: r.win.clone().into(),
+            wins: r.wins.clone().into(),
+            losses: r.losses.clone().into(),
+            dd: r.dd.clone().into(),
             kd: r.kd.clone().into(),
+            kd_low: r.kd_low,
             acs: r.acs.clone().into(),
             adr: r.adr.clone().into(),
             hs: r.hs.clone().into(),
             win_share: r.win_share,
+            agents: ModelRc::new(VecModel::from(
+                r.agents
+                    .iter()
+                    .map(|a| MapAgentUi {
+                        win: a.win.clone().into(),
+                        win_share: a.win_share,
+                        art: load(&a.art_url, 96),
+                    })
+                    .collect::<Vec<MapAgentUi>>(),
+            )),
             art: load(&r.art_url, 320),
         })
         .collect();
-    // Three cards per row, grouped here: Slint's GridLayout does not honour a
-    // runtime column inside a `for`, so the row grouping is data.
-    let map_grid: Vec<ModelRc<MapRowUi>> = maps
-        .chunks(3)
-        .map(|row| ModelRc::new(VecModel::from(row.to_vec())))
-        .collect();
     t.set_agents(ModelRc::new(VecModel::from(agents)));
-    t.set_map_grid(ModelRc::new(VecModel::from(map_grid)));
+    t.set_map_rows(ModelRc::new(VecModel::from(maps)));
     t.set_breakdown_state(view.state.into());
     t.set_breakdown_note(view.message.clone().into());
 }

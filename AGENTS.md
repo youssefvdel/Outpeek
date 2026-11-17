@@ -118,6 +118,7 @@ is missing, measure the committed screenshot instead of guessing.
 | Day count | bordered 30x24 chip beside the date |
 | Strip | 62 px season cell + three agent cells, each with a win bar |
 | Verdict | wins mint `//` faint, losses coral |
+| Maps table | one body card, 34 px header, 56 px rows; banner first column, two 28 px top agents (whole `%`), Win % \| Wins \| Losses \| K/D \| ADR \| ACS \| signed per-round DDΔ |
 
 ### Non-negotiables before saying a UI change is done
 
