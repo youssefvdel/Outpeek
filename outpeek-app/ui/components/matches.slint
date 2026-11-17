@@ -1,8 +1,7 @@
 // Matches tab: the TRN-website history — a top-3 agent strip, a recent-form
 // strip, then one group per day (header aggregates plus that day's rows).
-// Every cell is pre-formatted by Rust (`MatchAgentUi` / `MatchFormUi` /
-// `MatchDayUi` / `MatchRowUi`), so this view cannot round, re-derive or invent
-// a value. TRS, clutch and placement chips render only what the payload
+// Every cell is pre-formatted by Rust (`MatchAgentUi` / `MatchDayUi` /
+// `MatchRowUi`), so this view cannot round, re-derive or invent a value. TRS, clutch and placement chips render only what the payload
 // reported; weapon stats have no source, so no panel shows them here either.
 //
 // A row click opens the scoreboard in place (`Tracker.select-match(id)`): the
@@ -11,7 +10,7 @@
 // failure is an inline error card with a retry, never a blank view.
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
-import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchFormUi, MatchDayUi, MatchSummaryUi } from "../state.slint";
+import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchDayUi, MatchSummaryUi } from "../state.slint";
 import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
 component StatChip inherits Rectangle {
@@ -428,52 +427,6 @@ component SeasonCell inherits Rectangle {
                 border-radius: 1.5px;
                 background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
             }
-        }
-    }
-}
-
-component FormCell inherits Rectangle {
-    in property <MatchFormUi> item;
-    horizontal-stretch: 1;
-    // The reference's form cell: age on top, the score set at value size in the
-    // result colour, K/D beneath, and a 3 px result bar closing the cell.
-    height: 74px;
-    VerticalLayout {
-        spacing: 2px;
-        alignment: center;
-
-        Text {
-            text: root.item.age == "" ? "—" : root.item.age;
-            font-family: Theme.font-body;
-            font-size: TypeScale.micro;
-            color: Theme.ink-faint;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-        Text {
-            text: root.item.score == "" ? "—" : root.item.score;
-            font-family: Theme.font-mono;
-            font-size: TypeScale.value;
-            font-weight: 700;
-            color: root.item.score == ""
-                ? Theme.ink-faint
-                : root.item.won ? Theme.mint : Theme.coral;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-        Text {
-            text: root.item.kd == "" ? "—" : root.item.kd;
-            font-family: Theme.font-mono;
-            font-size: TypeScale.micro;
-            color: Theme.ink-dim;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-        Rectangle {
-            height: 3px;
-            border-radius: 1.5px;
-            background: root.item.won ? Theme.mint : Theme.coral;
-            opacity: 0.85;
         }
     }
 }

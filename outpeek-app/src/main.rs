@@ -1239,17 +1239,6 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         })
         .collect();
     t.set_match_agents(ModelRc::new(VecModel::from(agents)));
-    let form: Vec<MatchFormUi> = view
-        .form
-        .iter()
-        .map(|f| MatchFormUi {
-            age: f.age.clone().into(),
-            score: f.score.clone().into(),
-            won: f.won,
-            kd: f.kd.clone().into(),
-        })
-        .collect();
-    t.set_match_form(ModelRc::new(VecModel::from(form)));
     let days: Vec<MatchDayUi> = view
         .days
         .iter()

@@ -37,7 +37,7 @@ use crate::rank;
 use crate::trn;
 use crate::trn_breakdown::{self, AgentRow, MapRow};
 use crate::trn_match_detail::{self, MatchDetail};
-use crate::trn_matches::{self, AgentStripRow, DayGroup, FormCell, MatchRow};
+use crate::trn_matches::{self, AgentStripRow, DayGroup, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
 /// Agent select is short and round transitions are quick.
@@ -89,8 +89,6 @@ pub struct MatchesView {
     pub summary: trn_matches::SeasonStrip,
     /// Top-3 agents by matches from the profile payload's own breakdown.
     pub agents: Vec<AgentStripRow>,
-    /// Last 8 matches, newest first, for the recent-form strip.
-    pub form: Vec<FormCell>,
     /// Day groups, newest day first, for the grouped history.
     pub days: Vec<DayGroup>,
     pub state: &'static str,
@@ -103,7 +101,6 @@ impl MatchesView {
             rows: Vec::new(),
             summary: trn_matches::SeasonStrip::default(),
             agents: Vec::new(),
-            form: Vec::new(),
             days: Vec::new(),
             state,
             message: message.into(),
@@ -281,12 +278,10 @@ fn matches_frame(
     state: &'static str,
     message: String,
 ) -> MatchesView {
-    let now = now_ms();
     MatchesView {
         summary: profile
             .map(|p| trn_matches::season_strip(&p.season))
             .unwrap_or_default(),
-        form: trn_matches::form_strip(&rows, now),
         days: trn_matches::group_days(&rows),
         agents: profile
             .map(|p| trn_matches::top_agents(&p.agents))

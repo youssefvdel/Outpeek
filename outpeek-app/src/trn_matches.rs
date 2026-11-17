@@ -371,30 +371,6 @@ fn side(has: bool, value: u64) -> String {
     }
 }
 
-/// One form-strip cell: the last games at a glance. `score` is the rounds
-/// score with the row's existing result colour (`won`); `kd` is the match's
-/// own ratio string.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FormCell {
-    pub age: String,
-    pub score: String,
-    pub won: bool,
-    pub kd: String,
-}
-
-/// Last 8 matches, newest first (the source rows already arrive that way).
-pub fn form_strip(rows: &[MatchRow], now_ms: u64) -> Vec<FormCell> {
-    rows.iter()
-        .take(8)
-        .map(|r| FormCell {
-            age: rel_age(&r.timestamp, now_ms),
-            score: r.rounds(),
-            won: r.won(),
-            kd: r.kd_ratio(),
-        })
-        .collect()
-}
-
 /// One agent of the top-3 strip: portrait, name, `7W - 9L (44%)`, K/D.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentStripRow {
@@ -1138,23 +1114,6 @@ mod tests {
         assert_eq!(g.hs, "");
         assert_eq!(g.acs, "");
         assert_eq!(g.dda, "");
-    }
-
-    #[test]
-    fn the_form_strip_is_the_last_eight_newest_first() {
-        let r = rows();
-        let form = form_strip(&r, NOW);
-        assert_eq!(form.len(), 8);
-        assert_eq!(form[0].age, "2d ago");
-        assert_eq!(form[1].age, "3d ago");
-        for cell in form.iter().skip(2) {
-            assert_eq!(cell.age, "5d ago");
-        }
-        // Score and K/D reuse the row's own strings and colour rule.
-        assert_eq!(form[0].score, r[0].rounds());
-        assert_eq!(form[0].kd, r[0].kd_ratio());
-        assert_eq!(form[0].won, r[0].won());
-        assert!(!form[0].won, "the newest fixture row is a defeat");
     }
 
     fn brow(

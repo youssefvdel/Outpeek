@@ -67,14 +67,6 @@ export struct MatchSummaryUi {
     win-share: float,
 }
 
-/// One cell of the recent-form strip: age, rounds score, K/D. `won` picks the
-/// score colour with the row's existing result rule.
-export struct MatchFormUi {
-    age: string,
-    score: string,
-    won: bool,
-    kd: string,
-}
 
 /// One day-group header: `Nov 14 [1]` plus the day's W/L, K/D, summed K/D/A,
 /// signed damage, mean HS% and ACS. All pre-formatted by Rust.
@@ -176,7 +168,6 @@ export global Tracker {
     // TRN-website strips, derived from the same rows/payload as `matches`.
     in-out property <MatchSummaryUi> match-summary;
     in-out property <[MatchAgentUi]> match-agents: [];
-    in-out property <[MatchFormUi]> match-form: [];
     // Day groups: `match-days[i]` heads `match-day-rows[i]`. The two models
     // are built together, so the indices always agree.
     in-out property <[MatchDayUi]> match-days: [];
