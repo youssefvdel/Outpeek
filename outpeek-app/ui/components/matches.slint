@@ -207,6 +207,10 @@ component MatchLine inherits Rectangle {
                 chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
             }
         }
+        // The slack lives BEFORE the tail: the numeric block then ends on the
+        // card's right edge, which is the edge every day band ends on.
+        Rectangle { horizontal-stretch: 1; }
+
         // TRN's own column order: K/D, then the K/D/A triple, then DDΔ, HS %
         // and ACS. The tail gets its own wider gutter so the ratio and the
         // triple never read as one number.
@@ -230,7 +234,6 @@ component MatchLine inherits Rectangle {
             Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
             Cell { col-width: 56px; value: root.item.acs; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
         }
-        Rectangle { horizontal-stretch: 1; }
     }
 
     Rectangle {
