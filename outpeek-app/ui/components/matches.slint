@@ -456,17 +456,59 @@ component DayHeader inherits Rectangle {
             }
         }
 
+        // The match count is a chip, not "[3]" in the date.
+        VCenter {
+            Rectangle {
+                width: 30px;
+                height: 24px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: Theme.line;
+                background: transparent;
+
+                Text {
+                    text: root.item.count-label == "" ? "—" : root.item.count-label;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    font-weight: 700;
+                    color: Theme.ink;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
         Rectangle { horizontal-stretch: 1; }
 
+        // The verdict in two colours: wins read mint, losses read coral.
         VCenter {
-            Text {
-                text: root.item.wl == "" ? "—" : root.item.wl;
-                font-family: Theme.font-body;
-                font-size: TypeScale.value;
-                font-weight: 700;
-                color: Theme.ink;
-                vertical-alignment: center;
-                overflow: elide;
+            HorizontalLayout {
+                spacing: 6px;
+
+                Text {
+                    text: root.item.wins-label;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.value;
+                    font-weight: 700;
+                    color: Theme.mint;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "//";
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.value;
+                    font-weight: 700;
+                    color: Theme.ink-faint;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.item.losses-label;
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.value;
+                    font-weight: 700;
+                    color: Theme.coral;
+                    vertical-alignment: center;
+                }
             }
         }
 

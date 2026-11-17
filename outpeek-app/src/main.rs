@@ -1244,7 +1244,9 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         .iter()
         .map(|d| MatchDayUi {
             title: d.title.clone().into(),
-            wl: d.wl.clone().into(),
+            count_label: d.count_label.clone().into(),
+            wins_label: d.wins_label.clone().into(),
+            losses_label: d.losses_label.clone().into(),
             kd: d.kd.clone().into(),
             kda: d.kda.clone().into(),
         kda_sub: d.kda_sub.clone().into(),

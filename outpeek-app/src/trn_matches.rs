@@ -478,12 +478,16 @@ pub fn season_strip(season: &crate::trn_profile::SeasonStats) -> SeasonStrip {
 pub struct DayGroup {
     /// Payload calendar date (`2026-11-14`), the grouping key.
     pub key: String,
-    /// `Nov 14 [3]` — the date plus the matches counted under it.
+    /// `Nov 14` — just the date; the match count is its own chip beside it.
     pub title: String,
-    /// `2 W // 1 L` — victories/defeats from the `result` field. Draws are
-    /// counted in the title and in every aggregate below but own no slot in
-    /// this line; anything else is not a result we understand.
-    pub wl: String,
+    /// The matches counted under this day, as the chip's text.
+    pub count_label: String,
+    /// `0 W` — victories from the `result` field, drawn in the win colour.
+    /// Draws count in the chip and in every aggregate below but own no slot
+    /// here; anything else is not a result we understand.
+    pub wins_label: String,
+    /// `1 L` — defeats, drawn in the loss colour.
+    pub losses_label: String,
     /// Sum kills / sum deaths, 1 decimal. Empty unless both sides reported
     /// and deaths are non-zero.
     pub kd: String,
@@ -605,8 +609,10 @@ pub fn group_days(rows: &[MatchRow]) -> Vec<DayGroup> {
             };
             DayGroup {
                 key,
-                title: format!("{day} [{n}]"),
-                wl: format!("{wins} W // {losses} L"),
+                title: day.clone(),
+                count_label: n.to_string(),
+                wins_label: format!("{wins} W"),
+                losses_label: format!("{losses} L"),
                 kd: if has_kills && has_deaths && deaths > 0 {
                     format!("{:.1}", kills as f64 / deaths as f64)
                 } else {
@@ -1043,8 +1049,10 @@ mod tests {
         assert_eq!(g.count, 1);
         assert_eq!(g.wins, 0);
         assert_eq!(g.losses, 1);
-        assert_eq!(g.title, "Nov 14 [1]");
-        assert_eq!(g.wl, "0 W // 1 L");
+        assert_eq!(g.title, "Nov 14");
+        assert_eq!(g.count_label, "1");
+        assert_eq!(g.wins_label, "0 W");
+        assert_eq!(g.losses_label, "1 L");
         // Same sums the row itself reports: 14 / 23 / 7.
         assert_eq!(g.kda, "14 / 23 / 7");
         assert_eq!(g.kda_sub, "0.61 K/D/A");
@@ -1061,7 +1069,8 @@ mod tests {
         let days = group_days(&rows());
         let g = days.iter().find(|d| d.key == "2026-11-11").unwrap();
         assert_eq!(g.count, 6);
-        assert_eq!(g.wl, "1 W // 5 L");
+        assert_eq!(g.wins_label, "1 W");
+        assert_eq!(g.losses_label, "5 L");
         assert_eq!(g.kda, "90 / 95 / 40");
         assert_eq!(g.kd, "0.9");
         assert_eq!(g.kda_sub, "0.95 K/D/A");
@@ -1092,7 +1101,8 @@ mod tests {
         assert_eq!(g.count, 3, "every match counts in the title");
         assert_eq!(g.wins, 1);
         assert_eq!(g.losses, 0, "draws and unknowns win and lose nothing");
-        assert_eq!(g.wl, "1 W // 0 L");
+        assert_eq!(g.wins_label, "1 W");
+        assert_eq!(g.losses_label, "0 L");
     }
 
     #[test]
