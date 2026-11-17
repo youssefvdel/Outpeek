@@ -110,10 +110,10 @@ is missing, measure the committed screenshot instead of guessing.
 
 | Element | Value |
 | --- | --- |
-| Match row panel | 72 px tall, 8 px radius, 1 px raised border, 10 px gap, 4 px result spine, 48 px portrait |
-| Day band | 54 px, 8 px radius, date at 18 px/700 secondary ink |
-| Round score | 18 px mono/700, result colour |
-| Numeric cells | one `StatCell`: micro label over 18 px mono/700 value, centred, 10 px gutter; the day band's K/D/A stacks small `90 K // 95 D // 40 A` over big `0.95 K/D/A` |
+| Match row panel | 66 px tall, 8 px radius, 1 px raised border, 10 px gap, 4 px result spine, 44 px portrait, rank medal 28 px, kebab at the right edge |
+| Day band | 50 px, 8 px radius, date at 16 px/700 secondary ink |
+| Round score | 16 px mono/700, our rounds mint / theirs coral |
+| Numeric cells | one `StatCell`: micro label over 16 px mono/700 value, centred, 10 px gutter; the day band's K/D/A stacks small `90 K // 95 D // 40 A` over big `0.95 K/D/A`; sub-1.0 K/D prints `coral-dim` |
 | List body | radius 16, 1 px border, 14/16 px padding, holds bands + panels |
 | Day count | bordered 30x24 chip beside the date |
 | Strip | 62 px season cell + three agent cells, each with a win bar |
@@ -161,3 +161,11 @@ Ship the screenshot with the change. If a detail is off by a pixel step
 - Never use `git stash` — stashes leak across worktrees. Commit, or use
   a temp branch / worktree-local patch instead.
 - Respect root `.gitignore` (covers `legacy/`, targets, caches).
+
+### Ratio, not absolute numbers
+
+The reference page is 1475 px wide with a 1068 px card, so it sets 72 px rows
+and 18 px values. Our shell's floor is 1280 px, which leaves a ~936 px card.
+Copying the absolute numbers there makes the surface read one step too big, so
+the baseline above is the reference's **ratio** at our width. If the window
+floor ever changes, re-derive the table instead of adding a second set.
