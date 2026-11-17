@@ -711,28 +711,22 @@ export component MatchesPage inherits VerticalLayout {
             }
         }
 
-        // Recent form: the last 8 matches, newest first.
-        if Tracker.match-form.length > 0: Card {
+        // The match list body, measured from the live client: #0F1923 body at
+        // radius 16 with a 1 px border and 14/16 px padding. The day bands and
+        // the match panels live INSIDE it, which is what makes the panels read
+        // as cards rather than stripes.
+        Rectangle {
+            border-radius: 16px;
+            background: Theme.container-low;
+            border-width: 1px;
+            border-color: Theme.container-high;
+
             VerticalLayout {
-                padding-left: Space.md;
-                padding-right: Space.md;
-                padding-top: Space.sm;
-                padding-bottom: Space.sm;
-                spacing: Space.sm;
-                ColumnLabel { text: "RECENT FORM"; }
-                HorizontalLayout {
-                    spacing: Space.md;
-                    for cell in Tracker.match-form: FormCell { item: cell; }
-                }
-            }
-        }
-
-        Card {
-            pad: 0px;
-            gap: 0px;
-
-            // No header row: every column carries its own micro label, TRN's
-            // own layout, so there is no third copy of these widths.
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 14px;
+                padding-bottom: 14px;
+                spacing: 10px;
 
             if Tracker.match-days.length == 0: Rectangle {
                 height: 120px;
@@ -765,6 +759,7 @@ export component MatchesPage inherits VerticalLayout {
                     for entry in Tracker.match-day-rows[i]: MatchLine { item: entry; }
                 }
                 Rectangle { height: 10px; background: transparent; }
+            }
             }
         }
     }
