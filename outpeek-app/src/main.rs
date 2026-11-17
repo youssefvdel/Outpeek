@@ -1258,6 +1258,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             wl: d.wl.clone().into(),
             kd: d.kd.clone().into(),
             kda: d.kda.clone().into(),
+        kda_sub: d.kda_sub.clone().into(),
             dda: d.dda.clone().into(),
             hs: d.hs.clone().into(),
             acs: d.acs.clone().into(),

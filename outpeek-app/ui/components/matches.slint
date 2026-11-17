@@ -90,6 +90,55 @@ component TrsCell inherits Rectangle {
     }
 }
 
+/// One numeric column, TRN's own shape: a micro label stacked with its value.
+/// `flip` puts the value on top (the day band's K/D/A column, where the triple
+/// sits over its ratio). One component, one set of widths — a band and its rows
+/// can never drift apart again.
+component StatCell inherits Rectangle {
+    in property <string> label: "";
+    in property <string> value: "";
+    in property <brush> ink: Theme.ink;
+    in property <length> col-width: 52px;
+    in property <bool> flip: false;
+    width: root.col-width;
+
+    VerticalLayout {
+        spacing: 1px;
+        alignment: center;
+
+        if !root.flip: Text {
+            text: root.label == "" ? "—" : root.label;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            font-weight: 500;
+            color: Theme.ink-faint;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: root.value == "" ? "—" : root.value;
+            font-family: Theme.font-mono;
+            font-size: TypeScale.value;
+            font-weight: 700;
+            color: root.value == "" ? Theme.ink-dim : root.ink;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.flip: Text {
+            text: root.label == "" ? "—" : root.label;
+            font-family: Theme.font-body;
+            font-size: TypeScale.micro;
+            font-weight: 500;
+            color: Theme.ink-faint;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
 component MatchLine inherits Rectangle {
     in property <MatchRowUi> item;
     // TRN's row rhythm, measured off the reference at 1475 px: 66 px tall, a
@@ -174,19 +223,34 @@ component MatchLine inherits Rectangle {
             }
         }
 
-        // The rounds score in the result colour ("14 : 16"): the row's verdict
-        // at a glance, no chip needed.
+        // The rounds score: a micro label over the verdict, stacked exactly
+        // like the TRS cell beside it.
         VCenter {
-            Text {
-                width: 66px;
-                text: root.item.score == "" ? "—" : root.item.score;
-                font-family: Theme.font-mono;
-                font-size: TypeScale.value;
-                font-weight: 700;
-                color: root.item.score == ""
-                    ? Theme.ink-faint
-                    : root.item.won ? Theme.mint : Theme.coral;
-                vertical-alignment: center;
+            VerticalLayout {
+                spacing: 0px;
+                alignment: center;
+
+                Text {
+                    text: "Score";
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.micro;
+                    font-weight: 500;
+                    color: Theme.ink-faint;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                Text {
+                    width: 66px;
+                    text: root.item.score == "" ? "—" : root.item.score;
+                    font-family: Theme.font-mono;
+                    font-size: TypeScale.value;
+                    font-weight: 700;
+                    color: root.item.score == ""
+                        ? Theme.ink-faint
+                        : root.item.won ? Theme.mint : Theme.coral;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
 
@@ -198,13 +262,18 @@ component MatchLine inherits Rectangle {
             }
         }
         // Clutch badge: the payload reports these sparsely, so the slot keeps
-        // its width and leaves the column aligned on rows without one.
+        // its width on rows without one and the tail never shifts.
         VCenter {
-            if root.item.clutch != "": StatChip {
-                text: root.item.clutch;
-                chip-width: 86px;
-                // Signed by the tone itself: a lost clutch is the bad case.
-                chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
+            Rectangle {
+                width: 86px;
+                height: 24px;
+
+                if root.item.clutch != "": StatChip {
+                    text: root.item.clutch;
+                    chip-width: 86px;
+                    // Signed by the tone itself: a lost clutch is the bad case.
+                    chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
+                }
             }
         }
         // The slack lives BEFORE the tail: the numeric block then ends on the
@@ -212,27 +281,16 @@ component MatchLine inherits Rectangle {
         Rectangle { horizontal-stretch: 1; }
 
         // TRN's own column order: K/D, then the K/D/A triple, then DDΔ, HS %
-        // and ACS. The tail gets its own wider gutter so the ratio and the
-        // triple never read as one number.
+        // and ACS. Every column is a StatCell — the day band reuses them, so
+        // no widths are repeated anywhere else in this file.
         HorizontalLayout {
             spacing: 10px;
 
-            Cell { col-width: 54px; value: root.item.kd; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
-            Cell { col-width: 128px; value: root.item.kda; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
-            Cell {
-                col-width: 64px;
-                value: root.item.dd;
-                mono: true;
-                align-right: true;
-                text-size: TypeScale.value;
-                weight: 700;
-                // Signed by the number itself: a delta over zero is the good case.
-                ink: root.item.dd == ""
-                    ? Theme.ink-dim
-                    : root.item.dd.starts-with("-") ? Theme.coral : Theme.mint;
-            }
-            Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
-            Cell { col-width: 56px; value: root.item.acs; mono: true; align-right: true; text-size: TypeScale.value; ink: Theme.ink; weight: 700; }
+            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: Theme.ink; }
+            StatCell { col-width: 150px; label: "K/D/A"; value: root.item.kda; ink: Theme.ink; }
+            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dd; ink: root.item.dd == "" ? Theme.ink-dim : (root.item.dd.starts-with("-") ? Theme.coral : Theme.mint); }
+            StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
+            StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }
         }
     }
 
@@ -465,27 +523,18 @@ component DayHeader inherits Rectangle {
 
         Rectangle { horizontal-stretch: 1; }
 
-        // Two chip-width spacers keep the totals under the rows' own numbers.
+        // Two chip-width spacers stand in for the rows' TRS/clutch slots, then
+        // the same shared tail as every row: one component, one set of widths.
         Rectangle { width: 96px; }
         Rectangle { width: 86px; }
         HorizontalLayout {
             spacing: 10px;
 
-            Cell { col-width: 54px; value: root.item.kd; mono: true; align-right: true; ink: Theme.ink; weight: 700; }
-            Cell { col-width: 128px; value: root.item.kda; mono: true; align-right: true; ink: Theme.ink; weight: 700; }
-            Cell {
-                col-width: 64px;
-                value: root.item.dda;
-                mono: true;
-                align-right: true;
-                weight: 600;
-                // Signed by the number itself, like the rows below.
-                ink: root.item.dda == ""
-                    ? Theme.ink-dim
-                    : root.item.dda.starts-with("-") ? Theme.coral : Theme.mint;
-            }
-            Cell { col-width: 56px; value: root.item.hs; mono: true; align-right: true; ink: Theme.ink; weight: 700; }
-            Cell { col-width: 56px; value: root.item.acs; mono: true; align-right: true; ink: Theme.ink; weight: 700; }
+            StatCell { col-width: 54px; label: "K/D"; value: root.item.kd; ink: Theme.ink; }
+            StatCell { col-width: 150px; label: root.item.kda_sub == "" ? "K/D/A" : root.item.kda_sub; value: root.item.kda; flip: root.item.kda_sub != ""; ink: Theme.ink; }
+            StatCell { col-width: 64px; label: "DDΔ"; value: root.item.dda; ink: root.item.dda == "" ? Theme.ink-dim : (root.item.dda.starts-with("-") ? Theme.coral : Theme.mint); }
+            StatCell { col-width: 56px; label: "HS %"; value: root.item.hs; ink: Theme.ink; }
+            StatCell { col-width: 56px; label: "ACS"; value: root.item.acs; ink: Theme.ink; }
         }
     }
 
@@ -693,35 +742,8 @@ export component MatchesPage inherits VerticalLayout {
             pad: 0px;
             gap: 0px;
 
-            // Header row. Column widths are the row's identical numbers, so
-            // each label sits over the figure it names.
-            Rectangle {
-                height: 40px;
-                background: transparent;
-
-                HorizontalLayout {
-                    padding-left: 14px;
-                    padding-right: Space.sm;
-                    spacing: 4px;
-
-                    // Portrait gutter, then the row's own column order:
-                    // match, score, the two chip slots, then the numbers.
-                    Rectangle { width: 44px; }
-                    ColumnLabel { col-width: 130px; text: "MATCH"; }
-                    ColumnLabel { col-width: 66px; text: "SCORE"; }
-                    Rectangle { width: 96px; }
-                    Rectangle { width: 86px; }
-                    HorizontalLayout {
-                        spacing: 10px;
-
-                        ColumnLabel { col-width: 54px; text: "K/D"; align-right: true; }
-                        ColumnLabel { col-width: 128px; text: "K/D/A"; align-right: true; }
-                        ColumnLabel { col-width: 64px; text: "DDΔ"; align-right: true; }
-                        ColumnLabel { col-width: 56px; text: "HS %"; align-right: true; }
-                        ColumnLabel { col-width: 56px; text: "ACS"; align-right: true; }
-                    }
-                }
-            }
+            // No header row: every column carries its own micro label, TRN's
+            // own layout, so there is no third copy of these widths.
 
             if Tracker.match-days.length == 0: Rectangle {
                 height: 120px;
