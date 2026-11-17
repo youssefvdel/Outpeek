@@ -110,8 +110,8 @@ is missing, measure the committed screenshot instead of guessing.
 
 | Element | Value |
 | --- | --- |
-| Match row | 66 px tall, 3 px result spine on the left, 44 px portrait |
-| Day band | 45 px, date at 14 px/700, day totals at caption size |
+| Match row panel | 72 px tall, 8 px radius, 1 px raised border, 10 px gap, 4 px result spine, 48 px portrait |
+| Day band | 54 px, 8 px radius, date at 18 px/700 secondary ink |
 | Round score | 18 px mono/700, result colour |
 | Numeric cells | 14 px mono/600, right-aligned, 10 px gutter in the tail |
 | Table gutters | 4 px; header labels micro/600 |
