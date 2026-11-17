@@ -1193,16 +1193,15 @@ fn apply_match_detail(ui: &AppWindow, view: &outpeek_app::worker::MatchDetailVie
     t.set_match_rounds(ModelRc::new(VecModel::from(rounds)));
 }
 
-/// Push the recent-match rows plus the website strips into the Matches tab.
+/// Push the recent-match rows plus the day groups into the Matches tab.
 /// The rows arrive already formatted; an absent stat is an em dash from
-/// `trn_matches`, never a zero. Day headers, form cells and agent cards are
-/// pre-formatted the same way — this pass only decodes art and binds models.
+/// `trn_matches`, never a zero. Day headers are pre-formatted the same way —
+/// this pass only decodes art and binds models.
 fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     use outpeek_app::trn_matches::MatchRow;
     let t = ui.global::<Tracker>();
     let now = outpeek_app::worker::now_ms();
-    let any_art = view.rows.iter().any(|r| !r.art_url.is_empty())
-        || view.agents.iter().any(|a| !a.art_url.is_empty());
+    let any_art = view.rows.iter().any(|r| !r.art_url.is_empty());
     let dir = if any_art {
         outpeek_app::assets::art_dir()
     } else {
@@ -1219,17 +1218,15 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
         let map = r.map.clone();
         let score = r.rounds();
         let trs = r.trs.map(|v| v.to_string()).unwrap_or_default();
-        let clutch = r.clutch.clone().unwrap_or_default();
         let agent = r.agent.clone().unwrap_or_default();
-        // Screen-reader line: same six facts as the old accessible-label,
-        // joined here; "—" when nothing was reported.
+        // Screen-reader line: agent, age, map, score, TRS joined here; "—"
+        // when nothing was reported.
         let parts = [
             agent.clone(),
             age.clone(),
             map.clone(),
             score.clone(),
             trs.clone(),
-            clutch.clone(),
         ];
         let a11y = parts
             .into_iter()
@@ -1263,8 +1260,6 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             trs_grade: outpeek_app::badges::badge_key("", r.trs.map(|v| v as i32)).into(),
             // A sub-1.0 ratio reads in the client's muted rose.
             kd_low: matches!((r.kills, r.deaths), (Some(k), Some(d)) if d > 0 && k < d),
-            clutch: clutch.into(),
-            clutch_bad: r.clutch_bad,
             art: load(&r.art_url, 96),
             kda: r.kda().into(),
             kd: r.kd_ratio().into(),
@@ -1277,27 +1272,6 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
     };
     let rows: Vec<MatchRowUi> = view.rows.iter().map(&row).collect();
     t.set_matches(ModelRc::new(VecModel::from(rows)));
-    let summary = &view.summary;
-    t.set_match_summary(MatchSummaryUi {
-        record: summary.record.clone().into(),
-        kd: summary.kd.clone().into(),
-        adr: summary.adr.clone().into(),
-        line: summary.line().into(),
-        win_share: summary.win_share,
-    });
-    let agents: Vec<MatchAgentUi> = view
-        .agents
-        .iter()
-        .map(|a| MatchAgentUi {
-            name: a.name.clone().into(),
-            record: a.record.clone().into(),
-            kd: a.kd.clone().into(),
-            kd_line: a.kd_line().into(),
-            win_share: a.win_share,
-            art: load(&a.art_url, 96),
-        })
-        .collect();
-    t.set_match_agents(ModelRc::new(VecModel::from(agents)));
     let days: Vec<MatchDayUi> = view
         .days
         .iter()

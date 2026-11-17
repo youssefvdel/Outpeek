@@ -37,7 +37,7 @@ use crate::rank;
 use crate::trn;
 use crate::trn_breakdown::{self, AgentRow, MapRow};
 use crate::trn_match_detail::{self, MatchDetail};
-use crate::trn_matches::{self, AgentStripRow, DayGroup, MatchRow};
+use crate::trn_matches::{self, DayGroup, MatchRow};
 use crate::trn_profile::{self, Profile, ProfileState, ProfileView, CACHE_TTL_MS};
 
 /// Agent select is short and round transitions are quick.
@@ -79,16 +79,10 @@ pub enum Event {
     Live(LiveView),
 }
 
-/// Rows plus the website strips, with the honesty label that belongs beside
-/// them. The strips derive from the same rows/payload — never a second
-/// request — so the tab can never disagree with itself.
+/// Rows plus the honesty label that belongs beside them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchesView {
     pub rows: Vec<MatchRow>,
-    /// Season cell at the left of the strip (record, K/D, ADR, bar share).
-    pub summary: trn_matches::SeasonStrip,
-    /// Top-3 agents by matches from the profile payload's own breakdown.
-    pub agents: Vec<AgentStripRow>,
     /// Day groups, newest day first, for the grouped history.
     pub days: Vec<DayGroup>,
     pub state: &'static str,
@@ -99,8 +93,6 @@ impl MatchesView {
     fn placeholder(state: &'static str, message: impl Into<String>) -> Self {
         Self {
             rows: Vec::new(),
-            summary: trn_matches::SeasonStrip::default(),
-            agents: Vec::new(),
             days: Vec::new(),
             state,
             message: message.into(),
@@ -283,66 +275,27 @@ async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchR
 /// rows (form = last 8, day groups) and the top-3 agent strip from the
 /// profile payload's own breakdown — never a second request.
 fn matches_frame(
-    profile: Option<&Profile>,
     rows: Vec<MatchRow>,
     state: &'static str,
     message: String,
 ) -> MatchesView {
     MatchesView {
-        summary: profile
-            .map(|p| trn_matches::season_strip(&p.season))
-            .unwrap_or_default(),
         days: trn_matches::group_days(&rows),
-        agents: profile
-            .map(|p| trn_matches::top_agents(&p.agents))
-            .unwrap_or_default(),
         rows,
         state,
         message,
     }
 }
 
-/// Fill portrait URLs for the rows and the agent strip through the existing
-/// catalogues. Returns true when at least one slot gained art, so the caller
-/// republishes only then. A miss stays empty; the views draw their glyphs.
+/// Fill portrait URLs for the rows through the existing catalogues. Returns
+/// true when at least one row gained art, so the caller republishes only
+/// then. A miss stays empty; the views draw their glyphs.
 async fn fill_strip_art(
     art: &Art,
     fetcher: Arc<dyn Fetcher>,
     view: &mut MatchesView,
-    profile: Option<&Profile>,
 ) -> bool {
-    let mut changed = fill_match_art(art, fetcher.clone(), &mut view.rows).await;
-    let Some(profile) = profile else {
-        return changed;
-    };
-    for slot in view.agents.iter_mut() {
-        if !slot.art_url.is_empty() {
-            continue;
-        }
-        let Some(known) = profile.agents.iter().find(|b| b.key == slot.key) else {
-            continue;
-        };
-        // TRN's portrait wins, like the Agents tab; the catalogue covers the
-        // uuid rows whose payload art is absent.
-        let url = if !known.image_url.is_empty() {
-            art.ensure_url(fetcher.clone(), &known.image_url, SystemTime::now())
-                .await
-        } else {
-            None
-        };
-        let url = match url {
-            Some(url) => Some(url),
-            None => {
-                art.agent_icon(fetcher.clone(), &known.key, SystemTime::now())
-                    .await
-            }
-        };
-        if let Some(url) = url {
-            slot.art_url = url;
-            changed = true;
-        }
-    }
-    changed
+    fill_match_art(art, fetcher.clone(), &mut view.rows).await
 }
 
 /// Resolve one frame of breakdown art: agent portraits come straight from the
@@ -898,8 +851,8 @@ where
             if matches.is_some() {
                 if let Some(rows) = matches.as_mut() {
                     let mut view =
-                        matches_frame(profile.as_ref(), rows.clone(), "cached", String::new());
-                    if fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await {
+                        matches_frame(rows.clone(), "cached", String::new());
+                    if fill_strip_art(&art, fetcher.clone(), &mut view).await {
                         *rows = view.rows.clone();
                         publish(Event::Matches(view));
                     }
@@ -1111,8 +1064,8 @@ where
                         crate::boot::mark("worker:matches-net");
                         eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
                         let mut view =
-                            matches_frame(profile.as_ref(), rows, "ready", String::new());
-                        fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await;
+                            matches_frame(rows, "ready", String::new());
+                        fill_strip_art(&art, fetcher.clone(), &mut view).await;
                         matches = Some(view.rows.clone());
                         publish(Event::Matches(view));
                     }
@@ -1135,7 +1088,6 @@ where
                             ),
                         };
                         publish(Event::Matches(matches_frame(
-                            profile.as_ref(),
                             rows,
                             state,
                             message,
@@ -1215,7 +1167,6 @@ where
                 matches_saved_at = cache.saved_at;
                 let rows = cache.matches;
                 let mut view = matches_frame(
-                    profile.as_ref(),
                     rows,
                     "cached",
                     format!(
@@ -1223,7 +1174,7 @@ where
                         trn_profile::age_label(now_ms().saturating_sub(matches_saved_at))
                     ),
                 );
-                fill_strip_art(&art, fetcher.clone(), &mut view, profile.as_ref()).await;
+                fill_strip_art(&art, fetcher.clone(), &mut view).await;
                 matches = Some(view.rows.clone());
                 publish(Event::Matches(view));
             }
@@ -1542,8 +1493,6 @@ mod tests {
             rank_url: String::new(),
             rank_name: String::new(),
             trs: Some(279),
-            clutch: Some("1v1 Lost".to_string()),
-            clutch_bad: true,
             placement: Some(9),
         }];
         let changed = block_on(fill_match_art(&art, fetcher, &mut rows));

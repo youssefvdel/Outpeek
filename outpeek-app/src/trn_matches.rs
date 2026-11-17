@@ -59,14 +59,6 @@ pub struct MatchRow {
     /// `default` so caches written before this field still load.
     #[serde(default)]
     pub trs: Option<u64>,
-    /// First `tags[]` name (`1v1 Lost`), if the payload attached any.
-    /// `default` so caches written before this field still load.
-    #[serde(default)]
-    pub clutch: Option<String>,
-    /// The first tag's tone was `Negative` — the chip draws coral, else mint.
-    /// `default` so caches written before this field still load.
-    #[serde(default)]
-    pub clutch_bad: bool,
     /// `placement` value (9 renders as `9th` under the map). A placement fact
     /// the payload reports for the mode; absent more often than not.
     /// `default` so caches written before this field still load.
@@ -223,17 +215,16 @@ impl MatchRow {
     }
 }
 
-use crate::trn_breakdown::BreakdownRow;
-
 // --- TRN-website match-history layout --------------------------------------
-// The Matches tab mirrors the website order: a top-3 agent strip, a
-// recent-form strip, then one group per day. Rust owns every string below;
+// The Matches tab mirrors the website order: one group per day. Rust owns
+// every string below;
 // `.slint` only renders.
 //
 // OUT OF SCOPE, stated once so no reader hunts for it:
-// * Per-match TRS, clutch badges, and placement come from the payload's own
-//   overview segment (`trnPerformanceScore`, `tags[]`, `placement`), so the
-//   rows show them. Weapon stats still have no source: TOP WEAPONS stays out.
+// * Per-match TRS, rank medal, and placement come from the payload's own
+//   overview segment (`trnPerformanceScore`, `rank.metadata`, `placement`),
+//   so the rows show them. Weapon stats still have no source: TOP WEAPONS
+//   stays out.
 
 /// Days since the Unix epoch for a civil date (Howard Hinnant's algorithm).
 /// Lets `rel_age` and the day grouping share UTC calendar days with no date
@@ -394,137 +385,6 @@ fn side(has: bool, value: u64) -> String {
         commas(value)
     } else {
         "—".to_string()
-    }
-}
-
-/// One agent of the top-3 strip: portrait, name, `7W - 9L (44%)`, K/D.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AgentStripRow {
-    /// Breakdown key (uuid), so the worker can resolve art for the same row
-    /// it formatted — never shown.
-    pub key: String,
-    pub name: String,
-    /// Wins rounded from matches x win share. Empty unless both numbers were
-    /// reported.
-    pub record: String,
-    /// The agent's own K/D, the same 2-decimal label as the Agents tab.
-    pub kd: String,
-    /// Share of that agent's matches won (0–1). Widths the strip's bar; the
-    /// number beside it is TRN's reported percentage, never re-derived here.
-    pub win_share: f32,
-    /// Cached portrait URL, filled by the worker through the existing art
-    /// pipeline. Empty = the catalogue missed and the strip draws its glyph.
-    pub art_url: String,
-}
-
-impl AgentStripRow {
-    /// "K/D 1.10" — "K/D —" when the payload reported none.
-    pub fn kd_line(&self) -> String {
-        if self.kd.is_empty() {
-            "K/D —".to_string()
-        } else {
-            format!("K/D {}", self.kd)
-        }
-    }
-}
-
-/// Top 3 agents by matches played (the breakdown arrives most-played first;
-/// this re-sorts so the strip never depends on input order).
-///
-/// The record uses the reported `matchesWon`/`matchesLost` — never a rounded
-/// estimate from `matches x win%` (ties would land in losses and a rounded
-/// share can be off by one). Anything unreported is empty, never guessed.
-pub fn top_agents(rows: &[BreakdownRow]) -> Vec<AgentStripRow> {
-    let mut sorted: Vec<&BreakdownRow> = rows.iter().collect();
-    sorted.sort_by(|a, b| b.matches.cmp(&a.matches).then_with(|| a.name.cmp(&b.name)));
-    sorted
-        .into_iter()
-        .take(3)
-        .map(|b| {
-            let (record, win_share) = match (b.wins, b.losses, b.win_pct) {
-                (Some(w), Some(l), Some(pct))
-                    if w >= 0 && l >= 0 && pct.is_finite() =>
-                {
-                    (
-                        format!("{w}W - {l}L ({pct:.0}%)"),
-                        (pct / 100.0).clamp(0.0, 1.0) as f32,
-                    )
-                }
-                _ => (String::new(), 0.0),
-            };
-            AgentStripRow {
-                key: b.key.clone(),
-                name: b.name.clone(),
-                record,
-                kd: b.kd_label(),
-                win_share,
-                art_url: String::new(),
-            }
-        })
-        .collect()
-}
-
-/// The season cell at the left of the strip: TRN prints the overall record on
-/// the first line and `K/D | ADR` under it, with the same bar the agent cells
-/// carry. Every part comes from the season segment TRN reported.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct SeasonStrip {
-    /// `8W - 12L (40%)`; empty when the wins or losses were not reported.
-    pub record: String,
-    /// `0.91 K/D`; empty when the payload carried no ratio.
-    pub kd: String,
-    /// `128 ADR`; empty when the payload carried no damage per round.
-    pub adr: String,
-    /// Season win share (0–1) for the bar.
-    pub win_share: f32,
-}
-
-impl SeasonStrip {
-    /// Second line, joined by Rust; empty when both halves are missing.
-    /// The view draws its dash, so absence stays empty here.
-    pub fn line(&self) -> String {
-        match (self.kd.as_str(), self.adr.as_str()) {
-            ("", "") => String::new(),
-            (kd, "") => kd.to_string(),
-            ("", adr) => adr.to_string(),
-            (kd, adr) => format!("{kd} | {adr}"),
-        }
-    }
-}
-
-/// Build the strip's season cell from the already-parsed season stats.
-pub fn season_strip(season: &crate::trn_profile::SeasonStats) -> SeasonStrip {
-    let record = match (season.wins, season.losses) {
-        (Some(w), Some(l)) if w >= 0 && l >= 0 => {
-            let total = w + l;
-            let pct = if total > 0 {
-                format!(" ({:.0}%)", (w as f64) * 100.0 / (total as f64))
-            } else {
-                String::new()
-            };
-            format!("{w}W - {l}L{pct}")
-        }
-        _ => String::new(),
-    };
-    let win_share = match (season.wins, season.losses) {
-        (Some(w), Some(l)) if w >= 0 && l >= 0 && w + l > 0 => {
-            (w as f32) / ((w + l) as f32)
-        }
-        _ => 0.0,
-    };
-    SeasonStrip {
-        record,
-        kd: season
-            .kd
-            .filter(|v| v.is_finite())
-            .map(|v| format!("{v:.2} K/D"))
-            .unwrap_or_default(),
-        adr: season
-            .dmg_per_round
-            .filter(|v| v.is_finite())
-            .map(|v| format!("{v:.0} ADR"))
-            .unwrap_or_default(),
-        win_share,
     }
 }
 
@@ -741,33 +601,6 @@ fn opt_text(v: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// First `tags[]` entry's name, trimmed; `None` when the payload attached no
-/// named tag.
-fn first_tag_name(seg_meta: &Value) -> Option<String> {
-    seg_meta
-        .get("tags")?
-        .as_array()?
-        .first()?
-        .get("name")?
-        .as_str()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
-/// Whether the first tag's tone equals `want` (case-insensitive). No tag, or
-/// no tone, is not `want`.
-fn first_tag_tone_is(seg_meta: &Value, want: &str) -> bool {
-    seg_meta
-        .get("tags")
-        .and_then(|t| t.as_array())
-        .and_then(|t| t.first())
-        .and_then(|tag| tag.get("tone"))
-        .and_then(|tone| tone.as_str())
-        .map(|tone| tone.eq_ignore_ascii_case(want))
-        .unwrap_or(false)
-}
-
 /// `9` -> `9th`, `1` -> `1st` — 11/12/13 stay `th`.
 fn ordinal(n: u64) -> String {
     let suffix = if (11..=13).contains(&(n % 100)) {
@@ -835,8 +668,6 @@ pub fn parse(payload: &Value) -> Option<Vec<MatchRow>> {
                     .unwrap_or_default()
                     .to_string(),
                 trs: num(&stats, "trnPerformanceScore"),
-                clutch: first_tag_name(&seg_meta),
-                clutch_bad: first_tag_tone_is(&seg_meta, "Negative"),
                 placement: num(&stats, "placement"),
             })
         })
@@ -892,6 +723,7 @@ pub fn save_cache(path: &Path, handle: &str, rows: &[MatchRow], now_ms: u64) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::trn_breakdown::BreakdownRow;
 
     const FIXTURE: &str = include_str!("../tests/fixtures/trn-matches.json");
 
@@ -1232,72 +1064,10 @@ mod tests {
         }
     }
 
-    /// The strip's season cell: TRN's three facts, and a bar share that is a
-    /// proportion of the reported record rather than a re-derived percentage.
-    #[test]
-    fn the_season_cell_reports_record_kd_and_adr() {
-        let season = crate::trn_profile::SeasonStats {
-            wins: Some(8),
-            losses: Some(12),
-            kd: Some(0.91),
-            dmg_per_round: Some(128.4),
-            ..Default::default()
-        };
-        let cell = season_strip(&season);
-        assert_eq!(cell.record, "8W - 12L (40%)");
-        assert_eq!(cell.kd, "0.91 K/D");
-        assert_eq!(cell.adr, "128 ADR");
-        assert!((cell.win_share - 0.4).abs() < 0.001);
-    }
-
-    /// No record yet draws nothing and no bar fill: absence is never a zero
-    /// record.
-    #[test]
-    fn the_season_cell_leaves_missing_facts_empty() {
-        let cell = season_strip(&crate::trn_profile::SeasonStats::default());
-        assert_eq!(cell.record, "");
-        assert_eq!(cell.kd, "");
-        assert_eq!(cell.adr, "");
-        assert_eq!(cell.win_share, 0.0);
-    }
-
-    #[test]
-    fn the_agent_strip_is_the_top_three_by_matches() {
-        let rows = vec![
-            brow("Sage", Some(9), Some(50.0), Some(1.1)),
-            brow("Omen", Some(16), Some(43.8), Some(0.86)),
-            brow("Jett", Some(3), Some(100.0), Some(2.0)),
-            brow("Phoenix", None, None, None),
-            brow("Reyna", Some(12), Some(25.0), Some(0.7)),
-        ];
-        let strip = top_agents(&rows);
-        assert_eq!(
-            strip.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(),
-            ["Omen", "Reyna", "Sage"]
-        );
-        assert_eq!(strip[0].record, "7W - 9L (44%)");
-        assert_eq!(strip[0].kd, "0.86");
-        assert_eq!(strip[0].kd_line(), "K/D 0.86");
-        assert_eq!(strip[1].record, "3W - 9L (25%)");
-        assert_eq!(strip[1].kd_line(), "K/D 0.70");
-        assert!(
-            strip.iter().all(|a| a.art_url.is_empty()),
-            "art is the worker's job"
-        );
-    }
-
-    #[test]
-    fn an_agent_without_numbers_has_no_record() {
-        let strip = top_agents(&[brow("Hush", Some(1), None, None)]);
-        assert_eq!(strip.len(), 1);
-        assert_eq!(strip[0].record, "");
-        assert_eq!(strip[0].kd, "");
-    }
-
     #[test]
     fn new_payload_keys_parse_into_row_fields() {
         let r = rows();
-        // Match 0 (Bind): Sage's own portrait, TRS 279, a lost 1v1, 9th.
+        // Match 0 (Bind): Sage's own portrait, TRS 279, 9th.
         assert_eq!(
             r[0].art_url,
             "https://titles.trackercdn.com/valorant-api/agents/\
@@ -1305,14 +1075,10 @@ mod tests {
         );
         assert_eq!(r[0].trs, Some(279));
         assert_eq!(r[0].trs_chip(), "TRS 279");
-        assert_eq!(r[0].clutch.as_deref(), Some("1v1 Lost"));
-        assert!(r[0].clutch_bad);
         assert_eq!(r[0].placement, Some(9));
         assert_eq!(r[0].map_label(), "Bind 9th");
-        // Match 1 (Summit): a won 1v1 is not bad, 6th place, TRS 543.
+        // Match 1 (Summit): 6th place, TRS 543.
         assert_eq!(r[1].art_url, r[0].art_url, "same Sage portrait");
-        assert_eq!(r[1].clutch.as_deref(), Some("1v1 Clutch"));
-        assert!(!r[1].clutch_bad);
         assert_eq!(r[1].trs_chip(), "TRS 543");
         assert_eq!(r[1].map_label(), "Summit 6th");
         // Match 2 (Lotus): the old shape — everything new is absent, and the
@@ -1320,8 +1086,6 @@ mod tests {
         assert_eq!(r[2].art_url, "");
         assert_eq!(r[2].trs, None);
         assert_eq!(r[2].trs_chip(), "");
-        assert_eq!(r[2].clutch, None);
-        assert!(!r[2].clutch_bad);
         assert_eq!(r[2].placement, None);
         assert_eq!(r[2].map_label(), "Lotus");
     }
@@ -1370,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tag_without_a_name_is_no_chip() {
+    fn a_blank_agent_image_is_no_portrait() {
         let payload = serde_json::json!({"data": {"matches": [
             {"attributes": {"id": "m1"}, "metadata": {"result": "victory"},
              "segments": [{"type": "overview",
@@ -1382,10 +1146,6 @@ mod tests {
         ]}});
         let r = parse(&payload).expect("shape is valid");
         assert_eq!(r.len(), 1);
-        // Only the first tag counts, even when it is blank: no fallback to
-        // later tags, and a blank tone is not Negative.
-        assert_eq!(r[0].clutch, None);
-        assert!(!r[0].clutch_bad);
         assert_eq!(r[0].art_url, "", "a blank URL is not a portrait");
         assert_eq!(r[0].trs_chip(), "TRS 300");
         assert_eq!(r[0].map_label(), "1st");

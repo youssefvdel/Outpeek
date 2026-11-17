@@ -17,10 +17,10 @@ export global Shell {
 /// One played match, pre-formatted by Rust. Every field is a string so the
 /// view cannot re-derive or invent a number; `won` only picks the colour.
 /// One match row, TRN-website shaped: portrait, age + mode over map (+ ordinal
-/// placement when reported), the rounds score in the result colour, the TRS
-/// and clutch badge chips, then the per-match numbers. Every field is
-/// pre-formatted; `won` only picks the score colour and `clutch-bad` the chip
-/// ink. Weapon stats have no payload source, so none appear here either.
+/// placement when reported), the rounds score in the result colour and the TRS
+/// badge, then the per-match numbers. Every field is pre-formatted; `won`
+/// only picks the score colour. Weapon stats have no payload source, so none
+/// appear here either.
 export struct MatchRowUi {
     id: string,
     // "Bind 9th" when a placement was reported, else the bare map.
@@ -46,10 +46,6 @@ export struct MatchRowUi {
     trs-grade: string,
     // True when this match's K/D is under 1.0 — the muted rose tone.
     kd-low: bool,
-    // First tags[] name ("1v1 Lost") — hidden when empty.
-    clutch: string,
-    // The clutch tone was Negative: coral ink, else mint.
-    clutch-bad: bool,
     art: image,
     kda: string,
     kd: string,
@@ -61,31 +57,6 @@ export struct MatchRowUi {
     // Screen-reader line, joined by Rust; "—" when nothing was reported.
     a11y-label: string,
 }
-
-/// One card of the top-3 agent strip: portrait, name, `7W - 9L (44%)`, K/D.
-/// All pre-formatted; an empty `art` draws the fallback glyph.
-export struct MatchAgentUi {
-    name: string,
-    record: string,
-    kd: string,
-    // "K/D 1.10" — "K/D —" when the payload reported none.
-    kd-line: string,
-    // 0–1: widths the cell's bar, nothing else reads it.
-    win-share: float,
-    art: image,
-}
-
-/// The season cell at the left of the top strip: TRN's own summary block.
-/// Empty strings are drawn as em dashes; the share only widths the bar.
-export struct MatchSummaryUi {
-    record: string,
-    kd: string,
-    adr: string,
-    // Second line, joined by Rust; empty when both halves are missing.
-    line: string,
-    win-share: float,
-}
-
 
 /// One day-group header: `Nov 14 [1]` plus the day's W/L, K/D, summed K/D/A,
 /// signed damage, mean HS% and ACS. All pre-formatted by Rust.
@@ -217,9 +188,6 @@ export global Tracker {
     // Recent matches (Tracker Network). `matches-state` is ready|cached|
     // loading|empty|error and `matches-note` carries the reason/age line.
     in-out property <[MatchRowUi]> matches: [];
-    // TRN-website strips, derived from the same rows/payload as `matches`.
-    in-out property <MatchSummaryUi> match-summary;
-    in-out property <[MatchAgentUi]> match-agents: [];
     // Day groups: `match-days[i]` heads `match-day-rows[i]`. The two models
     // are built together, so the indices always agree.
     in-out property <[MatchDayUi]> match-days: [];

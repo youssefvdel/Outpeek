@@ -1,8 +1,8 @@
-// Matches tab: the TRN-website history — a top-3 agent strip, a recent-form
-// strip, then one group per day (header aggregates plus that day's rows).
-// Every cell is pre-formatted by Rust (`MatchAgentUi` / `MatchDayUi` /
-// `MatchRowUi`), so this view cannot round, re-derive or invent a value. TRS, clutch and placement chips render only what the payload
-// reported; weapon stats have no source, so no panel shows them here either.
+// Matches tab: the TRN-website history — one group per day (header aggregates
+// plus that day's rows). Every cell is pre-formatted by Rust (`MatchDayUi` /
+// `MatchRowUi`), so this view cannot round, re-derive or invent a value. TRS
+// and placement render only what the payload reported; weapon stats have no
+// source, so no panel shows them here either.
 //
 // A row click opens the scoreboard in place (`Tracker.select-match(id)`): the
 // detail view replaces the table, Back clears the selection and the table
@@ -10,34 +10,12 @@
 // failure is an inline error card with a retry, never a blank view.
 
 import { Theme, Space, Shape, TypeScale, Motion } from "tokens.slint";
-import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchAgentUi, MatchDayUi, MatchSummaryUi } from "../state.slint";
+import { Tracker, MatchRowUi, MatchPlayerUi, MatchRoundUi, MatchDayUi } from "../state.slint";
 import { Card, Cell, ColumnLabel, VCenter, Glyph } from "widgets.slint";
 
-/// Single-sourced fixed widths shared by rows and day bands.
+/// Single-sourced fixed width shared by rows and day bands.
 export global MatchCols {
     in-out property <length> trs: 96px;
-    in-out property <length> clutch: 86px;
-}
-
-component StatChip inherits Rectangle {
-    in property <string> text;
-    in property <brush> chip-ink: Theme.ink;
-    in property <length> chip-width: 76px;
-    width: root.chip-width;
-    height: 24px;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: Theme.line-soft;
-    Text {
-        text: root.text;
-        font-family: Theme.font-mono;
-        font-size: TypeScale.micro;
-        font-weight: 600;
-        color: root.chip-ink;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        overflow: elide;
-    }
 }
 
 /// The TRS grade badge: Tracker Network draws its own tier mark beside the
@@ -346,21 +324,6 @@ component MatchLine inherits Rectangle {
                 value: root.item.trs;
             }
         }
-        // Clutch badge: the payload reports these sparsely, so the slot keeps
-        // its width on rows without one and the tail never shifts.
-        VCenter {
-            Rectangle {
-                width: MatchCols.clutch;
-                height: 24px;
-
-                if root.item.clutch != "": StatChip {
-                    text: root.item.clutch;
-                    chip-width: 86px;
-                    // Signed by the tone itself: a lost clutch is the bad case.
-                    chip-ink: root.item.clutch-bad ? Theme.coral : Theme.mint;
-                }
-            }
-        }
         // Slack before the tail: the numeric block ends before the kebab,
         // and the day band carries the same trailing spacer so both end even.
         Rectangle { horizontal-stretch: 1; }
@@ -369,8 +332,8 @@ component MatchLine inherits Rectangle {
         // and ACS. Every column is a StatCell — the day band reuses them, so
         // no widths are repeated anywhere else in this file.
         // Row sum (fixed): 14 pad-l + 44 portrait + 120 identity + 28 rank +
-        // ~60 score + 96 TRS + 86 clutch + 380 numerics + 40 gutters + 20 kebab
-        // + 8 pad-r + 32 gaps ≈ 928px; identity is the shrink slot, never fonts.
+        // ~60 score + 96 TRS + 380 numerics + 40 gutters + 20 kebab
+        // + 8 pad-r + 32 gaps ≈ 842px; identity is the shrink slot, never fonts.
         HorizontalLayout {
             spacing: 10px;
 
@@ -407,148 +370,14 @@ component MatchLine inherits Rectangle {
     }
 }
 
-/// One agent cell of the top strip, TRN-shaped: portrait, name, the season
-/// record, the agent's K/D and a bar whose width is the reported win share.
-/// The number is Rust's string; the bar only reads the share.
-/// Strip sum (fixed): 200 season + 3×150 agents + 24 pads + 24 gaps = 698px.
-component AgentCell inherits Rectangle {
-    in property <MatchAgentUi> item;
-    horizontal-stretch: 1;
-    min-width: 150px;
-    height: 62px;
-
-    HorizontalLayout {
-        spacing: Space.sm;
-
-        // Portrait: the agent's own face. The tinted plate is the fallback
-        // floor when the catalogue missed.
-        VCenter {
-            Rectangle {
-                width: 40px;
-                height: 40px;
-                border-radius: 8px;
-                background: Theme.primary-deep;
-                clip: true;
-
-                if root.item.art.width > 0: Image {
-                    source: root.item.art;
-                    width: 40px;
-                    height: 40px;
-                    image-fit: contain;
-                }
-                if root.item.art.width == 0: Glyph {
-                    kind: "user";
-                    size: 18px;
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    stroke: Theme.primary;
-                    opacity: 0.7;
-                }
-            }
-        }
-
-        VerticalLayout {
-            horizontal-stretch: 1;
-            spacing: 1px;
-            alignment: center;
-
-            Text {
-                text: root.item.name == "" ? "—" : root.item.name;
-                font-family: Theme.font-body;
-                font-size: TypeScale.caption;
-                font-weight: 700;
-                color: Theme.ink;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            Text {
-                text: root.item.record == "" ? "—" : root.item.record;
-                font-family: Theme.font-body;
-                font-size: TypeScale.micro;
-                color: Theme.ink-dim;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            Text {
-                text: root.item.kd-line;
-                font-family: Theme.font-mono;
-                font-size: TypeScale.micro;
-                color: Theme.ink-faint;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            Rectangle {
-                height: 3px;
-                border-radius: 1.5px;
-                background: Theme.line;
-
-                Rectangle {
-                    x: 0;
-                    width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
-                    height: parent.height;
-                    border-radius: 1.5px;
-                    background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
-                }
-            }
-        }
-    }
-}
-
-/// The season cell at the left of the strip: TRN prints the whole-season
-/// record on the first line, `K/D | ADR` under it, then the same bar.
-component SeasonCell inherits Rectangle {
-    in property <MatchSummaryUi> item;
-    width: 200px;
-    height: 62px;
-    border-radius: Shape.sm;
-    background: Theme.container-high;
-
-    VerticalLayout {
-        padding-left: Space.md;
-        padding-right: Space.md;
-        spacing: 2px;
-        alignment: center;
-
-        Text {
-            text: root.item.record == "" ? "—" : root.item.record;
-            font-family: Theme.font-body;
-            font-size: TypeScale.title;
-            font-weight: 700;
-            color: Theme.mint;
-            overflow: elide;
-        }
-        Text {
-            text: root.item.line == "" ? "—" : root.item.line;
-            font-family: Theme.font-mono;
-            font-size: TypeScale.micro;
-            color: Theme.mint;
-            opacity: 0.75;
-            overflow: elide;
-        }
-        Rectangle {
-            height: 3px;
-            border-radius: 1.5px;
-            background: Theme.line;
-
-            Rectangle {
-                x: 0;
-                width: parent.width * Math.min(Math.max(root.item.win-share, 0), 1);
-                height: parent.height;
-                border-radius: 1.5px;
-                background: root.item.win-share >= 0.5 ? Theme.mint : Theme.coral;
-            }
-        }
-    }
-}
-
 component DayHeader inherits Rectangle {
     in property <MatchDayUi> item;
     // Reference band: 50 px and rounded, the date at 16 px/700 in the
     // secondary ink, the W/L verdict in the middle, then the day's totals over
     // the columns they total. The trailing 20px spacer keeps the numerics over
     // the rows' numerics (rows end in a 20px kebab).
-    // Band sum (fixed): 14 pad-l + date + 30 chip + verdict + 96 TRS + 86 clutch
-    // + 380 numerics + 40 gutters + 20 tail + 8 pad-r + gaps ≈ 700px + flex.
+    // Band sum (fixed): 14 pad-l + date + 30 chip + verdict + 96 TRS
+    // + 380 numerics + 40 gutters + 20 tail + 8 pad-r + gaps ≈ 620px + flex.
     height: 50px;
     border-radius: 8px;
     background: Theme.container-low;
@@ -630,10 +459,9 @@ component DayHeader inherits Rectangle {
 
         Rectangle { horizontal-stretch: 1; }
 
-        // Two spacers stand in for the rows' TRS/clutch slots (MatchCols),
+        // Two spacers stand in for the rows' TRS slot (MatchCols),
         // then the same shared tail as every row.
         Rectangle { width: MatchCols.trs; }
-        Rectangle { width: MatchCols.clutch; }
         HorizontalLayout {
             spacing: 10px;
 
@@ -815,21 +643,6 @@ export component MatchesPage inherits VerticalLayout {
 
     if Tracker.match-id == "": VerticalLayout {
         spacing: Space.md;
-
-        // Top strip, TRN-shaped: the season summary on the left, then the
-        // three most-played agents spread across the rest of the row.
-        if Tracker.match-agents.length > 0: Card {
-            HorizontalLayout {
-                padding-left: Space.md;
-                padding-right: Space.md;
-                padding-top: Space.sm;
-                padding-bottom: Space.sm;
-                spacing: Space.md;
-
-                SeasonCell { item: Tracker.match-summary; }
-                for agent in Tracker.match-agents: AgentCell { item: agent; }
-            }
-        }
 
         // The match list body, measured from the live client: #0F1923 body at
         // radius 16 with a 1 px border and 14/16 px padding. The day bands and
