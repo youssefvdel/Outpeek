@@ -1,0 +1,590 @@
+// Skins viewer: one player's equipped weapon skins, opened from a Live row's
+// SKINS pill. Rust owns every value (`LoadoutWeaponUi`); this file renders.
+// Empty strings draw as em dashes, never zeros or invented art.
+//
+// Layout: a dim backdrop over the whole window plus one near-full-window
+// panel (94% x 92%, capped at 1360x780 — the legacy's own max). Inside, the
+// legacy's 5-column arsenal grid: SIDEARMS | SMGS+SHOTGUNS+MELEE | RIFLES |
+// SNIPERS+MACHINE GUNS | PLAYER CARD & EXPRESSIONS, with the 9 hairline
+// category headers. Sections arrive pre-partitioned from Rust (anything
+// unnamed lands in MACHINE GUNS instead of vanishing). Column 5 has no art source yet, so it draws the
+// legacy's honest empty state (glyph + "No Card Equipped" + name) and an
+// unfilled expressions wheel.
+//
+// Interactions match the legacy dialog: backdrop-click closes, Esc closes,
+// 200ms backdrop fade + 320ms panel slide on open.
+
+import { Theme, TypeScale, Space, Shape, Motion } from "tokens.slint";
+import { Tracker, LoadoutWeaponUi } from "../state.slint";
+import { Chip, Glyph, HCenter, IconButton, VCenter } from "widgets.slint";
+
+/// Hairline — label — hairline, label centered. The legacy's 9 section titles.
+component CategoryHeader inherits HorizontalLayout {
+    in property <string> title: "";
+    height: 18px;
+    spacing: 8px;
+
+    VCenter {
+        Rectangle {
+            height: 1px;
+            background: Theme.line-soft;
+            horizontal-stretch: 1;
+        }
+    }
+    Text {
+        text: root.title;
+        font-family: Theme.font-mono;
+        font-size: TypeScale.micro;
+        font-weight: 700;
+        letter-spacing: 1.8px;
+        color: Theme.primary;
+        vertical-alignment: center;
+    }
+    VCenter {
+        Rectangle {
+            height: 1px;
+            background: Theme.line-soft;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+/// One weapon card: centered art under a 40px buddy overlay, then the
+/// baseline (weapon line + skin line over a top hairline). Flex height —
+/// cards in a column share it equally, the way the legacy's `flex-1` rows do.
+/// A missing render draws the glyph at the same size the art would occupy, so
+/// a card never collapses.
+component WeaponCard inherits Rectangle {
+    in property <LoadoutWeaponUi> item;
+    vertical-stretch: 1;
+    min-height: 88px;
+    border-radius: 12px;
+    background: card-touch.has-hover ? Theme.container-high : Theme.container-low;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    border-width: Shape.stroke;
+    border-color: card-touch.has-hover ? Theme.primary-edge : Theme.line-soft;
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    clip: true;
+
+    card-touch := TouchArea { }
+
+    VerticalLayout {
+        padding: 6px;
+        spacing: 4px;
+
+        Rectangle {
+            vertical-stretch: 1;
+            min-height: 40px;
+
+            if item.art.width > 0: Image {
+                source: item.art;
+                width: 100%;
+                height: 100%;
+                image-fit: contain;
+            }
+            if item.art.width == 0: Glyph {
+                kind: "crosshair";
+                size: 18px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                stroke: Theme.ink-faint;
+                opacity: 0.7;
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.line-soft;
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+
+            Text {
+                text: item.weapon-name == "" ? "—" : item.weapon-name;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                color: Theme.ink-faint;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            if item.detail != "": Text {
+                text: item.detail;
+                font-family: Theme.font-mono;
+                font-size: TypeScale.micro;
+                font-weight: 700;
+                color: Theme.amber;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if !item.is-default: VCenter {
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.primary;
+                }
+            }
+        }
+        Text {
+            text: item.skin-name == "" ? "—" : item.skin-name;
+            font-family: Theme.font-body;
+            font-size: TypeScale.caption;
+            font-weight: 600;
+            color: item.is-default ? Theme.ink-dim : Theme.primary;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    // Equipped gun buddy, top-right, 40px. The slot is always drawn while a
+    // buddy is equipped: unresolved art draws the same-size fallback glyph.
+    if item.buddy-name != "": Rectangle {
+        x: parent.width - self.width - 4px;
+        y: 4px;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: Theme.container-high;
+        border-width: Shape.stroke;
+        border-color: Theme.line-soft;
+        clip: true;
+
+        if item.buddy-art.width > 0: Image {
+            source: item.buddy-art;
+            width: 40px;
+            height: 40px;
+            image-fit: contain;
+        }
+        if item.buddy-art.width == 0: Glyph {
+            kind: "crosshair";
+            size: 16px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            stroke: Theme.ink-faint;
+            opacity: 0.7;
+        }
+    }
+}
+
+/// Column 5, top: the player card. No card art source is wired yet, so this is
+/// the legacy's honest empty state — glyph + "No Card Equipped" — with the
+/// identity band naming the player it belongs to. Never a stranger's card.
+component PlayerCardSlot inherits Rectangle {
+    vertical-stretch: 1;
+    min-height: 200px;
+    border-radius: 16px;
+    background: Theme.container-low;
+    border-width: Shape.stroke;
+    border-color: Theme.line-soft;
+    clip: true;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 6px;
+
+        HCenter {
+            Glyph { kind: "user"; size: 28px; stroke: Theme.ink-faint; opacity: 0.45; }
+        }
+        Text {
+            text: "No Card Equipped";
+            font-family: Theme.font-body;
+            font-size: TypeScale.caption;
+            color: Theme.ink-faint;
+            horizontal-alignment: center;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - self.height;
+        width: 100%;
+        height: 52px;
+        background: Theme.surface-dim;
+
+        VerticalLayout {
+            alignment: center;
+            padding-left: 8px;
+            padding-right: 8px;
+
+            Text {
+                text: Tracker.loadout-player == "" ? "—" : Tracker.loadout-player;
+                font-family: Theme.font-display;
+                font-size: 13px;
+                font-weight: 800;
+                color: Theme.ink;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+/// Column 5, bottom: the 4-slot expressions wheel. No expression art source is
+/// wired yet, so the slots keep the legacy's ring geometry with fallback
+/// glyphs — structure, not invented icons.
+component ExpressionsWheel inherits Rectangle {
+    height: 190px;
+    background: transparent;
+
+    // Fixed 190px square, centered in the column: the ring math below is in
+    // absolute coordinates (center 95,95), never in column fractions.
+    Rectangle {
+        width: 190px;
+        height: 190px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: transparent;
+
+        // Outer faint ring (142px) + middle concentric ring (84px).
+        Rectangle {
+            x: 24px; y: 24px; width: 142px; height: 142px;
+            border-radius: Shape.pill;
+            background: transparent;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+        }
+        Rectangle {
+            x: 53px; y: 53px; width: 84px; height: 84px;
+            border-radius: Shape.pill;
+            background: transparent;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+        }
+        // Central hub + dot.
+        Rectangle {
+            x: 80px; y: 80px; width: 30px; height: 30px;
+            border-radius: Shape.pill;
+            background: Theme.container-high;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+        }
+        Rectangle {
+            x: 91px; y: 91px; width: 8px; height: 8px;
+            border-radius: 4px;
+            background: Theme.primary;
+        }
+
+        // 4 cardinal slots, centered on the outer ring (42px circles).
+        Rectangle {
+            x: 74px; y: 3px; width: 42px; height: 42px;
+            border-radius: Shape.pill;
+            background: Theme.container-high;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+            Glyph { kind: "crosshair"; size: 14px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; stroke: Theme.ink-faint; opacity: 0.5; }
+        }
+        Rectangle {
+            x: 145px; y: 74px; width: 42px; height: 42px;
+            border-radius: Shape.pill;
+            background: Theme.container-high;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+            Glyph { kind: "crosshair"; size: 14px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; stroke: Theme.ink-faint; opacity: 0.5; }
+        }
+        Rectangle {
+            x: 74px; y: 145px; width: 42px; height: 42px;
+            border-radius: Shape.pill;
+            background: Theme.container-high;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+            Glyph { kind: "crosshair"; size: 14px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; stroke: Theme.ink-faint; opacity: 0.5; }
+        }
+        Rectangle {
+            x: 3px; y: 74px; width: 42px; height: 42px;
+            border-radius: Shape.pill;
+            background: Theme.container-high;
+            border-width: 1px;
+            border-color: Theme.line-soft;
+            Glyph { kind: "crosshair"; size: 14px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; stroke: Theme.ink-faint; opacity: 0.5; }
+        }
+    }
+}
+
+/// The centered panel: header, honesty line, then the 5-column arsenal grid.
+/// Sections arrive pre-partitioned from Rust, so the view renders them
+/// verbatim — never a name filter that could hide a weapon.
+component LoadoutPanel inherits Rectangle {
+    in property <bool> shown;
+    // Window-relative size, pushed by the modal (the only place `parent` is
+    // the window): near-full-window, capped at the legacy's 1360x780.
+    in property <length> panel-width: 720px;
+    in property <length> panel-height: 540px;
+    width: root.panel-width;
+    height: root.panel-height;
+    border-radius: 16px;
+    background: Theme.container;
+    border-width: Shape.stroke;
+    border-color: Theme.line-soft;
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: 200ms; easing: ease-out; }
+
+    VerticalLayout {
+        padding: Space.lg;
+        spacing: 10px;
+
+        // Top header bar: agent glyph (no agent-art source is wired, so the
+        // user fallback), Riot ID, COLLECTION pill, close.
+        HorizontalLayout {
+            height: 40px;
+            spacing: Space.md;
+
+            VCenter {
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 9px;
+                    background: Theme.container-high;
+                    border-width: Shape.stroke;
+                    border-color: Theme.line-soft;
+
+                    Glyph {
+                        kind: "user";
+                        size: 18px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        stroke: Theme.primary;
+                    }
+                }
+            }
+            VCenter {
+                Text {
+                    text: Tracker.loadout-player == "" ? "—" : Tracker.loadout-player;
+                    font-family: Theme.font-display;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+            if Tracker.loadout-ambiguous: VCenter {
+                Chip { text: "MULTI-PICK"; tone: "armed"; pad-x: 7px; pad-y: 1px; }
+            }
+            VCenter {
+                Chip { text: "COLLECTION"; tone: "neutral"; pad-x: 10px; pad-y: 2px; }
+            }
+            VCenter {
+                IconButton {
+                    glyph: "x";
+                    label: "Close loadout";
+                    clicked => { Tracker.close-loadout(); }
+                }
+            }
+        }
+
+        // A duplicate agent pick resolves to the first matching loadout: say
+        // so instead of silently showing a stranger's weapons.
+        if Tracker.loadout-ambiguous: Rectangle {
+            background: Theme.amber-wash;
+            border-width: 1px;
+            border-color: Theme.amber-edge;
+            border-radius: 12px;
+
+            HorizontalLayout {
+                padding-left: Space.md;
+                padding-right: Space.md;
+                padding-top: 7px;
+                padding-bottom: 7px;
+                spacing: Space.sm;
+
+                VCenter {
+                    Rectangle {
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.amber;
+                    }
+                }
+                Text {
+                    text: "Multiple players picked the same agent — showing the first matching loadout.";
+                    font-family: Theme.font-body;
+                    font-size: TypeScale.caption;
+                    color: Theme.ink-dim;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        if Tracker.loadout-state == "loading": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: Space.sm;
+            Text {
+                text: "Reading equipped skins…";
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+            }
+        }
+
+        if Tracker.loadout-state == "empty" || Tracker.loadout-state == "error": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: Space.sm;
+
+            HCenter {
+                Glyph { kind: "crosshair"; size: 28px; stroke: Theme.ink-faint; opacity: 0.7; }
+            }
+            Text {
+                text: Tracker.loadout-state == "error" ? "Skins read failed" : "No loadout data";
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 700;
+                color: Theme.ink;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: Tracker.loadout-note == "" ? "—" : Tracker.loadout-note;
+                font-family: Theme.font-body;
+                font-size: TypeScale.caption;
+                color: Theme.ink-faint;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        if Tracker.loadout-state == "ready" && Tracker.loadout-sidearms.length + Tracker.loadout-smgs.length + Tracker.loadout-shotguns.length + Tracker.loadout-melee.length + Tracker.loadout-rifles.length + Tracker.loadout-snipers.length + Tracker.loadout-machine.length == 0: VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: Space.sm;
+
+            HCenter {
+                Glyph { kind: "crosshair"; size: 28px; stroke: Theme.ink-faint; opacity: 0.7; }
+            }
+            Text {
+                text: "No weapons reported";
+                font-family: Theme.font-display;
+                font-size: TypeScale.title;
+                font-weight: 700;
+                color: Theme.ink;
+                horizontal-alignment: center;
+            }
+        }
+
+        // 5-column arsenal grid. Each column shares the row height; the cards
+        // inside share the column. Column widths stay equal by stretch, so a
+        // 1280px floor cannot clip the last cell (no fixed widths anywhere in
+        // the row — the arithmetic lives in the stretch, not in a comment).
+        if Tracker.loadout-state == "ready" && Tracker.loadout-sidearms.length + Tracker.loadout-smgs.length + Tracker.loadout-shotguns.length + Tracker.loadout-melee.length + Tracker.loadout-rifles.length + Tracker.loadout-snipers.length + Tracker.loadout-machine.length > 0: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 10px;
+
+            // Column 1: SIDEARMS.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                CategoryHeader { title: "SIDEARMS"; }
+                for w in Tracker.loadout-sidearms: WeaponCard { item: w; }
+            }
+
+            // Column 2: SMGS, SHOTGUNS & MELEE.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                CategoryHeader { title: "SMGS"; }
+                for w in Tracker.loadout-smgs: WeaponCard { item: w; }
+                CategoryHeader { title: "SHOTGUNS"; }
+                for w in Tracker.loadout-shotguns: WeaponCard { item: w; }
+                CategoryHeader { title: "MELEE"; }
+                for w in Tracker.loadout-melee: WeaponCard { item: w; }
+            }
+
+            // Column 3: RIFLES.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                CategoryHeader { title: "RIFLES"; }
+                for w in Tracker.loadout-rifles: WeaponCard { item: w; }
+            }
+
+            // Column 4: SNIPER RIFLES & MACHINE GUNS (plus anything Rust
+            // could not name — visible beats hidden).
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                CategoryHeader { title: "SNIPER RIFLES"; }
+                for w in Tracker.loadout-snipers: WeaponCard { item: w; }
+                CategoryHeader { title: "MACHINE GUNS"; }
+                for w in Tracker.loadout-machine: WeaponCard { item: w; }
+            }
+
+            // Column 5: PLAYER CARDS & EXPRESSIONS.
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                CategoryHeader { title: "PLAYER CARDS"; }
+                PlayerCardSlot { }
+                CategoryHeader { title: "EXPRESSIONS"; }
+                HCenter {
+                    ExpressionsWheel { }
+                }
+            }
+        }
+    }
+}
+
+/// Page overlay: a dim backdrop plus the centered panel. Absolutely
+/// positioned (x/y set by the shell), so it never joins the page's
+/// preferred-size math. Backdrop-click and Esc both close; the panel keeps
+/// every press that lands on it, so a stray click can never reach the page
+/// underneath. Mount plays the legacy's 200ms fade + 320ms slide.
+export component LoadoutModal inherits Rectangle {
+    property <bool> shown;
+    init => { shown = true; }
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim-top;
+    opacity: shown ? 1 : 0;
+    animate opacity { duration: 200ms; easing: ease-out; }
+
+    // The scope wraps the whole modal, so Esc works whenever focus is
+    // anywhere inside it: a descendant scope that rejects the key bubbles it
+    // up here. One-shot timer focuses it on open (init fires before the
+    // window can take focus); afterwards Tab moves freely to the Close button.
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                Tracker.close-loadout();
+                return accept;
+            }
+            return reject;
+        }
+
+        // Sits below the panel in tree order: presses on the panel stay there,
+        // everything else closes the viewer instead of hitting the page.
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { Tracker.close-loadout(); }
+        }
+
+        LoadoutPanel {
+            shown: root.shown;
+            panel-width: parent.width - 48px > 1360px ? 1360px : parent.width - 48px;
+            panel-height: parent.height - 48px > 780px ? 780px : parent.height - 48px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2 + (root.shown ? 0px : 12px);
+            animate y { duration: 320ms; easing: ease-out; }
+        }
+    }
+
+    focus-timer := Timer {
+        interval: 150ms;
+        running: true;
+        triggered => {
+            scope.focus();
+            focus-timer.running = false;
+        }
+    }
+}

@@ -79,6 +79,66 @@ pub fn match_by_id(
     live_match::parse_match(&payload, phase).map(Some)
 }
 
+/// The loadout payload path for a phase. Namespaces differ per phase: a
+/// pregame id 404s on the core-game route and vice versa.
+pub fn loadout_path(phase: &str, match_id: &str) -> String {
+    if phase == "pregame" {
+        format!("/pregame/v1/matches/{match_id}/loadouts")
+    } else {
+        format!("/core-game/v1/matches/{match_id}/loadouts")
+    }
+}
+
+/// Raw loadout entries for one live match: the `{ Loadouts: [...] }` array.
+///
+/// The caller's phase is tried first, then the other one — first non-empty
+/// `Loadouts` array wins. `Ok(vec![])` means Riot answered genuinely empty (or
+/// 404 on both routes: the match ended between the click and this read), which
+/// the caller renders as the honest empty state, never as an error. Runs once
+/// per viewer open, never polled.
+pub fn loadout_entries(
+    ent: &Entitlements,
+    region: &str,
+    phase: &str,
+    match_id: &str,
+) -> Result<Vec<Value>, String> {
+    if match_id.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let host = live_match::glz_host(region);
+    let mut phases = vec![phase];
+    phases.push(if phase == "pregame" {
+        "coregame"
+    } else {
+        "pregame"
+    });
+    for phase in phases {
+        let path = loadout_path(phase, match_id);
+        let (status, body) = rank::remote_get(&host, &path, ent)?;
+        if status == 404 {
+            continue;
+        }
+        if status == 401 || status == 403 {
+            return Err("Riot session expired — restart the Riot Client.".to_string());
+        }
+        if !(200..300).contains(&status) {
+            return Err(format!("Riot returned HTTP {status} for the loadout read."));
+        }
+        let payload: Value =
+            serde_json::from_str(&body).map_err(|_| "Unreadable loadout payload.".to_string())?;
+        let entries = payload
+            .get("Loadouts")
+            .or_else(|| payload.get("loadouts"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if !entries.is_empty() {
+            return Ok(entries);
+        }
+    }
+    Ok(Vec::new())
+}
+
 /// Names for a lobby, from the Riot Client's account service. Batched by the
 /// caller; a per-PUUID miss keeps the service's own `error` string.
 pub fn namesets(auth: &LockfileAuth, puuids: &[String]) -> Result<Vec<NameRow>, String> {

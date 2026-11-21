@@ -344,6 +344,45 @@ pub struct NameRow {
     pub error: String,
 }
 
+/// Match-end harvest trigger: Riot blanks strict-hidden stranger names in live
+/// payloads and `namesets` during a match, but releases them once the match
+/// is over. The moment we leave `coregame` we must ask the account service
+/// for the whole lobby and remember the answers — the only window where a
+/// hidden player's real Riot ID becomes available.
+///
+/// Returns the deduped PUUIDs of every lobby participant at match end, or
+/// `None` when no harvest should run (not a match end, or nobody to ask for).
+/// Pure — no I/O, so the transition rules are testable. Mirrors
+/// `matchEndHarvest` in `legacy/src/utils/tracker.ts`.
+pub fn match_end_harvest(
+    prev: Option<&LiveMatch>,
+    next: Option<&LiveMatch>,
+) -> Option<Vec<String>> {
+    let prev = prev?;
+    if prev.phase != "coregame" {
+        return None;
+    }
+    if matches!(next, Some(n) if n.phase == "coregame") {
+        return None;
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut puuids = Vec::new();
+    for player in &prev.players {
+        let puuid = player.puuid.trim();
+        if puuid.is_empty() {
+            continue;
+        }
+        if seen.insert(puuid.to_lowercase()) {
+            puuids.push(puuid.to_string());
+        }
+    }
+    if puuids.is_empty() {
+        None
+    } else {
+        Some(puuids)
+    }
+}
+
 /// Parse the loopback nameset answer. Tolerates both the `{namesets: [...]}`
 /// envelope and a bare array (the Tauri command returns the array).
 pub fn parse_namesets(payload: &Value) -> Vec<NameRow> {
@@ -554,6 +593,72 @@ mod tests {
         assert_eq!(glz_host("EU"), "glz-eu-1.eu.a.pvp.net");
         assert_eq!(glz_host("na"), "glz-na-1.na.a.pvp.net");
         assert_eq!(glz_host("mars"), "glz-eu-1.eu.a.pvp.net");
+    }
+
+    /// A lobby that just ended: the harvest trigger fires.
+    fn ended_lobby() -> LiveMatch {
+        LiveMatch {
+            match_id: "m-1".to_string(),
+            phase: "coregame".to_string(),
+            players: vec![
+                LivePlayer {
+                    puuid: "AAA".to_string(),
+                    ..Default::default()
+                },
+                LivePlayer {
+                    puuid: "bbb".to_string(),
+                    ..Default::default()
+                },
+                // A repeated puuid (custom-game containers can overlap) is one ask.
+                LivePlayer {
+                    puuid: "BBB".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_coregame_to_idle_transition_harvests_the_lobby_once() {
+        // Presence left the match / the match id 404d: the only window where
+        // Riot releases hidden names.
+        let harvest = match_end_harvest(Some(&ended_lobby()), None);
+        assert_eq!(
+            harvest.as_deref(),
+            Some(&["AAA".to_string(), "bbb".to_string()][..]),
+            "deduped, order kept, nobody invented"
+        );
+        // Pregame after coregame is also a match end (agent select next).
+        let next = LiveMatch {
+            phase: "pregame".to_string(),
+            ..Default::default()
+        };
+        assert!(match_end_harvest(Some(&ended_lobby()), Some(&next)).is_some());
+    }
+
+    #[test]
+    fn no_harvest_without_a_match_end() {
+        let lobby = ended_lobby();
+        // Still in the match: asking now would get blanked hidden names.
+        let still_live = LiveMatch {
+            phase: "coregame".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(match_end_harvest(Some(&lobby), Some(&still_live)), None);
+        // Agent select ending is not a match end either.
+        let select = LiveMatch {
+            phase: "pregame".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(match_end_harvest(Some(&select), None), None);
+        // No previous lobby, or nobody to ask for: nothing to do.
+        assert_eq!(match_end_harvest(None, None), None);
+        let empty = LiveMatch {
+            phase: "coregame".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(match_end_harvest(Some(&empty), None), None);
     }
 
     #[test]

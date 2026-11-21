@@ -24,6 +24,7 @@ import { MatchesPage } from "components/matches.slint";
 import { AgentsPage } from "components/agents.slint";
 import { MapsPage } from "components/maps.slint";
 import { LivePage } from "components/live.slint";
+import { LoadoutModal } from "components/loadout.slint";
 
 // Re-exported so the Rust side can address the same globals, push the titlebar
 // geometry, and use the row struct without the deprecated generated alias.
@@ -164,5 +165,18 @@ export component AppWindow inherits Window {
             }
             }
         }
+    }
+
+    // Window-level overlay: a sibling of the shell, never a child of the scroll
+    // surface. Inside the page the Flickable clipped it to the viewport and
+    // `100%` resolved against the page's preferred height, so the panel landed
+    // above the window (y = -178 at 1280x804). Absolute x/y plus explicit
+    // window-sized dimensions keep it out of the layout's preferred-size math
+    // and let it cover the whole window.
+    if Tracker.loadout-open: LoadoutModal {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
     }
 }

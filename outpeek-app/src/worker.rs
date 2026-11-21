@@ -21,6 +21,7 @@
 //! Every publish is a partial state change; the UI thread decides what to
 //! repaint. The loop never blocks the UI thread.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -32,6 +33,7 @@ use crate::live_api::{self, Probe};
 use crate::live_facts::{derive_facts, find_local_presence};
 use crate::live_match;
 use crate::live_view::{self, LiveCache, LiveView};
+use crate::loadout;
 use crate::model::{format_player_tag, RankState, RankView, TrackerSnapshot};
 use crate::rank;
 use crate::trn;
@@ -77,6 +79,11 @@ pub enum Event {
     /// The live lobby: two teams, names, agents, ranks. Only published on a
     /// change; a failed read keeps the last board instead of blanking it.
     Live(LiveView),
+    /// One player's equipped skins, fetched on demand when a Live row's Skins
+    /// button is clicked. `state` is loading|ready|empty|error; `weapons` is
+    /// empty until the read lands, and an error keeps the message with a retry
+    /// (re-click).
+    Loadout(LoadoutView),
 }
 
 /// Rows plus the honesty label that belongs beside them.
@@ -142,6 +149,55 @@ impl BreakdownView {
     }
 }
 
+/// One equipped weapon row for the Skins viewer: pre-formatted strings plus
+/// cached art URLs. Empty strings draw em dashes; a miss stays empty and the
+/// row draws its glyph — never invented art.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoadoutWeaponUi {
+    pub weapon_name: String,
+    /// Parent skin name ("Reaver Vandal"); a default row carries the weapon
+    /// name and `is_default`, never the grey-X placeholder.
+    pub skin_name: String,
+    /// "Variant 1 Black · Lv 4", joined here; empty for base skins.
+    /// The view binds verbatim — never an assembled sentence.
+    pub detail: String,
+    pub is_default: bool,
+    pub buddy_name: String,
+    /// Cached gun-render URL; empty when nothing resolved.
+    pub art_url: String,
+    /// Cached buddy art URL; empty when unequipped or unresolved.
+    pub buddy_art_url: String,
+}
+
+/// One Skins viewer frame. Memory-only: loadouts are cached per match id in
+/// memory, never written to disk, so a re-open while the match runs reuses
+/// them. `ambiguous` discloses a duplicate-agent pick instead of silently
+/// showing a stranger's weapons.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoadoutView {
+    pub player_name: String,
+    pub weapons: Vec<LoadoutWeaponUi>,
+    pub ambiguous: bool,
+    pub state: &'static str,
+    pub message: String,
+}
+
+impl LoadoutView {
+    fn placeholder(
+        player_name: impl Into<String>,
+        state: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            player_name: player_name.into(),
+            weapons: Vec::new(),
+            ambiguous: false,
+            state,
+            message: message.into(),
+        }
+    }
+}
+
 /// Cross-thread switches owned by the app (UI) and read by the poller.
 #[derive(Debug, Default)]
 pub struct Flags {
@@ -161,6 +217,19 @@ pub struct Flags {
     /// second click while a fetch is in flight replaces the first.
     pub match_request: Mutex<Option<String>>,
     pub match_pending: AtomicBool,
+    /// Set by `select-loadout(puuid)`; consumed by the poller, which fetches
+    /// that player's equipped skins once (never polled). The match id and the
+    /// phase travel beside the flag — they name the loadout routes to read.
+    pub loadout_request: Mutex<Option<LoadoutRequest>>,
+    pub loadout_pending: AtomicBool,
+}
+
+/// One Skins viewer open: which match's loadouts, and whose.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LoadoutRequest {
+    pub match_id: String,
+    pub phase: String,
+    pub puuid: String,
 }
 
 pub fn now_ms() -> u64 {
@@ -274,11 +343,7 @@ async fn fill_match_art(art: &Art, fetcher: Arc<dyn Fetcher>, rows: &mut [MatchR
 /// One Matches frame: the rows plus the website strips derived from the same
 /// rows (form = last 8, day groups) and the top-3 agent strip from the
 /// profile payload's own breakdown — never a second request.
-fn matches_frame(
-    rows: Vec<MatchRow>,
-    state: &'static str,
-    message: String,
-) -> MatchesView {
+fn matches_frame(rows: Vec<MatchRow>, state: &'static str, message: String) -> MatchesView {
     MatchesView {
         days: trn_matches::group_days(&rows),
         rows,
@@ -290,11 +355,7 @@ fn matches_frame(
 /// Fill portrait URLs for the rows through the existing catalogues. Returns
 /// true when at least one row gained art, so the caller republishes only
 /// then. A miss stays empty; the views draw their glyphs.
-async fn fill_strip_art(
-    art: &Art,
-    fetcher: Arc<dyn Fetcher>,
-    view: &mut MatchesView,
-) -> bool {
+async fn fill_strip_art(art: &Art, fetcher: Arc<dyn Fetcher>, view: &mut MatchesView) -> bool {
     fill_match_art(art, fetcher.clone(), &mut view.rows).await
 }
 
@@ -410,9 +471,11 @@ fn fake_live_frame() -> Option<LiveView> {
                level: &str,
                rank: &str,
                rr: &str,
+               peak: &str,
                party: &str,
                me: bool,
                incognito: bool| live_view::LivePlayerUi {
+        puuid: format!("fake-puuid-{}", name),
         name: name.to_string(),
         agent: agent.to_string(),
         agent_art: String::new(),
@@ -425,6 +488,7 @@ fn fake_live_frame() -> Option<LiveView> {
         rank: rank.to_string(),
         rr: rr.to_string(),
         crest: String::new(),
+        peak: peak.to_string(),
         party: party.to_string(),
         party_label: if party.is_empty() {
             String::new()
@@ -436,6 +500,7 @@ fn fake_live_frame() -> Option<LiveView> {
     };
     Some(LiveView {
         state: "coregame",
+        match_id: "fake-match-id".to_string(),
         message: String::new(),
         map: "Ascent".to_string(),
         mode: "Competitive".to_string(),
@@ -448,6 +513,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 214",
                 "Diamond 3",
                 "26 RR",
+                "Ascendant 1",
                 "3",
                 true,
                 false,
@@ -458,6 +524,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 187",
                 "Diamond 1",
                 "12 RR",
+                "Diamond 2",
                 "3",
                 false,
                 false,
@@ -468,6 +535,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 92",
                 "Platinum 3",
                 "74 RR",
+                "",
                 "3",
                 false,
                 true,
@@ -479,6 +547,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "NOT READ",
                 "",
                 "",
+                "",
                 false,
                 false,
             ),
@@ -488,6 +557,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 44",
                 "RANK HIDDEN",
                 "",
+                "Platinum 1",
                 "",
                 false,
                 false,
@@ -500,6 +570,7 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 310",
                 "Ascendant 1",
                 "40 RR",
+                "Ascendant 2",
                 "2",
                 false,
                 false,
@@ -510,17 +581,29 @@ fn fake_live_frame() -> Option<LiveView> {
                 "Lv 140",
                 "Platinum 1",
                 "8 RR",
+                "",
                 "2",
                 false,
                 false,
             ),
-            row("Enemy 3#EUW", "Viper", "", "UNRATED", "", "", false, false),
+            row(
+                "Enemy 3#EUW",
+                "Viper",
+                "",
+                "UNRATED",
+                "",
+                "",
+                "",
+                false,
+                false,
+            ),
             row(
                 "Enemy 4#NA1",
                 "Breach",
                 "Lv 61",
                 "Gold 2",
                 "55 RR",
+                "Gold 3",
                 "",
                 false,
                 false,
@@ -532,10 +615,83 @@ fn fake_live_frame() -> Option<LiveView> {
                 "ERROR",
                 "",
                 "",
+                "",
                 false,
                 false,
             ),
         ],
+    })
+}
+
+/// One live-lobby frame plus the lobby it came from.
+///
+/// The returned match is `Some` while a roster is on screen (even an empty
+/// one) and `None` once there is no match to show. A failed roster read
+/// returns the previous lobby, so a transient error is never mistaken for a
+/// match end. The caller compares the two to run the match-end harvest.
+/// Debug-only Skins viewer frame: a full 21-weapon arsenal across every legacy
+/// category (sidearms, SMGs, shotguns, rifles, snipers, machine guns, melee),
+/// no art, no network — so the 5-column grid's density can be verified on a
+/// host without VALORANT.
+#[cfg(debug_assertions)]
+fn fake_loadout_frame() -> Option<LoadoutView> {
+    if std::env::var_os("OUTPEEK_FAKE_LOADOUT").is_none() {
+        return None;
+    }
+    let row =
+        |weapon: &str, skin: &str, detail: &str, is_default: bool, buddy: &str| LoadoutWeaponUi {
+            weapon_name: weapon.to_string(),
+            skin_name: skin.to_string(),
+            detail: detail.to_string(),
+            is_default,
+            buddy_name: buddy.to_string(),
+            art_url: String::new(),
+            buddy_art_url: String::new(),
+        };
+    Some(LoadoutView {
+        player_name: "Youssef#EUW".to_string(),
+        weapons: vec![
+            row(
+                "Classic",
+                "Prime Classic",
+                "Variant 2 Orange · Lv 3",
+                false,
+                "Fist Bump",
+            ),
+            row("Shorty", "Shorty", "", true, ""),
+            row("Frenzy", "Frenzy", "", true, ""),
+            row("Ghost", "Sovereign Ghost", "Variant 1 Silver", false, ""),
+            row("Sheriff", "Sheriff", "", true, ""),
+            row("Stinger", "Stinger", "", true, ""),
+            row("Spectre", "Prime Spectre", "Variant 1 Orange", false, ""),
+            row("Bucky", "Bucky", "", true, ""),
+            row(
+                "Judge",
+                "Glitchpop Judge",
+                "Variant 2 Blue",
+                false,
+                "Lucky Horseshoe",
+            ),
+            row("Bulldog", "Glitchpop Bulldog", "Variant 1 Red", false, ""),
+            row("Guardian", "Sovereign Guardian", "", false, ""),
+            row("Phantom", "Oni Phantom", "Variant 2 Green", false, ""),
+            row(
+                "Vandal",
+                "Reaver Vandal",
+                "Variant 1 Black · Lv 4",
+                false,
+                "Fist Bump",
+            ),
+            row("Marshal", "Marshal", "", true, ""),
+            row("Outlaw", "Outlaw", "", true, ""),
+            row("Operator", "Ion Operator", "Variant 2 Blue", false, ""),
+            row("Ares", "Ares", "", true, ""),
+            row("Odin", "Glitchpop Odin", "", false, ""),
+            row("Melee", "Reaver Knife", "Variant 1 Black · Lv 4", false, ""),
+        ],
+        ambiguous: false,
+        state: "ready",
+        message: String::new(),
     })
 }
 
@@ -547,9 +703,13 @@ async fn live_frame(
     presences: &serde_json::Value,
     ent_cache: &mut Option<(Entitlements, Instant)>,
     cache: &mut LiveCache,
-) -> LiveView {
+    prev_match: Option<&live_match::LiveMatch>,
+) -> (LiveView, Option<live_match::LiveMatch>) {
     let Some(me) = identity else {
-        return LiveView::offline("No Riot Client — the live lobby needs one.");
+        return (
+            LiveView::offline("No Riot Client — the live lobby needs one."),
+            None,
+        );
     };
     // Names first: they are also the fallback for a lobby where the account
     // service has nothing.
@@ -566,31 +726,42 @@ async fn live_frame(
                 *ent_cache = Some((ent.clone(), now));
                 ent
             }
-            Err(e) => return LiveView::idle(e),
+            Err(e) => return (LiveView::idle(e), prev_match.cloned()),
         },
     };
     let region =
         rank::region_from_access_token(&ent.access_token).unwrap_or_else(|| "eu".to_string());
 
     let matched = match live_api::probe(&ent, &region, &me.puuid) {
-        Ok(Probe::Idle) => return LiveView::idle("In menus — no live match."),
+        Ok(Probe::Idle) => return (LiveView::idle("In menus — no live match."), None),
         Ok(Probe::Match { phase, match_id }) => {
             match live_api::match_by_id(&ent, &region, phase, &match_id) {
                 Ok(Some(matched)) => matched,
-                Ok(None) => return LiveView::idle("The match ended — back to the menu."),
+                Ok(None) => {
+                    return (LiveView::idle("The match ended — back to the menu."), None);
+                }
                 Err(e) => {
                     eprintln!("[live] roster: {e}");
-                    return LiveView::idle(e).error("Live lobby read failed.");
+                    return (
+                        LiveView::idle(e).error("Live lobby read failed."),
+                        prev_match.cloned(),
+                    );
                 }
             }
         }
         Err(e) => {
             eprintln!("[live] probe: {e}");
-            return LiveView::idle(e).error("Live lobby read failed.");
+            return (
+                LiveView::idle(e).error("Live lobby read failed."),
+                prev_match.cloned(),
+            );
         }
     };
     if !matched.has_roster() {
-        return LiveView::idle("The match has no roster yet.");
+        return (
+            LiveView::idle("The match has no roster yet."),
+            Some(matched),
+        );
     }
 
     // Parties the payload omits come from the presences (the client puts the
@@ -648,7 +819,7 @@ async fn live_frame(
             None
         }
     };
-    live_view::build(
+    let view = live_view::build(
         &matched,
         &me.puuid,
         &snap.map,
@@ -660,7 +831,8 @@ async fn live_frame(
         art,
         fetcher,
     )
-    .await
+    .await;
+    (view, Some(matched))
 }
 
 /// Resolve one frame of art for the current tier/peak/agent. Every step fails
@@ -731,10 +903,17 @@ where
     let mut art = Art::new(crate::assets::art_dir());
     let fetcher: Arc<dyn Fetcher> = Arc::new(HttpFetcher);
     // Live lobby state. Names and ranks are per player and cached; the board is
-    // only republished when it actually changed.
+    // only republished when it actually changed. The last lobby's roster is
+    // kept beside it so the match-end harvest can fire exactly once.
     let mut live_cache = LiveCache::default();
     let mut live_last: Option<LiveView> = None;
+    let mut last_live_match: Option<live_match::LiveMatch> = None;
     let mut live_ent: Option<(Entitlements, Instant)> = None;
+    // Skins viewer state. The catalogue is fetched once per process; parsed
+    // loadouts are cached per match id, memory-only, so a re-open while the
+    // match runs reuses them. Never polled — only a Skins click refills this.
+    let mut loadout_catalog: Option<loadout::Catalog> = None;
+    let mut loadout_cache: HashMap<String, Vec<loadout::PlayerLoadout>> = HashMap::new();
     // Debug board for a host without VALORANT: the poller never probes, so the
     // fixture is published here and the live path is skipped entirely.
     let fake_live: Option<LiveView> = {
@@ -750,6 +929,24 @@ where
     if let Some(view) = &fake_live {
         live_last = Some(view.clone());
         publish(Event::Live(view.clone()));
+    }
+    // Debug-only Skins viewer for a host without VALORANT. `OUTPEEK_FAKE_LOADOUT=1`
+    // publishes a ready frame with three honest rows (skinned + variant/level,
+    // default fallback, buddy) and no art URLs, so the rows draw their glyphs
+    // instead of needing the network. The modal opens beside it in main.rs.
+    // Never compiled into a release build.
+    let fake_loadout: Option<LoadoutView> = {
+        #[cfg(debug_assertions)]
+        {
+            fake_loadout_frame()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            None
+        }
+    };
+    if let Some(view) = &fake_loadout {
+        publish(Event::Loadout(view.clone()));
     }
     if art.enabled() {
         let freed = art.cap();
@@ -850,8 +1047,7 @@ where
             // already holds the last frame's own values.
             if matches.is_some() {
                 if let Some(rows) = matches.as_mut() {
-                    let mut view =
-                        matches_frame(rows.clone(), "cached", String::new());
+                    let mut view = matches_frame(rows.clone(), "cached", String::new());
                     if fill_strip_art(&art, fetcher.clone(), &mut view).await {
                         *rows = view.rows.clone();
                         publish(Event::Matches(view));
@@ -1063,8 +1259,7 @@ where
                         }
                         crate::boot::mark("worker:matches-net");
                         eprintln!("[trn] matches: {} · {} row(s)", profile_handle, rows.len());
-                        let mut view =
-                            matches_frame(rows, "ready", String::new());
+                        let mut view = matches_frame(rows, "ready", String::new());
                         fill_strip_art(&art, fetcher.clone(), &mut view).await;
                         matches = Some(view.rows.clone());
                         publish(Event::Matches(view));
@@ -1087,11 +1282,7 @@ where
                                 format!("Tracker Network did not answer ({e})."),
                             ),
                         };
-                        publish(Event::Matches(matches_frame(
-                            rows,
-                            state,
-                            message,
-                        )));
+                        publish(Event::Matches(matches_frame(rows, state, message)));
                     }
                 }
             }
@@ -1152,6 +1343,204 @@ where
                                 "Tracker Network did not answer ({e}). Re-click the row to retry."
                             ),
                         )));
+                    }
+                }
+            }
+        }
+
+        // Skins viewer: one click, one fetch of the match's loadouts, then the
+        // parse. The catalogue arrives once per process; parsed loadouts are
+        // cached per match id in memory. Never polled — this block runs only
+        // when a Live row's Skins button was clicked.
+        if flags.loadout_pending.swap(false, Ordering::Relaxed) {
+            let req = flags
+                .loadout_request
+                .lock()
+                .map(|mut slot| slot.take())
+                .unwrap_or_default();
+            if let Some(req) =
+                req.filter(|r| !r.match_id.trim().is_empty() && !r.puuid.trim().is_empty())
+            {
+                let player_name = live_last
+                    .as_ref()
+                    .map(|view| {
+                        view.blue
+                            .iter()
+                            .chain(view.red.iter())
+                            .find(|row| row.puuid.eq_ignore_ascii_case(&req.puuid))
+                            .map(|row| row.name.clone())
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default();
+                let player_name = if player_name.is_empty() {
+                    "Player".to_string()
+                } else {
+                    player_name
+                };
+                publish(Event::Loadout(LoadoutView::placeholder(
+                    &player_name,
+                    "loading",
+                    "Reading equipped skins…",
+                )));
+                // Entitlements ride the live path's own cache; a stale one is
+                // re-read from the lockfile exactly like the lobby probe does.
+                let now = Instant::now();
+                let ent = match live_ent.as_ref() {
+                    Some((ent, at)) if now.duration_since(*at) < Duration::from_secs(300) => {
+                        Some(ent.clone())
+                    }
+                    _ => match identity::read_lockfile()
+                        .and_then(|auth| identity::fetch_entitlements(&auth))
+                    {
+                        Ok(ent) => {
+                            live_ent = Some((ent.clone(), now));
+                            Some(ent)
+                        }
+                        Err(e) => {
+                            publish(Event::Loadout(LoadoutView::placeholder(
+                                &player_name,
+                                "error",
+                                format!("{e} Re-click Skins to retry."),
+                            )));
+                            None
+                        }
+                    },
+                };
+                if let Some(ent) = ent {
+                    if loadout_catalog.is_none() {
+                        match loadout::fetch_catalog().await {
+                            Ok(catalog) => {
+                                eprintln!(
+                                    "[loadout] catalogue: {} weapon(s), {} skin art entry(ies)",
+                                    catalog.weapons.len(),
+                                    catalog.skin_index.len()
+                                );
+                                loadout_catalog = Some(catalog);
+                            }
+                            Err(e) => {
+                                publish(Event::Loadout(LoadoutView::placeholder(
+                                    &player_name,
+                                    "error",
+                                    format!("{e} Re-click Skins to retry."),
+                                )));
+                            }
+                        }
+                    }
+                    if let Some(catalog) = loadout_catalog.as_ref() {
+                        let region = rank::region_from_access_token(&ent.access_token)
+                            .unwrap_or_else(|| "eu".to_string());
+                        // A re-open while the match runs reuses the parsed
+                        // loadouts; a finished match keeps its last board.
+                        let parsed = if let Some(cached) = loadout_cache.get(&req.match_id) {
+                            Some(cached.clone())
+                        } else {
+                            match live_api::loadout_entries(
+                                &ent,
+                                &region,
+                                &req.phase,
+                                &req.match_id,
+                            ) {
+                                Ok(entries) => {
+                                    let parsed: Vec<loadout::PlayerLoadout> = entries
+                                        .iter()
+                                        .map(|e| loadout::parse_loadout_entry(e, catalog))
+                                        .collect();
+                                    loadout_cache.insert(req.match_id.clone(), parsed.clone());
+                                    // A lobby is at most a dozen players and the
+                                    // keys are match ids, but a long session
+                                    // still should not grow without a ceiling.
+                                    while loadout_cache.len() > 8 {
+                                        if let Some(oldest) = loadout_cache.keys().next().cloned() {
+                                            loadout_cache.remove(&oldest);
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    Some(parsed)
+                                }
+                                Err(e) => {
+                                    publish(Event::Loadout(LoadoutView::placeholder(
+                                        &player_name,
+                                        "error",
+                                        format!("{e} Re-click Skins to retry."),
+                                    )));
+                                    None
+                                }
+                            }
+                        };
+                        if let Some(all) = parsed {
+                            let (hit, ambiguous) =
+                                loadout::resolve_loadout_for_player(&all, &req.puuid, "", None);
+                            match hit {
+                                Some(found) => {
+                                    let mut weapons = Vec::with_capacity(found.weapons.len());
+                                    for w in &found.weapons {
+                                        // Gun renders resolve through the same
+                                        // allowlisted pipeline as every other
+                                        // row: a miss stays empty and the row
+                                        // draws its glyph.
+                                        let art_url = if w.icon.is_empty() {
+                                            String::new()
+                                        } else {
+                                            art.ensure_url(
+                                                fetcher.clone(),
+                                                &w.icon,
+                                                SystemTime::now(),
+                                            )
+                                            .await
+                                            .unwrap_or_default()
+                                        };
+                                        let buddy_art_url = if w.buddy_icon.is_empty() {
+                                            String::new()
+                                        } else {
+                                            art.ensure_url(
+                                                fetcher.clone(),
+                                                &w.buddy_icon,
+                                                SystemTime::now(),
+                                            )
+                                            .await
+                                            .unwrap_or_default()
+                                        };
+                                        // "Variant 1 Black · Lv 4", joined here:
+                                        // the view binds verbatim.
+                                        let mut detail_parts = Vec::new();
+                                        if !w.variant_label.is_empty() {
+                                            detail_parts.push(w.variant_label.clone());
+                                        }
+                                        if w.level > 0 {
+                                            detail_parts.push(format!("Lv {}", w.level));
+                                        }
+                                        weapons.push(LoadoutWeaponUi {
+                                            weapon_name: w.weapon_name.clone(),
+                                            skin_name: w.skin_name.clone(),
+                                            detail: detail_parts.join(" · "),
+                                            is_default: w.is_default_skin,
+                                            buddy_name: w.buddy_name.clone(),
+                                            art_url,
+                                            buddy_art_url,
+                                        });
+                                    }
+                                    eprintln!(
+                                        "[loadout] {} weapon(s) for {player_name}",
+                                        weapons.len()
+                                    );
+                                    publish(Event::Loadout(LoadoutView {
+                                        player_name: player_name.clone(),
+                                        weapons,
+                                        ambiguous,
+                                        state: "ready",
+                                        message: String::new(),
+                                    }));
+                                }
+                                None => {
+                                    publish(Event::Loadout(LoadoutView::placeholder(
+                                        &player_name,
+                                        "empty",
+                                        "Riot returned no loadout data for this match yet.",
+                                    )));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1289,7 +1678,7 @@ where
                 } else if fake_live.is_none() {
                     // The live lobby rides the same poll and the same presences:
                     // one read feeds the strip, the names and the parties.
-                    let view = live_frame(
+                    let (view, current_match) = live_frame(
                         &art,
                         fetcher.clone(),
                         identity.as_ref(),
@@ -1297,8 +1686,32 @@ where
                         &root,
                         &mut live_ent,
                         &mut live_cache,
+                        last_live_match.as_ref(),
                     )
                     .await;
+                    // Match end is the only window where Riot releases hidden
+                    // names: the last lobby was `coregame` and this read is
+                    // not. Re-ask the account service for the whole lobby and
+                    // remember the answers for the next one. Best-effort —
+                    // never throws into the poll loop.
+                    if let Some(puuids) = live_match::match_end_harvest(
+                        last_live_match.as_ref(),
+                        current_match.as_ref(),
+                    ) {
+                        if let Ok(auth) = identity::read_lockfile() {
+                            match live_api::namesets(&auth, &puuids) {
+                                Ok(rows) => {
+                                    let remembered = live_cache.remember_names(&rows);
+                                    eprintln!(
+                                        "[live] harvest: remembered {remembered}/{} name(s) at match end",
+                                        puuids.len()
+                                    );
+                                }
+                                Err(e) => eprintln!("[live] harvest: {e}"),
+                            }
+                        }
+                    }
+                    last_live_match = current_match;
                     if live_last.as_ref() != Some(&view) {
                         live_last = Some(view.clone());
                         publish(Event::Live(view));
@@ -1375,8 +1788,8 @@ where
 }
 
 /// Sleep `total`, waking often enough that `stop` is honoured promptly.
-/// A pending playlist switch or match open also cuts the sleep short: both
-/// are user actions, and the playlist re-parse is in-memory.
+/// A pending playlist switch, match open or Skins open also cuts the sleep
+/// short: all three are user actions, and the playlist re-parse is in-memory.
 async fn sleep_or_stop(flags: &Flags, total: Duration) {
     let mut slept = Duration::ZERO;
     while slept < total {
@@ -1387,6 +1800,9 @@ async fn sleep_or_stop(flags: &Flags, total: Duration) {
             return;
         }
         if flags.match_pending.load(Ordering::Relaxed) {
+            return;
+        }
+        if flags.loadout_pending.load(Ordering::Relaxed) {
             return;
         }
         let chunk = SLEEP_STEP.min(total - slept);

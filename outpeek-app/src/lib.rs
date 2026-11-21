@@ -43,6 +43,7 @@ pub mod identity;
 pub mod live_api;
 pub mod live_match;
 pub mod live_view;
+pub mod loadout;
 pub mod model;
 pub mod rank;
 pub mod settings;

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::assets::{Art, Fetcher};
-use crate::live_match::LiveMatch;
+use crate::live_match::{LiveMatch, NameRow};
 use crate::model::tier_label;
 use crate::rank::RankRow;
 
@@ -23,11 +23,18 @@ use crate::rank::RankRow;
 pub const RANK_TTL: Duration = Duration::from_secs(15 * 60);
 /// A failed read is retried sooner than a good one, but not on every poll.
 pub const RANK_RETRY: Duration = Duration::from_secs(2 * 60);
+/// A resolved Riot ID is per player too, on the same discipline as a rank:
+/// memory-only, good for a quarter of an hour, then re-asked. Presences
+/// refresh friends every frame, so what actually expires here are harvested
+/// hidden names nobody has seen since.
+pub const NAME_TTL: Duration = RANK_TTL;
 
 /// One row of the Live Match board. Every cell is a display string; the view
 /// never formats a number.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LivePlayerUi {
+    /// The roster PUUID. Never drawn: it keys the Skins viewer lookup.
+    pub puuid: String,
     /// `Shadow#EUW`, or `Player 3f2a` when no source proved a Riot ID.
     pub name: String,
     pub agent: String,
@@ -43,6 +50,9 @@ pub struct LivePlayerUi {
     pub rr: String,
     /// Cached rank crest URL.
     pub crest: String,
+    /// Peak tier Riot's act history reports (`Diamond 2`); empty when no act
+    /// reported one. The view draws nothing for it — never "Unrated".
+    pub peak: String,
     /// `2` when this player queued with someone else, empty solo.
     pub party: String,
     /// `"×2"` — empty when solo.
@@ -56,6 +66,9 @@ pub struct LivePlayerUi {
 pub struct LiveView {
     /// `idle` | `offline` | `pregame` | `coregame` | `error`.
     pub state: &'static str,
+    /// The live match id that produced this board. Empty when there is none;
+    /// the Skins viewer needs it to address the loadout routes.
+    pub match_id: String,
     /// The reason line: why there is no board, or which read failed.
     pub message: String,
     pub map: String,
@@ -70,6 +83,7 @@ impl LiveView {
     pub fn idle(message: impl Into<String>) -> Self {
         Self {
             state: "idle",
+            match_id: String::new(),
             message: message.into(),
             map: String::new(),
             mode: String::new(),
@@ -104,27 +118,66 @@ impl LiveView {
 }
 
 /// Names and ranks outlive one lobby: both are per player, and re-reading them
-/// on every poll would be ten remote calls every 2.5 s.
+/// on every poll would be ten remote calls every 2.5 s. Names are
+/// memory-only and expire on [`NAME_TTL`], the same discipline as ranks.
 #[derive(Debug, Default)]
 pub struct LiveCache {
-    names: HashMap<String, (String, String)>,
+    names: HashMap<String, (Instant, (String, String))>,
     ranks: HashMap<String, (Instant, Option<RankRow>)>,
 }
 
 impl LiveCache {
     pub fn name(&self, puuid: &str) -> Option<&(String, String)> {
-        self.names.get(&puuid.to_lowercase())
+        self.name_at(puuid, Instant::now())
+    }
+
+    fn name_at(&self, puuid: &str, now: Instant) -> Option<&(String, String)> {
+        let (at, pair) = self.names.get(&puuid.to_lowercase())?;
+        if now.saturating_duration_since(*at) < NAME_TTL {
+            Some(pair)
+        } else {
+            None
+        }
     }
 
     pub fn set_name(&mut self, puuid: &str, name: &str, tag: &str) {
+        self.set_name_at(puuid, name, tag, Instant::now());
+    }
+
+    fn set_name_at(&mut self, puuid: &str, name: &str, tag: &str, at: Instant) {
         let name = name.trim();
         if name.is_empty() {
             return;
         }
         self.names.insert(
             puuid.to_lowercase(),
-            (name.to_string(), tag.trim().to_string()),
+            (at, (name.to_string(), tag.trim().to_string())),
         );
+    }
+
+    /// Remember namesets rows from a trusted post-match read (the match-end
+    /// harvest). Rows with a service `error`, an empty name, or a
+    /// `Player XXXX` placeholder are not names and never enter the cache —
+    /// a placeholder must never be able to evict or fake a real Riot ID.
+    /// Returns how many PUUIDs were remembered.
+    pub fn remember_names(&mut self, rows: &[NameRow]) -> usize {
+        let now = Instant::now();
+        let mut remembered = 0;
+        for row in rows {
+            if !row.error.trim().is_empty() {
+                continue;
+            }
+            let name = row.name.trim();
+            if name.is_empty() || name.starts_with("Player ") {
+                continue;
+            }
+            self.names.insert(
+                row.puuid.to_lowercase(),
+                (now, (name.to_string(), row.tag.trim().to_string())),
+            );
+            remembered += 1;
+        }
+        remembered
     }
 
     /// Cached rank for a player, read through `read` when the entry is missing
@@ -151,11 +204,17 @@ impl LiveCache {
         value
     }
 
-    /// Drop entries for players who are no longer in the lobby: a long session
-    /// would otherwise keep every PUUID it ever saw.
+    /// Drop rank entries for players who are no longer in the lobby: a long
+    /// session would otherwise keep every PUUID it ever saw. Names are NOT
+    /// pruned by lobby — a harvested name belongs to players who just left,
+    /// and must survive for the next lobby. Only expired names are dropped,
+    /// on the same TTL as ranks.
     pub fn retain(&mut self, puuids: &[String]) {
         let wanted: Vec<String> = puuids.iter().map(|p| p.to_lowercase()).collect();
         self.ranks.retain(|puuid, _| wanted.contains(puuid));
+        let now = Instant::now();
+        self.names
+            .retain(|_, (at, _)| now.saturating_duration_since(*at) < NAME_TTL);
     }
 }
 
@@ -246,6 +305,12 @@ pub async fn build(
         };
         let rank = cache.rank(&player.puuid, Instant::now(), || rank_for(&player.puuid));
         let (rank_text, rr) = rank_cells(rank);
+        // Peak is Riot's own act history, independent of the hidden flag: the
+        // view draws it dimmer than the rank, never as a second rank.
+        let peak = match rank {
+            Some(row) if row.peak_tier >= 3 => tier_label(row.peak_tier),
+            _ => String::new(),
+        };
         // The crest is the tier's own emblem; a hidden or unread rank has no
         // crest to draw, because there is no proven tier.
         let crest = match rank {
@@ -280,6 +345,7 @@ pub async fn build(
             format!("×{party}")
         };
         let row = LivePlayerUi {
+            puuid: player.puuid.clone(),
             name: display,
             agent: agent_name,
             agent_art,
@@ -288,6 +354,7 @@ pub async fn build(
             rank: rank_text,
             rr,
             crest,
+            peak,
             party,
             party_label,
             me: player.puuid.eq_ignore_ascii_case(local_puuid),
@@ -301,6 +368,7 @@ pub async fn build(
     }
     LiveView {
         state: phase_state(&match_.phase),
+        match_id: match_.match_id.clone(),
         message: String::new(),
         map: map.to_string(),
         mode: mode.to_string(),
@@ -468,5 +536,147 @@ mod tests {
         cache.rank("gone", now, || Some(rank(21, 10)));
         cache.retain(&["abc".to_string()]);
         assert!(cache.ranks.is_empty() || !cache.ranks.contains_key("gone"));
+    }
+
+    #[test]
+    fn a_resolved_name_is_cached_and_an_old_one_is_asked_again() {
+        let mut cache = LiveCache::default();
+        let now = Instant::now();
+        cache.set_name_at("PUUID-A", "Shadow", "EUW", now);
+        assert_eq!(
+            cache.name_at("puuid-a", now + Duration::from_secs(60)),
+            Some(&("Shadow".to_string(), "EUW".to_string())),
+            "a cached name is case-insensitive inside the TTL"
+        );
+        assert!(
+            cache
+                .name_at("puuid-a", now + NAME_TTL + Duration::from_secs(1))
+                .is_none(),
+            "past the TTL it asks again, like a rank"
+        );
+    }
+
+    #[test]
+    fn harvested_names_survive_the_lobby_but_expired_ones_are_dropped() {
+        let mut cache = LiveCache::default();
+        let now = Instant::now();
+        cache.set_name_at("stays", "Shadow", "EUW", now);
+        cache.set_name_at(
+            "stale",
+            "Old",
+            "NA1",
+            now - NAME_TTL - Duration::from_secs(1),
+        );
+        // Nobody from the last lobby is here — the harvest must survive that.
+        cache.retain(&["nobody".to_string()]);
+        assert!(
+            cache.name_at("stays", now).is_some(),
+            "a harvested name outlives the lobby it came from"
+        );
+        assert!(
+            cache.name_at("stale", now).is_none(),
+            "an expired name is dropped on the same TTL as ranks"
+        );
+    }
+
+    #[test]
+    fn the_harvest_never_remembers_a_placeholder_or_an_error() {
+        use crate::live_match::NameRow;
+        let mut cache = LiveCache::default();
+        let rows = vec![
+            NameRow {
+                puuid: "real".to_string(),
+                name: "Shadow".to_string(),
+                tag: "EUW".to_string(),
+                error: String::new(),
+            },
+            NameRow {
+                puuid: "missing".to_string(),
+                name: String::new(),
+                tag: String::new(),
+                error: "Nameset V2 not found for puuid.".to_string(),
+            },
+            NameRow {
+                puuid: "blank".to_string(),
+                name: String::new(),
+                tag: String::new(),
+                error: String::new(),
+            },
+            NameRow {
+                puuid: "fake".to_string(),
+                name: "Player 4bad".to_string(),
+                tag: String::new(),
+                error: String::new(),
+            },
+        ];
+        assert_eq!(cache.remember_names(&rows), 1);
+        assert!(cache.name("real").is_some());
+        assert!(cache.name("missing").is_none());
+        assert!(
+            cache.name("fake").is_none(),
+            "a placeholder must never enter the cache"
+        );
+    }
+
+    #[test]
+    fn the_board_shows_a_harvested_name_and_keeps_the_placeholder_and_incognito() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let art = Art::new(None);
+            let fetcher: std::sync::Arc<dyn Fetcher> =
+                std::sync::Arc::new(crate::assets::HttpFetcher);
+            let mut cache = LiveCache::default();
+            cache.set_name("hidden-puuid", "Shadow", "EUW");
+            let matched = LiveMatch {
+                match_id: "m-1".to_string(),
+                phase: "coregame".to_string(),
+                players: vec![
+                    crate::live_match::LivePlayer {
+                        puuid: "hidden-puuid".to_string(),
+                        team: "Blue".to_string(),
+                        incognito: true,
+                        ..Default::default()
+                    },
+                    crate::live_match::LivePlayer {
+                        puuid: "unknown-puuid-1234".to_string(),
+                        team: "Red".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            };
+            let mut rank_for = |_: &str| -> Option<RankRow> { None };
+            let view = build(
+                &matched,
+                "",
+                "",
+                "",
+                0,
+                0,
+                &mut cache,
+                &mut rank_for,
+                &art,
+                fetcher,
+            )
+            .await;
+            assert_eq!(view.blue.len(), 1);
+            assert_eq!(view.red.len(), 1);
+            assert_eq!(
+                view.blue[0].name, "Shadow#EUW",
+                "a resolved name replaces the placeholder"
+            );
+            assert!(
+                view.blue[0].incognito,
+                "Riot's own flag still shows beside the real name"
+            );
+            assert_eq!(
+                view.red[0].name, "Player 1234",
+                "unresolvable stays a placeholder, never invented"
+            );
+            assert!(!view.red[0].incognito);
+        });
     }
 }

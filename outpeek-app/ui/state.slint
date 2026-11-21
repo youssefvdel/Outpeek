@@ -95,6 +95,24 @@ export struct MatchPlayerUi {
     dd: string,
 }
 
+/// One equipped weapon row for the Skins viewer, pre-formatted by Rust.
+/// `detail` is the joined "Variant 1 Black · Lv 4" line (empty for base
+/// skins); empty strings draw as em dashes, never zeros or invented art.
+export struct LoadoutWeaponUi {
+    weapon-name: string,
+    // Parent skin name ("Reaver Vandal"); a default row carries the weapon
+    // name and `is-default`, never the grey-X placeholder.
+    skin-name: string,
+    detail: string,
+    is-default: bool,
+    buddy-name: string,
+    // Cached gun render — an empty image draws the fallback glyph at the
+    // same size the art would occupy, so the row never collapses.
+    art: image,
+    // Cached buddy art; empty when unequipped or unresolved.
+    buddy-art: image,
+}
+
 /// One round cell on the match detail strip. `blue` picks the colour;
 /// `tip` ("Round 3 — Blue, Elimination") is the accessible name and the
 /// tapped/hovered result line, so the colour is never the only signal.
@@ -128,6 +146,8 @@ export struct AgentRowUi {
 /// One player of the live lobby, pre-formatted by Rust. `rank` is a fact or an
 /// honest state (RANK HIDDEN / UNRATED / NOT READ) — the view never derives one.
 export struct LivePlayerUi {
+    // The roster PUUID. Never drawn: it keys the Skins viewer lookup.
+    puuid: string,
     name: string,
     agent: string,
     agent-art: image,
@@ -137,6 +157,8 @@ export struct LivePlayerUi {
     rank: string,
     rr: string,
     crest: image,
+    // Peak tier from Riot's own act history; empty = no act reported one.
+    peak: string,
     party: string,
     // "×2" — empty when solo.
     party-label: string,
@@ -365,6 +387,35 @@ export global Tracker {
     in-out property <string> live-mode: "";
     in-out property <int> live-blue-score: 0;
     in-out property <int> live-red-score: 0;
+    // The live match id behind the board. Empty when there is no match; the
+    // Skins viewer needs it to address the loadout routes.
+    in-out property <string> live-match-id: "";
+
+    // Skins viewer (one player's equipped weapon skins). `loadout-state` is
+    // empty|loading|ready|error and `loadout-note` carries the reason; rows
+    // arrive pre-formatted with cached art. A Live row click ->
+    // `select-loadout(puuid)` (Rust fetches on demand, memory-only);
+    // backdrop or Close -> `close-loadout()` clears nothing, the rows stay
+    // for the next open.
+    callback select-loadout(string);
+    callback close-loadout();
+    in-out property <bool> loadout-open: false;
+    in-out property <string> loadout-player: "";
+    // Skins viewer arsenal, pre-partitioned by Rust into the legacy's own
+    // sections (sidearms | SMGs | shotguns | melee | rifles | snipers |
+    // machine guns). The view renders one column per section group and never
+    // filters by name, so an unnamed weapon lands in `loadout-machine`
+    // instead of vanishing.
+    in-out property <[LoadoutWeaponUi]> loadout-sidearms: [];
+    in-out property <[LoadoutWeaponUi]> loadout-smgs: [];
+    in-out property <[LoadoutWeaponUi]> loadout-shotguns: [];
+    in-out property <[LoadoutWeaponUi]> loadout-melee: [];
+    in-out property <[LoadoutWeaponUi]> loadout-rifles: [];
+    in-out property <[LoadoutWeaponUi]> loadout-snipers: [];
+    in-out property <[LoadoutWeaponUi]> loadout-machine: [];
+    in-out property <bool> loadout-ambiguous: false;
+    in-out property <string> loadout-state: "empty";
+    in-out property <string> loadout-note: "";
 
     // Live panel. state: loading | empty | live | error.
     in-out property <string> live-state: "loading";

@@ -627,6 +627,54 @@ fn wire_callbacks(
         });
     }
 
+    // Skins viewer: a Live row's SKINS button opens the modal at once with its
+    // loading line; the worker's event lands the rows on its next tick. The
+    // request carries the match id + phase the board was built from, so the
+    // read hits the right namespace (the worker tries the other phase when the
+    // first 404s). Close only hides — the rows stay for the next open.
+    {
+        let app_weak = app.as_weak();
+        let flags = flags.clone();
+        app.global::<Tracker>().on_select_loadout(move |puuid| {
+            let puuid = puuid.to_string();
+            if puuid.trim().is_empty() {
+                return;
+            }
+            if let Some(app) = app_weak.upgrade() {
+                let t = app.global::<Tracker>();
+                let match_id = t.get_live_match_id().to_string();
+                if match_id.trim().is_empty() {
+                    t.set_loadout_open(true);
+                    t.set_loadout_state("empty".into());
+                    t.set_loadout_note("No live match — the Skins viewer needs one.".into());
+                    return;
+                }
+                let phase = t.get_live_roster_state().to_string();
+                if let Ok(mut slot) = flags.loadout_request.lock() {
+                    *slot = Some(outpeek_app::worker::LoadoutRequest {
+                        match_id,
+                        phase,
+                        puuid,
+                    });
+                }
+                flags.loadout_pending.store(true, Ordering::Relaxed);
+                // Optimistic: the modal opens at once with its loading line;
+                // the worker's event lands the rows on its next tick.
+                t.set_loadout_open(true);
+                t.set_loadout_state("loading".into());
+                t.set_loadout_note("Reading equipped skins…".into());
+            }
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        app.global::<Tracker>().on_close_loadout(move || {
+            if let Some(app) = app_weak.upgrade() {
+                app.global::<Tracker>().set_loadout_open(false);
+            }
+        });
+    }
+
     // PLAYLIST dropdown: Rust owns the value like select-tab. Unknown ids fall
     // back to competitive; the worker re-parses the last body in memory (no
     // refetch) and the choice persists beside last_tab/last_view.
@@ -1283,7 +1331,7 @@ fn apply_matches(ui: &AppWindow, view: &outpeek_app::worker::MatchesView) {
             kd: d.kd.clone().into(),
             kd_low: d.kd_low,
             kda: d.kda.clone().into(),
-        kda_sub: d.kda_sub.clone().into(),
+            kda_sub: d.kda_sub.clone().into(),
             dda: d.dda.clone().into(),
             dda_negative: d.dda_negative,
             hs: d.hs.clone().into(),
@@ -1406,6 +1454,7 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
         players
             .iter()
             .map(|row| LivePlayerUi {
+                puuid: row.puuid.clone().into(),
                 name: row.name.clone().into(),
                 agent: row.agent.clone().into(),
                 agent_art: load(&row.agent_art, 96),
@@ -1414,6 +1463,7 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
                 rank: row.rank.clone().into(),
                 rr: row.rr.clone().into(),
                 crest: load(&row.crest, 64),
+                peak: row.peak.clone().into(),
                 party: row.party.clone().into(),
                 party_label: row.party_label.clone().into(),
                 me: row.me,
@@ -1423,6 +1473,7 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
     };
     t.set_live_blue_team(ModelRc::new(VecModel::from(rows(&view.blue))));
     t.set_live_red_team(ModelRc::new(VecModel::from(rows(&view.red))));
+    t.set_live_match_id(view.match_id.clone().into());
     t.set_live_roster_state(view.state.into());
     t.set_live_note(view.message.clone().into());
     // The board's strip has its own slots: the snapshot clears its copies on an
@@ -1447,6 +1498,70 @@ fn apply_live(ui: &AppWindow, view: &LiveView) {
         "—".to_string()
     };
     t.set_live_score(live_score.into());
+}
+
+/// The Skins viewer section a weapon name belongs to: the legacy's own/// columns (sidearms | SMGs | shotguns | melee | rifles | snipers | machine
+/// guns). Anything unnamed — a future weapon, a casing slip — lands in
+/// machine guns: visible beats hidden, and the view never filters by name.
+fn loadout_section(name: &str) -> usize {
+    match name {
+        "Classic" | "Shorty" | "Frenzy" | "Ghost" | "Sheriff" => 0,
+        "Stinger" | "Spectre" => 1,
+        "Bucky" | "Judge" => 2,
+        "Melee" => 3,
+        "Bulldog" | "Guardian" | "Phantom" | "Vandal" => 4,
+        "Marshal" | "Outlaw" | "Operator" => 5,
+        _ => 6,
+    }
+}
+
+/// Push one Skins viewer frame into the Live modal.
+///
+/// Rows arrive pre-formatted with cached art URLs; only the decoding happens
+/// here, at the size the rows draw (320 px gun renders, 64 px buddies). A URL
+/// that is empty, or whose file vanished between the download and this call,
+/// decodes to an empty image: the row then draws its fallback glyph.
+fn apply_loadout(ui: &AppWindow, view: &outpeek_app::worker::LoadoutView) {
+    let t = ui.global::<Tracker>();
+    let any_art = view
+        .weapons
+        .iter()
+        .any(|w| !w.art_url.is_empty() || !w.buddy_art_url.is_empty());
+    let dir = if any_art {
+        outpeek_app::assets::art_dir()
+    } else {
+        None
+    };
+    let load = |url: &str, edge: u32| -> slint::Image {
+        match dir.as_deref() {
+            Some(dir) => outpeek_overlay::image_cache::load_from_scaled(dir, url, edge),
+            None => slint::Image::default(),
+        }
+    };
+    let mut sections: [Vec<LoadoutWeaponUi>; 7] = Default::default();
+    for w in &view.weapons {
+        sections[loadout_section(&w.weapon_name)].push(LoadoutWeaponUi {
+            weapon_name: w.weapon_name.clone().into(),
+            skin_name: w.skin_name.clone().into(),
+            detail: w.detail.clone().into(),
+            is_default: w.is_default,
+            buddy_name: w.buddy_name.clone().into(),
+            art: load(&w.art_url, 320),
+            buddy_art: load(&w.buddy_art_url, 64),
+        });
+    }
+    let [sidearms, smgs, shotguns, melee, rifles, snipers, machine] = sections;
+    t.set_loadout_sidearms(ModelRc::new(VecModel::from(sidearms)));
+    t.set_loadout_smgs(ModelRc::new(VecModel::from(smgs)));
+    t.set_loadout_shotguns(ModelRc::new(VecModel::from(shotguns)));
+    t.set_loadout_melee(ModelRc::new(VecModel::from(melee)));
+    t.set_loadout_rifles(ModelRc::new(VecModel::from(rifles)));
+    t.set_loadout_snipers(ModelRc::new(VecModel::from(snipers)));
+    t.set_loadout_machine(ModelRc::new(VecModel::from(machine)));
+    t.set_loadout_player(view.player_name.clone().into());
+    t.set_loadout_ambiguous(view.ambiguous);
+    t.set_loadout_state(view.state.into());
+    t.set_loadout_note(view.message.clone().into());
 }
 
 /// Decode the cached art this event names into the window's image slots.
@@ -1516,6 +1631,16 @@ fn start_worker(
                     Event::MatchDetail(view) => apply_match_detail(&app, &view),
                     Event::Breakdown(view) => apply_breakdown(&app, &view),
                     Event::Live(view) => apply_live(&app, &view),
+                    Event::Loadout(view) => {
+                        apply_loadout(&app, &view);
+                        // Debug fixture only: the fake frame opens the modal
+                        // beside the fake board so the viewer is screenshottable
+                        // without VALORANT. Real frames never touch the flag.
+                        #[cfg(debug_assertions)]
+                        if std::env::var_os("OUTPEEK_FAKE_LOADOUT").is_some() {
+                            app.global::<Tracker>().set_loadout_open(true);
+                        }
+                    }
                 }
             });
         },
@@ -1638,4 +1763,33 @@ fn maybe_run_repaint_bench(app: &AppWindow) {
                 max.as_millis()
             );
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::loadout_section;
+
+    #[test]
+    fn every_known_weapon_lands_in_its_legacy_column() {
+        for name in ["Classic", "Shorty", "Frenzy", "Ghost", "Sheriff"] {
+            assert_eq!(loadout_section(name), 0, "{name} is a sidearm");
+        }
+        for name in ["Stinger", "Spectre"] {
+            assert_eq!(loadout_section(name), 1, "{name} is an SMG");
+        }
+        for name in ["Bucky", "Judge"] {
+            assert_eq!(loadout_section(name), 2, "{name} is a shotgun");
+        }
+        assert_eq!(loadout_section("Melee"), 3);
+        for name in ["Bulldog", "Guardian", "Phantom", "Vandal"] {
+            assert_eq!(loadout_section(name), 4, "{name} is a rifle");
+        }
+        for name in ["Marshal", "Outlaw", "Operator"] {
+            assert_eq!(loadout_section(name), 5, "{name} is a sniper");
+        }
+        // Named heavies and anything unnamed stay visible under machine guns.
+        for name in ["Ares", "Odin", "Bandit", "", "Knife?"] {
+            assert_eq!(loadout_section(name), 6, "{name} must not vanish");
+        }
+    }
 }
